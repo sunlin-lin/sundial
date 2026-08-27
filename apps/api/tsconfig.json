@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // project references 要求 composite；composite 不允許 noEmit，因此改為只產出宣告檔並丟進
+    // 被 .gitignore 的 .tsbuild/，`bun run typecheck` 才能用 `tsc --build` 一次檢查整個 monorepo。
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "../../.tsbuild/api",
+    "rootDir": "."
+  },
+  // scripts/ 一併納入型別檢查：它會 import src 的 schema 與密碼雜湊，
+  // 不檢查的話，欄位改名或函式簽章變更不會讓 `bun run typecheck` 變紅，
+  // 而種子腳本壞掉要到有人執行它的那一刻才會發現。
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "drizzle.config.ts", "test-setup.ts"]
+}

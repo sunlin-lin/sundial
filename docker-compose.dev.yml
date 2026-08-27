@@ -1,0 +1,34 @@
+# 本機開發用的 MariaDB。正式環境不使用本檔。
+services:
+  mariadb:
+    image: mariadb:11.4
+    container_name: sundial-mariadb-dev
+    restart: unless-stopped
+    environment:
+      # 容器時區與 DB 時區都設成台北：後端規範 §6 規定全系統一律台北牆鐘時間，
+      # 不做任何換算。容器預設是 UTC，不設的話 NOW()、CURDATE() 與應用層看到的日期會差 8 小時，
+      # 而且只在深夜與月底發作。
+      TZ: Asia/Taipei
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    command:
+      # --default-time-zone 決定連線的 session 時區。應用程式啟動時會比對這個值，
+      # 不是 +08:00 就拒絕啟動（§6），因此這裡與啟動自檢必須一致。
+      - --default-time-zone=+08:00
+      # utf8mb4：中文姓名與 emoji 都要存得下；utf8（3 bytes）會在寫入時截斷或報錯。
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - '${DB_PORT}:3306'
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mariadb-data:

@@ -1,0 +1,10 @@
+# 放在根層而不是 apps/api/：`bun test` 通常從 repo 根目錄執行，
+# bunfig 只會被從當前工作目錄往上尋找，放在子目錄時根目錄跑的測試不會載入 preload，
+# 於是 §7.4 的「測試不得連非測試資料庫」防護會靜默失效——測試照跑，只是沒有守衛。
+[test]
+preload = ["./apps/api/test-setup.ts"]
+
+[install]
+# CI 一律 frozen lockfile（通用規範 §6）：解析結果與 lockfile 不符時要紅燈，
+# 不可讓 Bun 逕自更新 lockfile，否則 CI 測到的版本組合與本機、正式環境都不同。
+exact = false

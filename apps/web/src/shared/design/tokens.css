@@ -1,0 +1,68 @@
+/*
+ * 設計 token（前端規範 §5.2）。
+ *
+ * 顏色、間距、字級、圓角、陰影一律走這裡定義的 token，**禁止 inline style 寫死色碼、
+ * 禁止 CSS 出現字面色碼、禁止魔術數字尺寸**。同一種狀態在 A 頁是一種橘、在 B 頁是另一種橘時，
+ * 使用者看得出來，而沒有人說得出哪個才對；要調主題色或做深色模式時，寫死的色碼一個都改不到。
+ *
+ * Tailwind v4 的 `@theme` 會把每一個變數同時變成 CSS 變數與 utility class：
+ * `--color-brand` → `bg-brand` / `text-brand` / `border-brand`。
+ */
+
+@import 'tailwindcss';
+
+@theme {
+  /* --- 品牌與互動 --- */
+  --color-brand: oklch(0.55 0.14 245);
+  --color-brand-strong: oklch(0.47 0.15 245);
+  --color-brand-soft: oklch(0.96 0.02 245);
+
+  /* --- 版面 --- */
+  --color-canvas: oklch(0.97 0.005 250);
+  --color-surface: oklch(1 0 0);
+  --color-line: oklch(0.9 0.008 250);
+
+  /* --- 文字 --- */
+  --color-ink: oklch(0.28 0.015 250);
+  --color-ink-muted: oklch(0.55 0.012 250);
+  --color-ink-inverse: oklch(0.99 0 0);
+
+  /* --- 狀態色：每一種狀態各有具名 token，不得各頁自選相近顏色（§5.2） --- */
+  --color-state-danger: oklch(0.58 0.18 25);
+  --color-state-warning: oklch(0.72 0.15 75);
+  --color-state-success: oklch(0.6 0.13 150);
+
+  /* --- 版面尺寸 --- */
+  --spacing-gutter: 1.5rem;
+  --radius-panel: 0.75rem;
+  --shadow-panel: 0 1px 2px oklch(0.28 0.015 250 / 0.06), 0 8px 24px oklch(0.28 0.015 250 / 0.08);
+
+  /* 最小支援寬度 1280px（§5.4）：管理類頁面以此為排版基準。 */
+  --width-app-min: 1280px;
+}
+
+/*
+ * Element Plus 的主題色。
+ *
+ * §5.3 允許的覆寫方式只有兩種：改它公開的 CSS 變數，或用它提供的 class／popper-class。
+ * **禁止** `!important`、禁止堆疊選擇器提高權重、禁止 `:deep()` 穿透到 `.el-input__inner`
+ * 這類非公開內部結構——那些都綁在實作細節上，升一個小版本、內部 DOM 一改就無聲失效：
+ * 不編譯失敗、沒有測試變紅，只有畫面歪掉，而且通常在客戶那邊才被發現。
+ *
+ * 這裡把 Element Plus 的主色接到上面的 token，兩套顏色才不會各走各的。
+ */
+:root {
+  --el-color-primary: var(--color-brand);
+  --el-color-danger: var(--color-state-danger);
+  --el-color-warning: var(--color-state-warning);
+  --el-color-success: var(--color-state-success);
+  --el-text-color-primary: var(--color-ink);
+  --el-text-color-regular: var(--color-ink);
+  --el-border-color: var(--color-line);
+  --el-border-radius-base: 0.5rem;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+}

@@ -1,0 +1,31 @@
+{
+  // 通用規範 §2.1：以下嚴格選項由本檔集中定義，子專案一律繼承且不得關閉。
+  // 每一項擋掉的失敗模式寫在該行旁邊——沒有後果的選項不會出現在這裡。
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+
+    "strict": true, // 全套嚴格檢查的基底
+    "noUncheckedIndexedAccess": true, // 未知代碼取到 undefined 後算出 NaN 並寫進薪資快照，全程無錯誤訊息
+    "exactOptionalPropertyTypes": true, // 「沒有這個欄位」與「欄位是 undefined」在寫入 DB 時是兩件事，後者會把既有值蓋成 NULL
+    "noImplicitOverride": true, // 父類別方法改名後，子類別覆寫默默變成一個沒人呼叫的新方法
+    "noFallthroughCasesInSwitch": true, // switch 漏 break 會多算一段金額
+    "noPropertyAccessFromIndexSignature": true, // 拼錯 key 時取到 undefined 而不是編譯錯誤（process.env 一律用 ['KEY'] 存取）
+    "verbatimModuleSyntax": true, // type-only import 被當成執行期相依，造成 bundle 膨脹與循環引用
+    "isolatedModules": true, // 確保 Bun／esbuild 逐檔轉譯的結果與 tsc 一致
+
+    // import 一律寫出 `.ts` 副檔名：Bun 直接執行 TypeScript 原始碼，
+    // 明寫副檔名讓「執行期解析的檔案」與「編譯期解析的檔案」是同一個，不必依賴解析器猜測。
+    "allowImportingTsExtensions": true,
+
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "forceConsistentCasingInFileNames": true, // 開發在 Windows（不分大小寫）、部署在 Linux（分大小寫），import 大小寫錯要在本機就爆
+    "resolveJsonModule": true,
+    "skipLibCheck": true
+  }
+}

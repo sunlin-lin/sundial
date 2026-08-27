@@ -1,0 +1,25 @@
+{
+  // 嚴格選項全部繼承根層 tsconfig.base.json（通用規範 §2.1），子專案一律不得關閉。
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // 這是瀏覽器端專案，需要 DOM 的型別；base 只給了 ESNext（後端沒有 DOM）。
+    // 這是「加東西」不是「關檢查」，與 §2.1 不衝突。
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+
+    // 產物由 Vite 產生，tsc／vue-tsc 只做檢查。
+    // base 開了 allowImportingTsExtensions，該選項要求不得由 tsc 產出 JS。
+    "noEmit": true,
+
+    // Vue 的 SFC 編譯要求 preserve，才不會把模板編譯結果中的 JSX 再處理一次。
+    "jsx": "preserve",
+    "jsxImportSource": "vue"
+
+    // 這裡刻意**不設** `paths` 別名：§0.11 的分層相依由 dependency-cruiser 依
+    // 目錄關係判定，別名會把 `shared/ → pages/` 這種反向相依偽裝成看不出方向的一行 import。
+    // 也刻意不收窄 `types`：vite.config.ts 需要 Node 的模組型別（由根層 @types/bun 提供），
+    // 收窄之後那些型別會消失，而錯誤訊息會指向 vite 套件內部，看不出是設定造成的。
+  },
+  // 測試檔由 tsconfig.test.json 負責（分開是為了讓正式建置的檢查不受測試專用型別影響）。
+  "include": ["src/**/*.ts", "src/**/*.vue", "env.d.ts", "vite.config.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

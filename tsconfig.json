@@ -1,0 +1,6 @@
+{
+  // 根專案本身不含程式碼，只以 project references 串起各 workspace，
+  // 讓 `tsc --build` 能一次檢查全部並在 workspace 之間維持正確的建置順序。
+  "files": [],
+  "references": [{ "path": "./apps/api" }]
+}

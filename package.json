@@ -1,0 +1,37 @@
+{
+  "name": "sundial",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev:api": "bun run --filter @sundial/api dev",
+    "dev:web": "bun run --filter @sundial/web dev",
+    "build:web": "bun run --filter @sundial/web build",
+    "typecheck": "tsc --build --force",
+    "typecheck:web": "bun run --filter @sundial/web typecheck",
+    "test": "bun test",
+    "test:web": "bun test apps/web/src",
+    "test:integration": "bun test --test-name-pattern integration",
+    "check": "eslint . && prettier --check .",
+    "check:layers": "depcruise --config .dependency-cruiser.cjs apps/api/src",
+    "db:up": "docker compose -f docker-compose.dev.yml up -d --wait",
+    "db:down": "docker compose -f docker-compose.dev.yml down",
+    "db:generate": "bun run --filter @sundial/api db:generate",
+    "db:migrate": "bun run --filter @sundial/api db:migrate",
+    "db:migrate:test": "bun run --filter @sundial/api db:migrate:test",
+    "seed:dev": "bun run --filter @sundial/api seed:dev",
+    "ci": "bun run check && bun run typecheck && bun run typecheck:web && bun run check:layers && bun run test"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "@types/bun": "^1.2.0",
+    "eslint": "^9.36.0",
+    "prettier": "^3.6.0",
+    "eslint-config-prettier": "^10.1.0",
+    "typescript-eslint": "^8.45.0",
+    "dependency-cruiser": "^16.10.0"
+  },
+  "engines": {
+    "bun": ">=1.2.0"
+  }
+}

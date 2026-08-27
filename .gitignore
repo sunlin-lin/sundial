@@ -1,2 +1,33 @@
 # Claude Code local settings (per-machine, not shared)
 .claude/settings.local.json
+
+# 相依與建置產物
+node_modules/
+dist/
+build/
+.tsbuild/
+*.tsbuildinfo
+
+# 契約產生物（後端規範 §1.7）：openapi.json 與由它產生的前端型別、API client 一律不進版控。
+# 進版控後必然出現「忘了重跑」的髒 diff，review 時也分不出哪些行是人改的、哪些是機器產的。
+openapi.json
+# 排除的是「產生物」，不是目錄本身：目錄要留在版控裡，才有地方寫下它是什麼、
+# 以及為什麼裡面的東西不進版控——否則 clone 下來的人只會看到一個不存在的 import 路徑。
+# 寫成 `<dir>/` 會讓 git 連目錄都不進去，屆時底下的 `!` 例外一律無效。
+apps/web/src/api/generated/*
+!apps/web/src/api/generated/.gitkeep
+!apps/web/src/api/generated/README.md
+
+# 祕密（通用規範 §3.4）：祕密一旦進 git 歷史，即使下一個 commit 刪掉，
+# 它仍存在於所有 clone 與 fork 中，唯一正確的處置是輪替該祕密。
+.env
+.env.*
+!.env.example
+
+# 測試與工具輸出
+coverage/
+*.log
+
+# 作業系統
+.DS_Store
+Thumbs.db

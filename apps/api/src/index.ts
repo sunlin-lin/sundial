@@ -1,0 +1,56 @@
+/**
+ * 服務進入點：讀設定 → 建連線 → 啟動自檢 → 開始接受請求。
+ *
+ * 應用程式的組裝在 `app/app.ts`，那裡不連資料庫也不 listen，`bun run gen:api` 才能只載入
+ * app 定義就產出契約（§1.7）。本檔是唯一會產生副作用的地方。
+ */
+import { buildApp } from './app/app.ts'
+import { createAccessControlPorts, createRefreshControlPorts } from './app/session-access-control.ts'
+import { createDatabase } from './db/client.ts'
+import { assertFieldEncryptionKeys, createFieldCipher, createKeyRing } from './db/field-encryption.ts'
+import { assertDatabaseTimeZone } from './db/time-zone-guard.ts'
+import { systemClock } from './shared/clock.ts'
+import { loadConfig } from './shared/config.ts'
+import { LogCategory, logger } from './shared/logger.ts'
+
+const config = loadConfig()
+const database = createDatabase(config.database)
+
+// 時區自檢排在 listen 之前，而且不接住例外：時區不符就是不要啟動（§6）。
+// 若改成「記一筆警告然後照常啟動」，服務會活著並開始寫入偏移 8 小時的時間，
+// 那正是這道檢查要防的事——讓服務起不來，遠比讓它算錯薪資便宜。
+await assertDatabaseTimeZone(database)
+
+// 金鑰自檢，理由與時區自檢相同（§5.1）：金鑰設錯時資料照樣寫得進去、讀得回來、測試全綠，
+// 直到有人拿正確的金鑰來解才發現整批個資解不開。啟動就擋，是唯一能在事故**之前**攔住它的位置。
+// 缺值已由 `loadConfig()` 擋下，這裡擋的是「有值但不合法」（base64 壞掉、長度不對、
+// active 代號不在清單裡、索引金鑰與加密金鑰共用同一把）。
+assertFieldEncryptionKeys(config.fieldEncryption)
+
+// 金鑰環在自檢**之後**才建立：反過來的話，金鑰壞掉時炸出來的會是 `createKeyRing` 內部的
+// 解碼錯誤，而 `assertFieldEncryptionKeys` 那句寫得清清楚楚的訊息永遠不會被印出來。
+const cipher = createFieldCipher(createKeyRing(config.fieldEncryption))
+
+/**
+ * 身分驗證的執行相依（§1.9.0、§1.9.1）。
+ *
+ * `sessions` 模組的 service 需要這三樣東西才能驗票與續期；把它們收成一個具名的常數，
+ * 是因為同一份東西要餵給三個地方（兩組憑證驗證器 ＋ 路由組裝點的 sessions 端點），
+ * 而分開寫三次就會出現「其中一份用了不同的 clock」這種對不起來、又完全不會報錯的狀況。
+ */
+const sessionsContext = { db: database, clock: systemClock, session: config.session }
+
+const app = buildApp({
+  clock: systemClock,
+  database,
+  cipher,
+  session: config.session,
+  // 權限碼查詢走 `modules/company-users`、驗票與續期走 `modules/sessions`，
+  // 兩者的接線都在 `app/session-access-control.ts`——入口層不直接 import 任何模組（§0.3）。
+  accessControl: createAccessControlPorts(sessionsContext),
+  refreshControl: createRefreshControlPorts(sessionsContext),
+})
+
+app.listen(config.port)
+
+logger.info(LogCategory.Startup, '服務已啟動', { port: config.port, nodeEnv: config.nodeEnv })

@@ -1,0 +1,76 @@
+{
+  "version": "5",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1787788800000,
+      "tag": "0000_initial_access_organization",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1787788801000,
+      "tag": "0001_seed_permission_codes_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1787788802000,
+      "tag": "0002_seed_permission_codes_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1787788803000,
+      "tag": "0003_seed_permission_codes_company_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1787788804000,
+      "tag": "0004_create_companies",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1787788805000,
+      "tag": "0005_add_company_foreign_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1787788806000,
+      "tag": "0006_create_employees",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1787788807000,
+      "tag": "0007_create_refresh_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1787788808000,
+      "tag": "0008_seed_permission_codes_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1787788809000,
+      "tag": "0009_seed_permission_codes_employees",
+      "breakpoints": true
+    }
+  ]
+}
