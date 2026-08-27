@@ -390,6 +390,19 @@ describe('roles/main endpoints (integration)', () => {
     expect(deleted.payload.code).toBe('300')
     expect(deleted.payload.errors[0]?.code).toBe(RoleErrorCode.InUse)
     expect(deleted.payload.errors[0]?.data?.['assignedUserCount']).toBe(1)
+
+    // 訊息插值：`role.in-use` 的句子要真的長出那個數字。
+    //
+    // 斷言「有數字」而不是整句逐字比對：逐字比對會讓每一次潤稿都變成一支紅掉的測試，
+    // 於是下一個人學會的是「改字要順手改測試」，而這一條真正要守的是**插值有沒有接上**
+    // ——參數沒傳到的話，使用者看到的是一句留著 `{{assignedUserCount}}` 的訊息，
+    // 而 `errors[].code` 與 `data` 都是對的，沒有任何一層會察覺。
+    expect(deleted.payload.errors[0]?.msg).toContain('1')
+    expect(deleted.payload.errors[0]?.msg).not.toContain('{{')
+    // 頂層 `msg` 是 errors[0] 的複本（§1.3），插值參數必須跟著同一筆一起搬過去
+    // ——只搬 key 不搬參數的話，這一句會留著括號，而 `errors[0].msg` 是好的。
+    expect(deleted.payload.msg).toContain('1')
+    expect(deleted.payload.msg).not.toContain('{{')
   })
 
   test('公司最後一個具管理能力的角色不可刪除、也不可停用', async () => {

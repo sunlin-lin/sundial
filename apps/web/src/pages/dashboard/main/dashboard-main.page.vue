@@ -8,13 +8,18 @@
  */
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import AppShell from '../../../layouts/AppShell.vue'
 import { logout } from '../../../shared/api/sessions.ts'
-import { t } from '../../../shared/i18n/messages.ts'
+import type { TranslateMessage } from '../../../shared/i18n/messages.ts'
 import { useAuthStore } from '../../../stores/auth.ts'
 
 const auth = useAuthStore()
 const router = useRouter()
+
+// 標註型別把 key 收窄回 `MessageKey`，並同時遮蔽掉套件的全域 `$t`（理由見語系檔的 `TranslateMessage`）。
+const { t } = useI18n()
+const $t: TranslateMessage = t
 
 const isSigningOut = ref(false)
 
@@ -46,18 +51,18 @@ const onSignOutRequested = (): void => {
     :is-signing-out="isSigningOut"
     @sign-out-requested="onSignOutRequested"
   >
-    <h1 class="text-xl font-semibold text-ink">{{ t('dashboard.heading') }}</h1>
+    <h1 class="text-xl font-semibold text-ink">{{ $t('dashboard.heading') }}</h1>
 
     <dl class="mt-6 grid max-w-xl grid-cols-2 gap-4">
       <div class="rounded-panel bg-surface p-6 shadow-panel">
         <dt class="text-xs font-medium tracking-wide text-ink-muted">
-          {{ t('dashboard.signed-in-as') }}
+          {{ $t('dashboard.signed-in-as') }}
         </dt>
         <dd class="mt-2 text-lg font-semibold text-ink">{{ auth.displayName }}</dd>
       </div>
       <div class="rounded-panel bg-surface p-6 shadow-panel">
         <dt class="text-xs font-medium tracking-wide text-ink-muted">
-          {{ t('dashboard.company') }}
+          {{ $t('dashboard.company') }}
         </dt>
         <dd class="mt-2 text-lg font-semibold text-ink">{{ auth.companyName }}</dd>
       </div>

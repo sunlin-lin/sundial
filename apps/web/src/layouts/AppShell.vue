@@ -11,8 +11,13 @@
  */
 import { ElButton } from 'element-plus'
 import { RouterLink } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { MAIN_MENU } from '../menu/main-menu.ts'
-import { t } from '../shared/i18n/messages.ts'
+import type { TranslateMessage } from '../shared/i18n/messages.ts'
+
+// 標註型別把 key 收窄回 `MessageKey`，並同時遮蔽掉套件的全域 `$t`（理由見語系檔的 `TranslateMessage`）。
+const { t } = useI18n()
+const $t: TranslateMessage = t
 
 defineProps<{
   /** 頁首顯示的登入者名稱。 */
@@ -34,12 +39,12 @@ const onSignOutClicked = (): void => {
   <div class="min-w-(--width-app-min) flex min-h-screen bg-canvas text-ink">
     <aside class="w-60 shrink-0 border-r border-line bg-surface">
       <div class="flex h-16 items-center border-b border-line px-gutter text-lg font-semibold">
-        {{ t('app.name') }}
+        {{ $t('app.name') }}
       </div>
       <nav class="p-gutter">
         <div v-for="group in MAIN_MENU" :key="group.labelKey" class="mb-6">
           <p class="mb-2 text-xs font-medium tracking-wide text-ink-muted">
-            {{ t(group.labelKey) }}
+            {{ $t(group.labelKey) }}
           </p>
           <ul class="flex flex-col gap-1">
             <li v-for="item in group.items" :key="item.routeName">
@@ -48,7 +53,7 @@ const onSignOutClicked = (): void => {
                 class="block rounded-lg px-3 py-2 text-sm hover:bg-brand-soft"
                 active-class="bg-brand-soft font-medium text-brand-strong"
               >
-                {{ t(item.labelKey) }}
+                {{ $t(item.labelKey) }}
               </RouterLink>
             </li>
           </ul>
@@ -65,7 +70,7 @@ const onSignOutClicked = (): void => {
           <p class="text-xs text-ink-muted">{{ companyName }}</p>
         </div>
         <ElButton :loading="isSigningOut" :disabled="isSigningOut" @click="onSignOutClicked">
-          {{ t('dashboard.sign-out') }}
+          {{ $t('dashboard.sign-out') }}
         </ElButton>
       </header>
 

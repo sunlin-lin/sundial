@@ -8,11 +8,18 @@
  *
  * 本檔不得 import 任何 http／elysia 模組（§3.1.1）：錯誤分組用具名常數表達，
  * 「這個分組在某個入口上對應什麼狀態碼」是入口的事。
+ *
+ * **每一筆的 `msg` 是訊息 key，不是字面訊息**（§1.8.2）：本檔決定「哪一則訊息」，
+ * 「哪一種語言」由出口層依 `locale` 決定。字面中文在 `shared/i18n/locales/`（查詢入口是 `shared/i18n/messages.ts`）——因此下面每一段
+ * 「訊息不得寫得更精確」的說明（§3.2），要連著那一頁一起看：規格在這裡，字在那裡。
  */
-import { ErrorGroup, type DomainError, type ErrorGroupValue } from '../../../shared/service-result.ts'
+import { ErrorGroup, type DomainError, type ErrorCode, type ErrorGroupValue } from '../../../shared/service-result.ts'
 
 /**
  * 本模組的錯誤碼（§1.3 的 `<領域>.<原因>`）。
+ *
+ * `satisfies Record<string, ErrorCode>` 把每一個碼釘在集中聯集（`shared/i18n/messages.ts`）上：
+ * 新增一個碼卻忘了寫訊息時，**這一行當場編譯不過**，而不是等到執行期回一句查不到的訊息。
  *
  * 領域一律用單數的 `employee`，而不是路徑上的 `employees`：錯誤碼的領域與路徑段名是兩套
  * 獨立的命名空間（§1.3）。寫成 `employees.` 會讓錯誤碼看起來像權限碼／`cmd`（那兩者才等於路徑），
@@ -23,7 +30,7 @@ export const EmployeeErrorCode = {
   IdentityNumberDuplicated: 'employee.identity-number-duplicated',
   NotFound: 'employee.not-found',
   StateChanged: 'employee.state-changed',
-} as const
+} as const satisfies Record<string, ErrorCode>
 
 export type EmployeeErrorCodeValue = (typeof EmployeeErrorCode)[keyof typeof EmployeeErrorCode]
 
@@ -39,7 +46,7 @@ export type EmployeeErrorCodeValue = (typeof EmployeeErrorCode)[keyof typeof Emp
 export const employeeCodeDuplicated = (): DomainError => ({
   group: ErrorGroup.Conflict,
   code: EmployeeErrorCode.CodeDuplicated,
-  msg: '員工編號已被使用，請換一個',
+  msg: EmployeeErrorCode.CodeDuplicated,
   data: { field: 'employeeCode' },
 })
 
@@ -56,7 +63,7 @@ export const employeeCodeDuplicated = (): DomainError => ({
 export const employeeIdentityNumberDuplicated = (): DomainError => ({
   group: ErrorGroup.Conflict,
   code: EmployeeErrorCode.IdentityNumberDuplicated,
-  msg: '此身分證字號已存在，無法建立',
+  msg: EmployeeErrorCode.IdentityNumberDuplicated,
   data: { field: 'identityNumber' },
 })
 
@@ -71,7 +78,7 @@ export const employeeIdentityNumberDuplicated = (): DomainError => ({
 export const employeeNotFound = (): DomainError => ({
   group: ErrorGroup.Unprocessable,
   code: EmployeeErrorCode.NotFound,
-  msg: '員工不存在或已被刪除',
+  msg: EmployeeErrorCode.NotFound,
   data: { field: 'id' },
 })
 
@@ -84,7 +91,7 @@ export const employeeNotFound = (): DomainError => ({
 export const employeeStateChanged = (): DomainError => ({
   group: ErrorGroup.Conflict,
   code: EmployeeErrorCode.StateChanged,
-  msg: '員工資料狀態已變更，請重新載入後再試',
+  msg: EmployeeErrorCode.StateChanged,
   data: { field: 'id' },
 })
 

@@ -8,7 +8,7 @@
  */
 import { Elysia } from 'elysia'
 import type { Clock } from '../shared/clock.ts'
-import { dataInvalid, systemError, type EnvelopeBody, type ErrorView } from '../shared/envelope.ts'
+import { dataInvalid, systemError, type EnvelopeBody } from '../shared/envelope.ts'
 import { LogCategory, logger } from '../shared/logger.ts'
 import { HttpStatus, type HttpStatusValue } from './http-code-map.ts'
 import { requestContext } from './request-context.ts'
@@ -43,24 +43,37 @@ const asRecord = (value: unknown): Record<string, unknown> | null => (isRecord(v
  */
 const toDotPath = (jsonPointer: string): string => jsonPointer.replace(/^\//, '').replaceAll('/', '.')
 
-const readValidationErrors = (error: unknown): readonly ErrorView[] => {
+/**
+ * schema 違規的一筆，**只進 log、不進回應**（§1.3：`100` 不附 `errors`）。
+ *
+ * 因此它刻意不是 `ErrorView`：`message` 是 TypeBox 產出的英文原文，不走訊息目錄
+ * （`shared/i18n/messages.ts`）。硬要它變成一個 key，就得為每一種 TypeBox 錯誤在目錄裡編一則
+ * 中文訊息，而那份訊息沒有任何使用者看得到——只是讓目錄多背一份會隨套件版本漂移的清單。
+ */
+type SchemaViolation = {
+  readonly code: string
+  readonly message: string
+  readonly field: string
+}
+
+const readValidationErrors = (error: unknown): readonly SchemaViolation[] => {
   const record = asRecord(error)
   const all = record?.['all']
   if (!Array.isArray(all)) return []
 
-  const views: ErrorView[] = []
+  const violations: SchemaViolation[] = []
   for (const item of all) {
     const detail = asRecord(item)
     const path = detail?.['path']
     const message = detail?.['message']
     if (typeof path !== 'string') continue
-    views.push({
+    violations.push({
       code: INVALID_FIELD_CODE,
-      msg: typeof message === 'string' ? message : '欄位格式不正確',
-      data: { field: toDotPath(path) },
+      message: typeof message === 'string' ? message : '(TypeBox 未附訊息)',
+      field: toDotPath(path),
     })
   }
-  return views
+  return violations
 }
 
 const readStack = (error: unknown): string => {
@@ -112,7 +125,8 @@ const mapFrameworkError = (
         path,
         violations: readValidationErrors(error),
       })
-      return { status: HttpStatus.BadRequest, body: dataInvalid('請求資料不符合規格') }
+      // 傳的是訊息 key，不是字串：翻譯只發生在出口層（§1.8.2，見 `response-envelope.ts`）。
+      return { status: HttpStatus.BadRequest, body: dataInvalid('request.invalid-schema') }
     }
 
     case 'PARSE':

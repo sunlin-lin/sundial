@@ -9,6 +9,10 @@
  * 錯誤碼的領域用 `role-assignment` 而不是 `company-users`：領域是**單數的功能分類**，
  * 與路徑段名是兩套獨立的命名空間（§1.3）。「角色指派」這個語意日後也會被
  * 新增員工（一次建立帳號＋角色）那條流程用到，綁死在目錄名上，那支端點就無碼可用。
+ *
+ * **每一筆的 `msg` 是訊息 key，不是字面訊息**（§1.8.2）：本檔決定「哪一則訊息」，
+ * 「哪一種語言」由出口層依 `locale` 決定。字面中文在 `shared/i18n/locales/`（查詢入口是 `shared/i18n/messages.ts`）——因此下面
+ * 「必須刻意含糊」的說明（§3.2），要連著那一頁一起看：規格在這裡，字在那裡。
  */
 import { ErrorGroup, type DomainError, type ErrorCode } from '../../../shared/service-result.ts'
 
@@ -17,6 +21,9 @@ import { ErrorGroup, type DomainError, type ErrorCode } from '../../../shared/se
  *
  * 每一個碼**只對應一種分組**（§1.8.3）：同一個碼有時 409、有時 422 的話，
  * 前端就無法只憑碼決定要「就地標欄位」還是「請使用者重新載入」，只能兩種都寫。
+ *
+ * `satisfies Record<string, ErrorCode>` 把每一個碼釘在集中聯集（`shared/i18n/messages.ts`）上：
+ * 新增一個碼卻忘了寫訊息時，**這一行當場編譯不過**，而不是等到執行期回一句查不到的訊息。
  */
 export const RoleAssignmentErrorCode = {
   /** 422。查無此公司成員——**包含「屬於其他公司」**（§3.2）。 */
@@ -35,7 +42,7 @@ export const RoleAssignmentErrorCode = {
   LastRoleRequired: 'role-assignment.last-role-required',
   /** 409。條件式 UPDATE 影響 0 列，代表在本次交易之外已有人改過同一批指派（§4.4）。 */
   StateChanged: 'role-assignment.state-changed',
-} as const
+} as const satisfies Record<string, ErrorCode>
 
 /**
  * 查無此公司成員。
@@ -47,14 +54,14 @@ export const RoleAssignmentErrorCode = {
 export const companyUserNotFound = (): DomainError => ({
   group: ErrorGroup.Unprocessable,
   code: RoleAssignmentErrorCode.CompanyUserNotFound,
-  msg: '找不到指定的公司成員',
+  msg: RoleAssignmentErrorCode.CompanyUserNotFound,
   data: { field: 'companyUserId' },
 })
 
 export const companyUserInactive = (): DomainError => ({
   group: ErrorGroup.Unprocessable,
   code: RoleAssignmentErrorCode.CompanyUserInactive,
-  msg: '成員帳號已停用，無法指派角色',
+  msg: RoleAssignmentErrorCode.CompanyUserInactive,
   data: { field: 'companyUserId' },
 })
 
@@ -68,28 +75,28 @@ export const companyUserInactive = (): DomainError => ({
 export const roleNotFound = (index: number): DomainError => ({
   group: ErrorGroup.Unprocessable,
   code: RoleAssignmentErrorCode.RoleNotFound,
-  msg: '找不到指定的角色',
+  msg: RoleAssignmentErrorCode.RoleNotFound,
   data: { field: `roleIds.${index}` },
 })
 
 export const roleInactive = (index: number): DomainError => ({
   group: ErrorGroup.Unprocessable,
   code: RoleAssignmentErrorCode.RoleInactive,
-  msg: '角色已停用，無法指派',
+  msg: RoleAssignmentErrorCode.RoleInactive,
   data: { field: `roleIds.${index}` },
 })
 
 export const roleAlreadyAssigned = (index: number): DomainError => ({
   group: ErrorGroup.Conflict,
   code: RoleAssignmentErrorCode.AlreadyAssigned,
-  msg: '這位成員已經擁有這個角色',
+  msg: RoleAssignmentErrorCode.AlreadyAssigned,
   data: { field: `roleIds.${index}` },
 })
 
 export const assignmentNotFound = (index: number): DomainError => ({
   group: ErrorGroup.Unprocessable,
   code: RoleAssignmentErrorCode.NotFound,
-  msg: '找不到可撤銷的角色指派',
+  msg: RoleAssignmentErrorCode.NotFound,
   data: { field: `roleIds.${index}` },
 })
 
@@ -97,14 +104,14 @@ export const assignmentNotFound = (index: number): DomainError => ({
 export const lastRoleRequired = (): DomainError => ({
   group: ErrorGroup.Conflict,
   code: RoleAssignmentErrorCode.LastRoleRequired,
-  msg: '每個帳號至少要保留一個角色，無法全部撤銷',
+  msg: RoleAssignmentErrorCode.LastRoleRequired,
   data: { field: 'roleIds' },
 })
 
 export const assignmentStateChanged = (): DomainError => ({
   group: ErrorGroup.Conflict,
   code: RoleAssignmentErrorCode.StateChanged,
-  msg: '角色指派狀態已變更，請重新載入',
+  msg: RoleAssignmentErrorCode.StateChanged,
   data: { field: 'roleIds' },
 })
 

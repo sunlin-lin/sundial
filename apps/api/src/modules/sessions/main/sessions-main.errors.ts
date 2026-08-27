@@ -13,10 +13,13 @@
  *
  * 本檔不得 import 任何 http／elysia 模組（§3.1.1）。
  */
-import { ErrorGroup, type DomainError, type ErrorGroupValue } from '../../../shared/service-result.ts'
+import { ErrorGroup, type DomainError, type ErrorCode, type ErrorGroupValue } from '../../../shared/service-result.ts'
 
 /**
  * 本模組的錯誤碼（§1.3 的 `<領域>.<原因>`）。
+ *
+ * `satisfies Record<string, ErrorCode>` 把每一個碼釘在集中聯集（`shared/i18n/messages.ts`）上：
+ * 新增一個碼卻忘了寫訊息時，**這一行當場編譯不過**，而不是等到執行期回一句查不到的訊息。
  *
  * 領域用 `auth` 而不是路徑上的 `sessions`：錯誤碼的領域與路徑段名是兩套**獨立的命名空間**（§1.3），
  * 前者是單數的功能分類，後者必須等於目錄名。寫成 `sessions.invalid-credentials` 會把
@@ -25,7 +28,7 @@ import { ErrorGroup, type DomainError, type ErrorGroupValue } from '../../../sha
  */
 export const SessionErrorCode = {
   InvalidCredentials: 'auth.invalid-credentials',
-} as const
+} as const satisfies Record<string, ErrorCode>
 
 export type SessionErrorCodeValue = (typeof SessionErrorCode)[keyof typeof SessionErrorCode]
 
@@ -50,11 +53,15 @@ export type SessionErrorCodeValue = (typeof SessionErrorCode)[keyof typeof Sessi
  *（§5.1 禁止把可用於枚舉的值放進 `errors[].data`），也不指向 `companyCode` 或 `username`
  * ——指哪一格就等於告訴使用者是哪一格錯了。指向 `password` 是三個欄位裡最無資訊量的選擇：
  * 它讓前端有一個可以聚焦的欄位（使用者最可能要重打的那一格），而不洩漏任何東西。
+ *
+ * `msg` 是**訊息 key**（與 `code` 同一個字串），字面訊息在 `shared/i18n/locales/`，
+ * 由出口層依 `locale` 翻譯（§1.8.2）。**含糊化的規格因此橫跨兩個檔案**：
+ * 上面那段說「為什麼只能有一句」，目錄那邊說「那一句是什麼」——要改字請先讀完這一段。
  */
 export const invalidCredentials = (): DomainError => ({
   group: ErrorGroup.Unprocessable,
   code: SessionErrorCode.InvalidCredentials,
-  msg: '公司代號、帳號或密碼錯誤',
+  msg: SessionErrorCode.InvalidCredentials,
   data: { field: 'password' },
 })
 

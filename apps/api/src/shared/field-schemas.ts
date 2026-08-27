@@ -9,6 +9,7 @@
  */
 import { t } from 'elysia'
 import type { TSchema } from '@sinclair/typebox'
+import { SUPPORTED_LOCALES } from './i18n/messages.ts'
 
 /** UUID v1–v5 的字面格式。用 pattern 而非 `format: 'uuid'`，避免相依 TypeBox 的 format 註冊時機。 */
 export const Uuid = t.String({
@@ -56,8 +57,14 @@ export const Money = t.String({ pattern: '^-?\\d{1,13}(?:\\.\\d{1,2})?$' })
  */
 export const Minutes = t.Integer({ minimum: 0 })
 
-/** 語系。目前只有繁體中文；新增語系是相容變更（新增列舉值且舊值仍支援，§1.6）。 */
-export const Locale = t.Literal('zh-TW')
+/**
+ * 語系。目前只有繁體中文；新增語系是相容變更（新增列舉值且舊值仍支援，§1.6）。
+ *
+ * **由訊息目錄的支援清單推導，不在這裡另寫一份字面值。** 兩處各寫一份的結果是它們會分岔：
+ * schema 放行了一個目錄裡沒有的語系（整批訊息靜靜回落成中文），或目錄翻好了卻被 schema 擋在門外
+ * ——兩種都不會有任何編譯錯誤。
+ */
+export const Locale = t.Union(SUPPORTED_LOCALES.map((locale) => t.Literal(locale)))
 
 /**
  * Request 的三個基底欄位（§1.3），**平鋪**在 body 同一層，不另開 `payload` 巢狀節點。

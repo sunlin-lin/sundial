@@ -43,7 +43,11 @@ export const mapDomainErrors = (errors: readonly DomainError[]): BoundaryRespons
 
   // `msg` 取第一筆只是為了讓不看 `errors` 的呼叫端有東西顯示；前端的處置一律綁在
   // `errors[].code` 上（§1.3），完整清單一筆都不會少。
-  return { status, body: logicError(errors.map(toErrorView), first.msg) }
+  //
+  // 插值參數要跟著同一筆一起帶走：只帶 `msg` 不帶 `params` 的話，頂層那句話會留著一串
+  // `{{assignedUserCount}}` 送到使用者面前——而 `errors[0].msg` 是好的，所以看畫面的人
+  // 只會覺得「有時候會有奇怪的括號」，不會有任何一層報錯。
+  return { status, body: logicError(errors.map(toErrorView), first.msg, first.params) }
 }
 
 /**

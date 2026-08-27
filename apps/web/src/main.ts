@@ -22,13 +22,23 @@ import {
   setPermissionDeniedHandler,
   setSystemFailureHandler,
 } from './shared/api/client.ts'
-import { t } from './shared/i18n/messages.ts'
+import { i18n, type TranslateMessage } from './shared/i18n/messages.ts'
 import { useAuthStore } from './stores/auth.ts'
 
 const app = createApp(App)
 const pinia = createPinia()
 
+/**
+ * 元件之外要用的翻譯函式。
+ *
+ * 這裡沒有 `useI18n()` 可用（那支只能在 setup 期間呼叫），因此走全域 composer。
+ * 型別標註的作用與元件內那一行完全相同：把 key 收窄回 `MessageKey`
+ * （vue-i18n 自己的 `t` 收任意字串，理由見語系檔檔頭）。
+ */
+const translate: TranslateMessage = i18n.global.t
+
 app.use(pinia)
+app.use(i18n)
 app.use(router)
 
 /**
@@ -50,9 +60,13 @@ setAuthRequiredHandler(() => {
  *
  * 把 403 當 401 處理會讓使用者進入「登入 → 點到沒權限的功能 → 被踢回登入頁」的無限迴圈，
  * 而且他重登幾次就遇到幾次，看起來像整個系統壞掉。
+ *
+ * 顯示的是**後端回來的那句話**，不是前端自己的文案（見語系檔檔頭）：後端已經依 `locale` 翻好，
+ * 前端再備一份只會多出一個會漂移的副本。`901` 的細節（是哪一個權限碼）後端一律不揭露，
+ * 所以這句話本來就是一句一般化的訊息（後端規範 §3.1.1）。
  */
-setPermissionDeniedHandler(() => {
-  ElMessage.error(t('error.permission-denied'))
+setPermissionDeniedHandler((message) => {
+  ElMessage.error(message)
 })
 
 /**
@@ -65,7 +79,7 @@ setPermissionDeniedHandler(() => {
  * `X-Trace-Id`（後端規範 §1.3）。`expForLog` 也是在這條路徑上使用——那是它唯一的用途。
  */
 setSystemFailureHandler((failure) => {
-  ElMessage.error(t('error.system'))
+  ElMessage.error(translate('error.system'))
   console.error('[api] 系統錯誤', {
     diagnosticCode: failure.diagnosticCode,
     exp: failure.expForLog,

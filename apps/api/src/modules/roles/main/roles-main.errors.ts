@@ -7,11 +7,18 @@
  *
  * 本檔不得 import 任何 http／elysia 模組（§3.1.1）：錯誤分組用具名常數表達，
  * 「這個分組在某個入口上對應什麼狀態碼」是入口的事。
+ *
+ * **每一筆的 `msg` 是訊息 key，不是字面訊息**（§1.8.2）：本檔決定「哪一則訊息」，
+ * 「哪一種語言」由出口層依 `locale` 決定。字面中文在 `shared/i18n/locales/`（查詢入口是 `shared/i18n/messages.ts`）——因此下面每一段
+ * 「訊息不得寫得更精確」的說明（§3.2），要連著那一頁一起看：規格在這裡，字在那裡。
  */
-import { ErrorGroup, type DomainError, type ErrorGroupValue } from '../../../shared/service-result.ts'
+import { ErrorGroup, type DomainError, type ErrorCode, type ErrorGroupValue } from '../../../shared/service-result.ts'
 
 /**
  * 本模組的錯誤碼（§1.3 的 `<領域>.<原因>`）。
+ *
+ * `satisfies Record<string, ErrorCode>` 把每一個碼釘在集中聯集（`shared/i18n/messages.ts`）上：
+ * 新增一個碼卻忘了寫訊息時，**這一行當場編譯不過**，而不是等到執行期回一句查不到的訊息。
  *
  * 領域一律用單數的 `role`，而不是路徑上的 `roles`：錯誤碼的領域與路徑段名是兩套獨立的命名空間
  * （§1.3）。寫成 `roles.` 會讓錯誤碼看起來像權限碼／`cmd`（那兩者才等於路徑），
@@ -26,7 +33,7 @@ export const RoleErrorCode = {
   InUse: 'role.in-use',
   LastAdminRole: 'role.last-admin-role',
   StateChanged: 'role.state-changed',
-} as const
+} as const satisfies Record<string, ErrorCode>
 
 export type RoleErrorCodeValue = (typeof RoleErrorCode)[keyof typeof RoleErrorCode]
 
@@ -50,7 +57,7 @@ const permissionIdField = (index: number): string => `permissionIds.${index}`
 export const roleCodeDuplicated = (): DomainError => ({
   group: ErrorGroup.Conflict,
   code: RoleErrorCode.CodeDuplicated,
-  msg: '角色代碼已被使用，請換一個',
+  msg: RoleErrorCode.CodeDuplicated,
   data: { field: 'code' },
 })
 
@@ -64,7 +71,7 @@ export const roleCodeDuplicated = (): DomainError => ({
 export const roleNotFound = (): DomainError => ({
   group: ErrorGroup.Unprocessable,
   code: RoleErrorCode.NotFound,
-  msg: '角色不存在或已被刪除',
+  msg: RoleErrorCode.NotFound,
   data: { field: 'id' },
 })
 
@@ -72,7 +79,7 @@ export const roleNotFound = (): DomainError => ({
 export const permissionNotFound = (index: number): DomainError => ({
   group: ErrorGroup.Unprocessable,
   code: RoleErrorCode.PermissionNotFound,
-  msg: '選取的權限不存在',
+  msg: RoleErrorCode.PermissionNotFound,
   data: { field: permissionIdField(index) },
 })
 
@@ -85,7 +92,7 @@ export const permissionNotFound = (index: number): DomainError => ({
 export const permissionNotAssignable = (index: number): DomainError => ({
   group: ErrorGroup.Unprocessable,
   code: RoleErrorCode.PermissionNotAssignable,
-  msg: '選取的權限不可指派，請改選底下的實際權限',
+  msg: RoleErrorCode.PermissionNotAssignable,
   data: { field: permissionIdField(index) },
 })
 
@@ -98,7 +105,7 @@ export const permissionNotAssignable = (index: number): DomainError => ({
 export const systemRoleProtected = (): DomainError => ({
   group: ErrorGroup.Conflict,
   code: RoleErrorCode.SystemRoleProtected,
-  msg: '系統預設角色不可修改或刪除',
+  msg: RoleErrorCode.SystemRoleProtected,
   data: { field: 'id' },
 })
 
@@ -108,11 +115,17 @@ export const systemRoleProtected = (): DomainError => ({
  * `assignedUserCount` 進 `data` 是安全的：它只是本公司自己的統計，不揭露任何人的身分
  * （§5.1 禁止把敏感值放進 `errors[].data`）。帶著這個數字，前端才能把訊息寫成
  * 「仍有 3 位成員使用此角色」而不是一句沒有下一步的「無法刪除」。
+ *
+ * **同一個數字也進 `params`，那是給後端自己的訊息插值用的**（`shared/i18n/`）：`data` 是回給前端的
+ * 定位資訊，`params` 是造句用的輸入，兩者的去向不同（`params` 不會出現在 JSON 回應裡）。
+ * 這一則是本檔唯一帶插值的錯誤，因此也是唯一在型別上被要求填 `params` 的
+ * ——少填是編譯錯誤，不是一句留著 `{{assignedUserCount}}` 的訊息。
  */
 export const roleInUse = (assignedUserCount: number): DomainError => ({
   group: ErrorGroup.Conflict,
   code: RoleErrorCode.InUse,
-  msg: '仍有公司成員使用此角色，請先將成員移轉至其他角色',
+  msg: RoleErrorCode.InUse,
+  params: { assignedUserCount },
   data: { field: 'id', assignedUserCount },
 })
 
@@ -125,7 +138,7 @@ export const roleInUse = (assignedUserCount: number): DomainError => ({
 export const lastAdminRole = (): DomainError => ({
   group: ErrorGroup.Conflict,
   code: RoleErrorCode.LastAdminRole,
-  msg: '這是公司最後一個具管理能力的角色，不可刪除或停用',
+  msg: RoleErrorCode.LastAdminRole,
   data: { field: 'id' },
 })
 
@@ -138,7 +151,7 @@ export const lastAdminRole = (): DomainError => ({
 export const roleStateChanged = (): DomainError => ({
   group: ErrorGroup.Conflict,
   code: RoleErrorCode.StateChanged,
-  msg: '角色狀態已變更，請重新載入後再試',
+  msg: RoleErrorCode.StateChanged,
   data: { field: 'id' },
 })
 

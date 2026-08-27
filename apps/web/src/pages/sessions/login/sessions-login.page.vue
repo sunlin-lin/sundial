@@ -5,9 +5,11 @@
  */
 import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElAlert, ElButton, ElForm, ElFormItem, ElInput } from 'element-plus'
+import { BusinessRuleError } from '../../../shared/api/api-error.ts'
 import { login } from '../../../shared/api/sessions.ts'
-import { t } from '../../../shared/i18n/messages.ts'
+import type { TranslateMessage } from '../../../shared/i18n/messages.ts'
 import { useAuthStore } from '../../../stores/auth.ts'
 import { canSubmitLogin } from './sessions-login.actions.ts'
 import { toLoginPayload } from './sessions-login.payload.ts'
@@ -15,10 +17,14 @@ import { toLoginPayload } from './sessions-login.payload.ts'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+// 標註型別把 key 收窄回 `MessageKey`，並同時遮蔽掉套件的全域 `$t`（理由見語系檔的 `TranslateMessage`）。
+const { t } = useI18n()
+const $t: TranslateMessage = t
 
 const form = reactive({ companyCode: '', username: '', password: '' })
 const isSubmitting = ref(false)
-const hasFailed = ref(false)
+/** 顯示在表單上方的失敗訊息；`null` = 這次還沒失敗過。 */
+const failureMessage = ref<string | null>(null)
 
 const payload = computed(() => toLoginPayload(form.companyCode, form.username, form.password))
 const canSubmit = computed(() => canSubmitLogin(payload.value, isSubmitting.value))
@@ -38,11 +44,30 @@ const resolveDestination = (): { path: string } | { name: string } => {
   return { path: requested }
 }
 
+/**
+ * 失敗時要顯示的那句話。
+ *
+ * **業務錯誤一律顯示後端回來的 `errors[0].msg`，前端不自己準備文案**（見語系檔檔頭）：
+ * 登入失敗的含糊化是**後端的規格**（後端規範 §3.2：公司代號不存在／帳號不存在／密碼錯誤／
+ * 帳號不屬於這家公司，四種一律同一句），四種原因在後端就已經收斂成同一筆 `auth.invalid-credentials`。
+ * 前端另外留一份文案的話，那份副本不受那條規格約束——下一個人把它改精確一點時沒有任何檢查會擋，
+ * 而登入頁就變成一支帳號列舉工具。
+ *
+ * 非業務錯誤（連不上、回應不是 envelope）走前端自己的系統錯誤文案：那與帳號是否存在無關，
+ * 不構成列舉管道，而使用者能做的也只有再試一次。
+ */
+const toFailureMessage = (error: unknown): string => {
+  if (!(error instanceof BusinessRuleError)) return $t('error.system')
+  // `errors` 理論上一定有一筆（後端規範 §1.3：`300` 才帶 errors，且不會是空的）；
+  // 真的空了就退到 envelope 頂層的 `msg`，那一句同樣是後端翻好的。
+  return error.errors[0]?.msg ?? error.message
+}
+
 const onSubmit = (): void => {
   if (!canSubmit.value) return
 
   isSubmitting.value = true
-  hasFailed.value = false
+  failureMessage.value = null
 
   login(payload.value)
     .then((identity) => {
@@ -50,11 +75,8 @@ const onSubmit = (): void => {
       auth.signIn(identity)
       return router.replace(resolveDestination())
     })
-    .catch(() => {
-      // **一律顯示同一句訊息，不因錯誤內容而不同。**
-      // 分辨「帳號不存在」與「密碼錯誤」等於把登入頁變成一支帳號列舉工具；
-      // 而系統錯誤與業務錯誤在這一頁對使用者的意義也是一樣的——他能做的只有再試一次。
-      hasFailed.value = true
+    .catch((error: unknown) => {
+      failureMessage.value = toFailureMessage(error)
     })
     .finally(() => {
       isSubmitting.value = false
@@ -65,26 +87,26 @@ const onSubmit = (): void => {
 <template>
   <div class="flex min-h-screen items-center justify-center bg-canvas p-6">
     <div class="w-full max-w-sm rounded-panel bg-surface p-8 shadow-panel">
-      <h1 class="text-xl font-semibold text-ink">{{ t('login.heading') }}</h1>
-      <p class="mt-1 mb-6 text-sm text-ink-muted">{{ t('login.subheading') }}</p>
+      <h1 class="text-xl font-semibold text-ink">{{ $t('login.heading') }}</h1>
+      <p class="mt-1 mb-6 text-sm text-ink-muted">{{ $t('login.subheading') }}</p>
 
       <ElAlert
-        v-if="hasFailed"
+        v-if="failureMessage !== null"
         class="mb-4"
         type="error"
         show-icon
         :closable="false"
-        :title="t('login.failed')"
+        :title="failureMessage"
       />
 
       <ElForm label-position="top" @submit.prevent="onSubmit">
-        <ElFormItem :label="t('login.field.company-code')">
+        <ElFormItem :label="$t('login.field.company-code')">
           <ElInput v-model="form.companyCode" name="companyCode" autocomplete="organization" />
         </ElFormItem>
-        <ElFormItem :label="t('login.field.username')">
+        <ElFormItem :label="$t('login.field.username')">
           <ElInput v-model="form.username" name="username" autocomplete="username" />
         </ElFormItem>
-        <ElFormItem :label="t('login.field.password')">
+        <ElFormItem :label="$t('login.field.password')">
           <ElInput
             v-model="form.password"
             name="password"
@@ -101,7 +123,7 @@ const onSubmit = (): void => {
           :loading="isSubmitting"
           :disabled="!canSubmit"
         >
-          {{ t('login.submit') }}
+          {{ $t('login.submit') }}
         </ElButton>
       </ElForm>
     </div>
