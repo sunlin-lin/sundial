@@ -2,7 +2,7 @@
 
 適用於 Sundial 前端：Vue 3（Composition API + `<script setup>`）、TypeScript 嚴格模式、Vue Router、Pinia、Element Plus、Tailwind CSS v4、Vite、axios。
 
-本文規定**程式碼怎麼寫**，不規定檔案放哪裡。畫面規格見 [`docs/ui/`](./ui/README.md)，資料欄位以 [`docs/schema/`](./schema/README.md) 為準。
+本文規定**程式碼怎麼寫**；**檔案放哪裡只規定一條，見 1.5**（頁面私有 vs 共用區的界線）。畫面規格見 [`docs/ui/`](./ui/README.md)，資料欄位以 [`docs/schema/`](./schema/README.md) 為準。
 
 **標記**：✅ = 可自動化檢查，違反時 CI 應該是紅的，不靠 code review 抓。沒有 ✅ 的條文靠 review 把關，因此每條都必須寫清楚「違反會發生什麼」，才有辦法在 review 中被指認。全文採「**規則 → 理由 → 範例**」，範例只出現在容易寫錯處。
 
@@ -64,6 +64,16 @@ export function availableActions(
 <!-- ✅ --> <span>{{ formatWorkedHours(row.workedMinutes) }}</span>
 <!-- ❌ --> <span>{{ row.workedMinutes ? (row.workedMinutes / 60).toFixed(1) + ' 小時' : '—' }}</span>
 ```
+
+### 1.5 頁面私有的東西放頁面自己的目錄，共用區要先有第二個使用者 ✅
+
+**規則**　某個頁面私有的呈現邏輯（1.3 抽出來的純函式）與子元件，一律放在**該頁面自己的目錄底下**。**只有在被兩個以上的頁面實際共用時，才移入共用區**（共用元件／共用 composable／共用 format 目錄）。移入時才改 import，不預先放。
+
+**理由**　「先放共用區以備不時之需」是共用區變成垃圾場的標準路徑。東西一旦放進共用區，三件事同時發生：**沒有人知道它還有沒有人用**（刪不掉，因為不確定）、**沒有人敢改它**（可能有別人在用），以及**它會開始長參數**——第二個頁面來用時加一個 `mode`，第三個再加一個 `compact`，最後那個「共用元件」的內部是一堆 `v-if`，比兩份各自單純的實作加起來還難讀。而放在頁面目錄下的東西，界線是清楚的：只有這一頁在用，改它只會影響這一頁，刪這一頁時它跟著一起刪掉。
+
+第二個使用者出現時才移入，成本也不高——那時候你**已經知道**兩邊真正共用的是哪一部分，抽出來的介面是被兩個真實案例驗證過的，而不是憑想像先設計一個。
+
+**檢查**　dependency-cruiser 禁止跨頁面目錄的 import（頁面 A 的目錄不得被頁面 B 的檔案 import，要共用就先移進共用區）；掃描測試斷言共用區的每個模組**至少有兩個不同的 import 來源目錄**，只有一個使用者即失敗（全域基礎設施——layout、router、統一 client——各算一個來源；含掃描器自我檢查，見 general 規範 §7.2）。
 
 ## 2. 狀態管理
 
@@ -568,6 +578,7 @@ rows.value = (await api.recordList(query)).data
 | 1.1 `script setup` + 型別化 props/emits | ESLint + `vue-tsc` |
 | 1.2 元件行數上限 | ESLint `max-lines`、模板深度 |
 | 1.4 模板禁複雜運算式 | `vue/no-complex-template-expression` |
+| 1.5 頁面私有的邏輯與元件放頁面目錄下；共用區的模組必須有兩個以上頁面使用 | dependency-cruiser + 掃描測試（含掃描器自我檢查） |
 | 2.2 store 命名與 `reset()` | ESLint + 掃描測試 |
 | 3.1 禁止直接 import axios | `no-restricted-imports` |
 | 3.1 access token 只存記憶體（禁止 `localStorage`／`sessionStorage`），refresh 只在統一 client 內做 | 掃描測試 |
@@ -599,4 +610,4 @@ rows.value = (await api.recordList(query)).data
 | 9.1 表單標籤、禁 `div` 當按鈕 | `eslint-plugin-vuejs-accessibility` |
 | 9.2 禁裸中文字串、禁直接格式化、禁 `new Date()` 換算時區、業務時間不得帶時區偏移（帶偏移僅限 `rqTS`／`rspTS`／`exp`，且這三者**一律不上畫面**） | 掃描測試 + `no-restricted-syntax` |
 
-共 33 條規則可自動化檢查。**新增規範時的原則：先問「這條能不能寫成檢查」，能就寫成檢查，不能才寫進文件。**
+共 34 條規則可自動化檢查。**新增規範時的原則：先問「這條能不能寫成檢查」，能就寫成檢查，不能才寫進文件。**
