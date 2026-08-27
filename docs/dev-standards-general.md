@@ -21,7 +21,7 @@
 |---|---|---|
 | 目錄 | `kebab-case` | `date-range/` |
 | 一般 `.ts` 檔 | `kebab-case` | `date-range.ts` |
-| Vue 元件檔 | `PascalCase.vue` | `DateRangePicker.vue` |
+| Vue 元件檔 | `PascalCase.vue`<br>**例外**：`*.page.vue`（路由目標檔）採 kebab-case，由路徑推導決定檔名（見前端規範 §0.3）。理由：它不是被 import 的元件，是由 `.route.ts` 動態載入的路由目標，不出現在任何模板標籤中。 | `DateRangePicker.vue`<br>`<段1>-<段2>.page.vue` |
 | 測試檔 | 被測檔同名 + `.test.ts` | `date-range.test.ts` |
 | 型別定義檔 | `kebab-case.types.ts` | `date-range.types.ts` |
 
