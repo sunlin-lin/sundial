@@ -92,7 +92,7 @@ const readLogoutResult = (value: unknown): true | null =>
 /**
  * 登入。
  *
- * 失敗時後端回 **422 ＋ `code='300'` ＋ `errors[0].code = 'auth.invalid-credentials'`**，
+ * 失敗時後端回 **422 ＋ `code='300'` ＋ `errors[0].code = 'sessions.main.errors.invalid-credentials'`**，
  * 不是 `900`（後端規範 §1.3）——因為使用者已經在登入頁了，「導向登入頁」對他不是一個動作。
  * 因此呼叫端會收到 `BusinessRuleError`，而不是被 client 導走。
  *

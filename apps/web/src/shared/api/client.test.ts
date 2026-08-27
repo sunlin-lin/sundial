@@ -162,7 +162,7 @@ describe('依 code 分支', () => {
     replaceTransport(async () => ({
       status: 422,
       payload: envelopeBody('300', null, null, [
-        { code: 'auth.invalid-credentials', msg: '帳號或密碼錯誤', data: { field: 'password' } },
+        { code: 'sessions.main.errors.invalid-credentials', msg: '帳號或密碼錯誤', data: { field: 'password' } },
       ]),
     }))
 
@@ -171,7 +171,7 @@ describe('依 code 分支', () => {
     )
 
     expect(failure).toBeInstanceOf(BusinessRuleError)
-    expect(failure).toHaveProperty('errors.0.code', 'auth.invalid-credentials')
+    expect(failure).toHaveProperty('errors.0.code', 'sessions.main.errors.invalid-credentials')
   })
 })
 

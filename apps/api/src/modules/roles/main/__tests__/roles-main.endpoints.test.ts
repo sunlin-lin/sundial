@@ -391,7 +391,7 @@ describe('roles/main endpoints (integration)', () => {
     expect(deleted.payload.errors[0]?.code).toBe(RoleErrorCode.InUse)
     expect(deleted.payload.errors[0]?.data?.['assignedUserCount']).toBe(1)
 
-    // 訊息插值：`role.in-use` 的句子要真的長出那個數字。
+    // 訊息插值：`roles.main.errors.in-use` 的句子要真的長出那個數字。
     //
     // 斷言「有數字」而不是整句逐字比對：逐字比對會讓每一次潤稿都變成一支紅掉的測試，
     // 於是下一個人學會的是「改字要順手改測試」，而這一條真正要守的是**插值有沒有接上**

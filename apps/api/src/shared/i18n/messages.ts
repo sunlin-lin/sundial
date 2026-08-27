@@ -12,7 +12,14 @@
  *
  * ---
  *
- * **為什麼用 i18next，而不是繼續手寫一張對照表。** 手寫版做不到插值：`role.in-use` 的
+ * **訊息 key 一律四段，由模組路徑機械推導**：`<大目錄>.<次目錄>.<類別>.<訊息名>`，全部 kebab-case
+ * （與路徑、`cmd`、權限碼一致）。語系檔按同樣的層次分層擺放（`locales/zh-TW/`，一個大目錄一個檔），
+ * 於是 key 不需要任何人「想」——跟著目錄走就只有一種寫法。`errors` 只是類別之一，
+ * 之後的欄位標籤、成功訊息在同一個次目錄底下另開類別即可。
+ *
+ * ---
+ *
+ * **為什麼用 i18next，而不是繼續手寫一張對照表。** 手寫版做不到插值：`roles.main.errors.in-use` 的
  * `errors[].data` 早就帶著 `assignedUserCount`，訊息卻只能說一句沒有數字的「仍有成員使用此角色」，
  * 因為對照表裡放的是一個死字串。自己補一個 `replace('{{x}}', ...)` 等於自己寫一個會愈長愈大的
  * 樣板引擎（複數、日期、巢狀變數、跳脫），而那已經是套件在做的事。
@@ -23,8 +30,8 @@
  * 呼叫端拿不到 `string` 這條路。
  *
  * **本檔同時是 §1.3 要求的「錯誤碼集中聯集」，而不是第二份對照表。** 錯誤碼與訊息 key 刻意是
- * 同一個字串（`auth.invalid-credentials`），於是「有哪些錯誤碼」與「每個錯誤碼講哪句話」
- * 必然是同一份清單——不可能一邊加了、另一邊忘了。各模組的 `*.errors.ts` 以
+ * 同一個字串（`sessions.main.errors.invalid-credentials`），於是「有哪些錯誤碼」與
+ * 「每個錯誤碼講哪句話」必然是同一份清單——不可能一邊加了、另一邊忘了。各模組的 `*.errors.ts` 以
  * `satisfies Record<string, ErrorCode>` 釘住自己那組碼，因此模組新增一個沒寫進語系檔的碼時，
  * **模組當場編譯不過**，而不是等到執行期回一句空訊息給使用者。
  *
@@ -33,12 +40,13 @@
  */
 import i18next from 'i18next'
 import { logger, LogCategory } from '../logger.ts'
-import { ZH_TW_ERRORS, ZH_TW_PLATFORM } from './locales/zh-TW.ts'
+import { ZH_TW, ZH_TW_ERRORS, ZH_TW_PLATFORM } from './locales/zh-TW/index.ts'
+import { findMessage, flattenMessageTree, type MessageKeysOf, type PartialMessageTree } from './message-tree.ts'
 
 /**
  * 支援的語系。
  *
- * 新增語系是相容變更（§1.6）：加值、不刪值。加進來之後 {@link CATALOGS} 要多一份目錄，
+ * 新增語系是相容變更（§1.6）：加值、不刪值。加進來之後 {@link MESSAGE_CATALOGS} 要多一份目錄，
  * 而 §2 的 `Locale` schema 會自動跟著放行（`field-schemas.ts` 由本清單推導，不另寫一份）。
  */
 export const SUPPORTED_LOCALES = ['zh-TW'] as const
@@ -49,23 +57,32 @@ export type LocaleValue = (typeof SUPPORTED_LOCALES)[number]
  * 回落語系。
  *
  * 兩種情況會用到它：請求沒帶 `locale`（例如錯誤發生在 body 解析之前），以及帶了一個我們不支援的
- * 語系。兩者都不該讓使用者看到空字串或一個 `role.not-found` 這樣的 key——**key 上畫面比沒有訊息更糟**：
- * 使用者看不懂，客服也看不懂，而它看起來像一句正常的訊息，不會有人回報。
+ * 語系。兩者都不該讓使用者看到空字串或一個 `roles.main.errors.not-found` 這樣的 key
+ * ——**key 上畫面比沒有訊息更糟**：使用者看不懂，客服也看不懂，而它看起來像一句正常的訊息，
+ * 不會有人回報。
  */
 export const DEFAULT_LOCALE = 'zh-TW'
 
 /**
- * 業務錯誤碼（§1.3）。格式 `<領域>.<原因>`，禁止編碼式命名（`E4012` 這種）。
+ * 業務錯誤碼（§1.3）。格式 `<大目錄>.<次目錄>.<類別>.<訊息名>`，禁止編碼式命名（`E4012` 這種）。
  *
  * 這是**真正的聯集型別**而不是 `` `${string}.${string}` `` 樣板字面值：後者只擋得住「格式不對」，
- * 擋不住 `role.not-fond` 這種拼錯——那會一路過關到執行期，變成一句查不到訊息的錯誤。
+ * 擋不住 `roles.main.errors.not-fond` 這種拼錯——那會一路過關到執行期，變成一句查不到訊息的錯誤。
+ *
+ * 由**業務**訊息樹推導，不含平台訊息：`platform.*` 那幾則不會出現在 `errors[].code`，
+ * 混進來的話各模組的 `satisfies Record<string, ErrorCode>` 就擋不住有人拿「系統發生錯誤」當業務碼。
  */
-export type ErrorCode = keyof typeof ZH_TW_ERRORS
+export type ErrorCode = MessageKeysOf<typeof ZH_TW_ERRORS>
 
-export type PlatformMessageKey = keyof typeof ZH_TW_PLATFORM
+export type PlatformMessageKey = MessageKeysOf<typeof ZH_TW_PLATFORM>
 
 /** 訊息目錄的所有 key。業務錯誤碼與平台訊息共用同一個查詢入口。 */
 export type MessageKey = ErrorCode | PlatformMessageKey
+
+/** 插值變數的型別，以名字表示。**刻意是封閉的兩個值**，見 {@link MESSAGE_PARAM_SPECS}。 */
+type MessageParamKind = 'number' | 'string'
+
+type MessageParamValueOf<TKind extends MessageParamKind> = TKind extends 'number' ? number : string
 
 /**
  * 需要插值的訊息，各自宣告它吃哪些變數。**沒列在這裡的 key 一個變數都收不了。**
@@ -76,15 +93,32 @@ export type MessageKey = ErrorCode | PlatformMessageKey
  * 宣告成型別之後，`DomainError` 就能在**建構那一筆錯誤的地方**要求把變數填齊（見 `service-result.ts`），
  * 那正是唯一知道數字從哪來的地方。
  *
- * ⚠️ 這份宣告與語系檔裡的 `{{...}}` 是兩份東西，型別擋不住「宣告了變數但句子裡沒用到」。
- * 反過來的那半——句子用了變數卻沒人傳——會在建構錯誤的地方被擋下，而那是會害到使用者的那一半。
+ * **為什麼是一個「值」而不是直接手寫 `type MessageParamsMap = {...}`。** 型別在執行期不存在，
+ * 於是「宣告的變數」與「語系檔句子裡的 `{{...}}`」就成了兩份互不驗證的東西：句子拿掉 `{{}}`
+ * 或拼錯變數名，編譯器一個字都看不到。寫成值之後，`scripts/check-message-params.ts`
+ * （`bun run check:i18n`）能拿它去跟每一句話雙向比對，而 {@link MessageParamsMap} 仍然由它推導
+ * ——**只有一份宣告**，不是「型別一份、給腳本看的一份」。
+ *
+ * key 被 `satisfies` 釘在 {@link MessageKey} 上（打錯即編譯錯誤），值被釘在 {@link MessageParamKind}
+ * 這個封閉聯集上（`'nubmer'` 也是編譯錯誤，而不是一個推導出 `string` 的驚喜）。
  */
-type MessageParamsMap = {
-  readonly 'role.in-use': { readonly assignedUserCount: number }
-}
+export const MESSAGE_PARAM_SPECS = {
+  'roles.main.errors.in-use': { assignedUserCount: 'number' },
+} as const satisfies Readonly<Partial<Record<MessageKey, Readonly<Record<string, MessageParamKind>>>>>
+
+type MessageParamSpecs = typeof MESSAGE_PARAM_SPECS
 
 /** 需要插值的訊息 key。 */
-export type ParameterizedMessageKey = keyof MessageParamsMap
+export type ParameterizedMessageKey = keyof MessageParamSpecs
+
+/** 由 {@link MESSAGE_PARAM_SPECS} 推導：`'number'` → `number`，`'string'` → `string`。 */
+type MessageParamsMap = {
+  readonly [TKey in ParameterizedMessageKey]: {
+    readonly [TParam in keyof MessageParamSpecs[TKey]]: MessageParamValueOf<
+      MessageParamSpecs[TKey][TParam] & MessageParamKind
+    >
+  }
+}
 
 /**
  * 任何一則訊息可能帶的插值參數（聯集，不是 `Record<string, unknown>`）。
@@ -103,9 +137,6 @@ export type MessageParams = MessageParamsMap[ParameterizedMessageKey]
  */
 export type MessageParamsOf<TKey extends MessageKey> = MessageParamsMap[Extract<TKey, ParameterizedMessageKey>]
 
-/** 完整目錄：預設語系必須每一則都有，缺一則就是編譯錯誤。 */
-type MessageCatalog = Readonly<Record<MessageKey, string>>
-
 /**
  * 非預設語系的目錄。
  *
@@ -113,10 +144,11 @@ type MessageCatalog = Readonly<Record<MessageKey, string>>
  * 缺的那幾則由 i18next 依 `fallbackLng` 回落到預設語系，並由 {@link translate} 記一筆 log
  * ——回空字串或回 key 本身都不行，前者讓使用者看到一個沒有內容的錯誤，
  * 後者讓他看到一句沒人看得懂、也沒人會回報的假訊息。
+ *
+ * 「預設語系必須完整」不再需要一個型別來檢查：**訊息 key 這份清單就是由 zh-TW 那棵樹算出來的**，
+ * 它不可能缺自己。少一則的症狀是那個 key 從 {@link MessageKey} 消失，於是用到它的模組編譯不過。
  */
-type PartialMessageCatalog = Readonly<Partial<Record<MessageKey, string>>>
-
-const ZH_TW: MessageCatalog = { ...ZH_TW_ERRORS, ...ZH_TW_PLATFORM }
+type PartialMessageCatalog = PartialMessageTree<typeof ZH_TW>
 
 /**
  * 各語系的目錄。
@@ -124,25 +156,31 @@ const ZH_TW: MessageCatalog = { ...ZH_TW_ERRORS, ...ZH_TW_PLATFORM }
  * 新增語系時在這裡多一列（型別是 {@link PartialMessageCatalog}，可以只翻一部分），
  * 並在 {@link SUPPORTED_LOCALES} 加值——兩處都改到了，`Record<LocaleValue, ...>` 才會過。
  *
- * **這份物件同時是 i18next 的資源來源與「這一則在這個語系有沒有」的判斷依據**（見 {@link translate}）：
- * 只有一份資料，就不會有「餵給套件的目錄」與「我們以為的目錄」對不起來的可能。
+ * **匯出是給 `scripts/check-message-params.ts` 用的**：插值掃描器要能自己看到「有哪些語系」，
+ * 否則新增語系時「目錄多了一列」與「掃描器也要多掃一個」會變成兩件要分別記得的事，
+ * 而漏掉後者不會有任何症狀——新語系的插值從此不受檢查。
  */
-const CATALOGS: Readonly<Record<LocaleValue, PartialMessageCatalog>> = {
+export const MESSAGE_CATALOGS: Readonly<Record<LocaleValue, PartialMessageCatalog>> = {
   'zh-TW': ZH_TW,
 }
 
-/** i18next 的預設命名空間名稱。本專案只有一個 namespace，key 自己已經帶著領域前綴（§1.3）。 */
+/** i18next 的預設命名空間名稱。本專案只有一個 namespace，key 自己已經帶著模組前綴（§1.3）。 */
 const NAMESPACE = 'translation'
 
 /**
- * 把 {@link CATALOGS} 轉成 i18next 要的資源形狀（多包一層 namespace）。
+ * 把 {@link MESSAGE_CATALOGS} **攤平**後轉成 i18next 要的資源形狀（多包一層 namespace）。
  *
- * **由 {@link CATALOGS} 推導而不是各寫一份。** 手寫一份餵給套件的話，新增語系時「目錄多了一列」
+ * 語系檔在原始碼裡是巢狀樹（跟著模組結構長，好改），餵給套件的是單層的
+ * `{ 'roles.main.errors.in-use': '仍有…' }`——兩種形狀，一份資料（見 `message-tree.ts` 檔頭）。
+ *
+ * **由目錄推導而不是各寫一份。** 手寫一份餵給套件的話，新增語系時「目錄多了一列」
  * 與「套件那邊也多了一列」是兩件要分別記得的事，漏掉後者的症狀是那個語系整包回落成中文
  * ——而 {@link translate} 的缺翻譯 log 一行都不會印，因為在我們這邊它明明有翻。
  */
-const toResources = (): Record<string, Record<string, PartialMessageCatalog>> =>
-  Object.fromEntries(Object.entries(CATALOGS).map(([locale, catalog]) => [locale, { [NAMESPACE]: catalog }]))
+const toResources = (): Record<string, Record<string, Record<string, string>>> =>
+  Object.fromEntries(
+    Object.entries(MESSAGE_CATALOGS).map(([locale, catalog]) => [locale, { [NAMESPACE]: flattenMessageTree(catalog) }]),
+  )
 
 /**
  * 本專案專用的 i18next 實例。
@@ -162,8 +200,11 @@ void i18n.init({
   resources: toResources(),
 
   // **必須關掉這兩個分隔符號。** i18next 預設把 `.` 當巢狀路徑、`:` 當 namespace 前綴，
-  // 而我們的 key 本來就長成 `auth.invalid-credentials`——不關掉的話，它會去找一個
-  // 名為 `auth` 的子物件底下的 `invalid-credentials`，然後找不到，然後回傳 key 本身。
+  // 而餵進去的資源是**攤平過**的，key 本來就長成 `sessions.main.errors.invalid-credentials`
+  // ——不關掉的話，它會去找一個名為 `sessions` 的子物件，然後找不到，然後回傳 key 本身。
+  //
+  // （語系檔在原始碼裡確實是巢狀的，但那是給人看的形狀；餵給套件的一律是攤平後的單層物件，
+  //   於是「i18next 怎麼解析 key」不必跟著我們的目錄分層走——樹再深，這裡的設定都不用改。）
   keySeparator: false,
   nsSeparator: false,
 
@@ -205,7 +246,7 @@ export const resolveLocale = (requested: string | null): LocaleValue => {
  *
  * @param key 訊息 key，業務錯誤碼也是一種 key（見檔頭）。**型別是我們自己的聯集**，不是 `string`。
  * @param locale 已收斂過的語系，見 {@link resolveLocale}。
- * @param params 該則訊息宣告的插值參數（見 `MessageParamsMap`）。不需插值的 key 這裡是 `never`，
+ * @param params 該則訊息宣告的插值參數（見 {@link MESSAGE_PARAM_SPECS}）。不需插值的 key 這裡是 `never`，
  *   傳任何東西都不合法。
  */
 export const translate = <TKey extends MessageKey>(
@@ -213,7 +254,7 @@ export const translate = <TKey extends MessageKey>(
   locale: LocaleValue,
   params?: MessageParamsOf<TKey>,
 ): string => {
-  if (CATALOGS[locale][key] === undefined) {
+  if (findMessage(MESSAGE_CATALOGS[locale], key) === undefined) {
     // 這一則在該語系還沒翻，下面 i18next 會回落到預設語系。留下記錄是必要的——
     // 沒有這行 log 的話，「某幾則訊息永遠是中文」不會有任何人發現，因為畫面看起來是好的。
     logger.warn(LogCategory.UnhandledException, '訊息在該語系缺翻譯，回落預設語系', {

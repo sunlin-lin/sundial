@@ -6,7 +6,7 @@
  * 而沒有任何方式能從外部看出哪幾支端點自己填了。
  *
  * **翻譯也是同一條規則的延伸，而不是額外的一件事。** envelope 頂層 `msg` 與每一筆 `errors[].msg`
- * 到這一層之前都還是 key（`auth.invalid-credentials`），在這裡才依 `locale` 換成字串——
+ * 到這一層之前都還是 key（`sessions.main.errors.invalid-credentials`），在這裡才依 `locale` 換成字串——
  * 因為**這是整條鏈上唯一知道 `locale` 的一層**（它就是補 `locale` 的那一層）。
  * 分工是：service／`*.errors.ts` 決定**哪一則訊息**（產出 key），出口層決定**哪一種語言**。
  * 讓 service 決定語言的後果是實的：同一段業務規則被第二種入口（設備、對外 API）呼叫時，

@@ -16,18 +16,34 @@
 import { ErrorGroup, type DomainError, type ErrorCode, type ErrorGroupValue } from '../../../shared/service-result.ts'
 
 /**
- * 本模組的錯誤碼（§1.3 的 `<領域>.<原因>`）。
+ * 本模組的錯誤碼（§1.3，格式見下）。
  *
  * `satisfies Record<string, ErrorCode>` 把每一個碼釘在集中聯集（`shared/i18n/messages.ts`）上：
  * 新增一個碼卻忘了寫訊息時，**這一行當場編譯不過**，而不是等到執行期回一句查不到的訊息。
  *
- * 領域用 `auth` 而不是路徑上的 `sessions`：錯誤碼的領域與路徑段名是兩套**獨立的命名空間**（§1.3），
- * 前者是單數的功能分類，後者必須等於目錄名。寫成 `sessions.invalid-credentials` 會把
- * 「憑證錯誤」這個**跨端點**的語意綁死在單一個目錄上——日後改密碼端點（在 `credentials` 大目錄底下）
- * 要回同一種錯時就無碼可用，只能再發明一個，而前端就得為同一件事準備兩套文案。
+ * ---
+ *
+ * **這個碼曾經叫 `auth.invalid-credentials`，那個決定已被推翻。**
+ *
+ * 現行規則：**訊息 key 一律四段，由模組路徑機械推導**——`<大目錄>.<次目錄>.<類別>.<訊息名>`，
+ * 全部 kebab-case（與路徑、`cmd`、權限碼一致）。這一則在 `modules/sessions/main/`，
+ * 類別是 `errors`，於是它只能是 `sessions.main.errors.invalid-credentials`，沒有第二種寫法。
+ *
+ * 舊規則說「領域是單數的功能分類，與路徑段名是兩套獨立的命名空間」，理由是跨端點語意：
+ * 日後改密碼端點（在 `credentials` 大目錄底下）要表達「憑證錯誤」時可以共用同一個碼。
+ * 推翻它的理由不是那個論證錯了，而是**它要求每一個錯誤碼都先做一次命名判斷**——
+ * 「這個原因的功能分類叫什麼」沒有標準答案，於是同一件事在不同人手上會長出
+ * `auth.`／`session.`／`credential.` 三個名字，而每一個都「有道理」。
+ * 由路徑推導則連判斷都不需要：碼在哪個目錄，前兩段就是什麼，一個字都不用想，也就無從想歪。
+ *
+ * **代價是實的，不打算粉飾：跨模組共用的訊息會出現重複的文案。** 改密碼端點日後要回同一句
+ * 「公司代號、帳號或密碼錯誤」時，它得用自己的 `credentials.<次目錄>.errors.invalid-credentials`，
+ * 於是同一句中文會在兩個語系檔裡各寫一次；兩邊要一起改的那天，漏掉一邊不會有任何編譯錯誤。
+ * 接受這個代價，是因為它的失敗模式是**文案不一致**（看得見、改得動），
+ * 而舊規則的失敗模式是**命名不一致**（要靠全文檢索才找得到，改了就是破壞性變更）。
  */
 export const SessionErrorCode = {
-  InvalidCredentials: 'auth.invalid-credentials',
+  InvalidCredentials: 'sessions.main.errors.invalid-credentials',
 } as const satisfies Record<string, ErrorCode>
 
 export type SessionErrorCodeValue = (typeof SessionErrorCode)[keyof typeof SessionErrorCode]

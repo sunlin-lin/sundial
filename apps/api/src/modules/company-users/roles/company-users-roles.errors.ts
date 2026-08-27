@@ -6,9 +6,13 @@
  * 與「這位成員屬於別家公司」共用的唯一出口**，兩者一旦可區分，攻擊者拿 id 枚舉就能探測出
  * 別家公司有哪些成員存在，而每一次探測在系統看來都只是一個正常請求。
  *
- * 錯誤碼的領域用 `role-assignment` 而不是 `company-users`：領域是**單數的功能分類**，
- * 與路徑段名是兩套獨立的命名空間（§1.3）。「角色指派」這個語意日後也會被
- * 新增員工（一次建立帳號＋角色）那條流程用到，綁死在目錄名上，那支端點就無碼可用。
+ * **錯誤碼由模組路徑機械推導**：`<大目錄>.<次目錄>.<類別>.<訊息名>`，本次目錄是
+ * `modules/company-users/roles/`，因此一律 `company-users.roles.errors.*`
+ * ——前兩段就是目錄，不是另外取的領域名（完整規則與它推翻了什麼，見 `sessions-main.errors.ts`）。
+ *
+ * 這批碼曾經以 `role-assignment` 為領域，理由是「角色指派」這個語意日後也會被新增員工
+ * （一次建立帳號＋角色）那條流程用到。**代價換過來了**：那支端點日後要用自己的碼，
+ * 於是同一句文案會在兩個語系檔各寫一次；換來的是這裡不必再判斷「這個語意該叫什麼」。
  *
  * **每一筆的 `msg` 是訊息 key，不是字面訊息**（§1.8.2）：本檔決定「哪一則訊息」，
  * 「哪一種語言」由出口層依 `locale` 決定。字面中文在 `shared/i18n/locales/`（查詢入口是 `shared/i18n/messages.ts`）——因此下面
@@ -27,21 +31,21 @@ import { ErrorGroup, type DomainError, type ErrorCode } from '../../../shared/se
  */
 export const RoleAssignmentErrorCode = {
   /** 422。查無此公司成員——**包含「屬於其他公司」**（§3.2）。 */
-  CompanyUserNotFound: 'role-assignment.company-user-not-found',
+  CompanyUserNotFound: 'company-users.roles.errors.company-user-not-found',
   /** 422。成員帳號已停用，不得再授予角色。 */
-  CompanyUserInactive: 'role-assignment.company-user-inactive',
+  CompanyUserInactive: 'company-users.roles.errors.company-user-inactive',
   /** 422。查無此角色——**包含「屬於其他公司」與「已軟刪除」**（§3.2、§4.3）。 */
-  RoleNotFound: 'role-assignment.role-not-found',
+  RoleNotFound: 'company-users.roles.errors.role-not-found',
   /** 422。角色已停用，停用後不可再授予（UI §右側角色資料）。 */
-  RoleInactive: 'role-assignment.role-inactive',
+  RoleInactive: 'company-users.roles.errors.role-inactive',
   /** 409。這位成員已經有這個角色的有效指派。 */
-  AlreadyAssigned: 'role-assignment.already-assigned',
+  AlreadyAssigned: 'company-users.roles.errors.already-assigned',
   /** 422。要撤銷的指派不存在或已被撤銷。 */
-  NotFound: 'role-assignment.not-found',
+  NotFound: 'company-users.roles.errors.not-found',
   /** 409。撤銷後成員會一個有效角色都不剩（UI §3.5「系統禁止移除最後一個角色」）。 */
-  LastRoleRequired: 'role-assignment.last-role-required',
+  LastRoleRequired: 'company-users.roles.errors.last-role-required',
   /** 409。條件式 UPDATE 影響 0 列，代表在本次交易之外已有人改過同一批指派（§4.4）。 */
-  StateChanged: 'role-assignment.state-changed',
+  StateChanged: 'company-users.roles.errors.state-changed',
 } as const satisfies Record<string, ErrorCode>
 
 /**

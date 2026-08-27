@@ -27,7 +27,7 @@ export type WebFlowCode = (typeof WEB_FLOW_CODE)[keyof typeof WEB_FLOW_CODE]
 
 /** `errors[]` 的單筆結構（後端規範 §1.3）。僅 `code='300'` 時會有內容。 */
 export type EnvelopeError = {
-  /** 語意化錯誤碼，例如 `auth.invalid-credentials`。前端據此決定行為。 */
+  /** 語意化錯誤碼，例如 `sessions.main.errors.invalid-credentials`。前端據此決定行為。 */
   readonly code: string
   /** 錯誤訊息。前端只拿它當 fallback 顯示，不拿它做判斷。 */
   readonly msg: string

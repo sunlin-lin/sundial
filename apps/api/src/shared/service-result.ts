@@ -22,7 +22,7 @@ export const ErrorGroup = {
 export type ErrorGroupValue = (typeof ErrorGroup)[keyof typeof ErrorGroup]
 
 /**
- * 錯誤碼（§1.3），格式 `<領域>.<原因>`，例如 `auth.invalid-credentials`。
+ * 錯誤碼（§1.3），格式 `<大目錄>.<次目錄>.<類別>.<訊息名>`，例如 `sessions.main.errors.invalid-credentials`。
  *
  * **它是一份集中的字面值聯集，不是 `` `${string}.${string}` `` 樣板型別。** 聯集列在
  * `shared/i18n/messages.ts`——因為錯誤碼與訊息 key 刻意是同一個字串，「有哪些碼」與「每個碼講哪句話」
@@ -50,7 +50,7 @@ type DomainErrorParamsOf<TCode extends ErrorCode> = TCode extends ParameterizedM
  * - 帶 key 不帶字串：service 決定「哪一則訊息」，語言由出口層依 `locale` 決定（§1.8.2）。
  *   業務層一旦寫死中文，這段規則被第二種入口呼叫時就改不掉語系了（§1.0.1）。
  * - `msg` 只能填自己的 `code`：寫成別的碼不會有任何錯誤，只會讓使用者看到一句**對不上這個錯誤**
- *   的訊息（`role.not-found` 配上「仍有公司成員使用此角色」），而 `errors[].code` 是對的，
+ *   的訊息（`roles.main.errors.not-found` 配上「仍有公司成員使用此角色」），而 `errors[].code` 是對的，
  *   所以前端的分支也是對的——沒有任何一層會察覺。展開成聯集之後，這種寫法直接編譯不過。
  *
  * **`params` 與 `data` 是兩件事，刻意不共用一個欄位。** `data` 是回給前端的（`field` dot-path、

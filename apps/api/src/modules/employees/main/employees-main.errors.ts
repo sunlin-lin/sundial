@@ -16,20 +16,20 @@
 import { ErrorGroup, type DomainError, type ErrorCode, type ErrorGroupValue } from '../../../shared/service-result.ts'
 
 /**
- * 本模組的錯誤碼（§1.3 的 `<領域>.<原因>`）。
+ * 本模組的錯誤碼（§1.3，格式見下）。
  *
  * `satisfies Record<string, ErrorCode>` 把每一個碼釘在集中聯集（`shared/i18n/messages.ts`）上：
  * 新增一個碼卻忘了寫訊息時，**這一行當場編譯不過**，而不是等到執行期回一句查不到的訊息。
  *
- * 領域一律用單數的 `employee`，而不是路徑上的 `employees`：錯誤碼的領域與路徑段名是兩套
- * 獨立的命名空間（§1.3）。寫成 `employees.` 會讓錯誤碼看起來像權限碼／`cmd`（那兩者才等於路徑），
- * 而它們的比對規則完全不同——混淆之後，log 上用同一個字串搜尋會撈到兩種不相干的東西。
+ * **碼由模組路徑機械推導**：`<大目錄>.<次目錄>.<類別>.<訊息名>`，本模組在 `modules/employees/main/`，
+ * 因此一律 `employees.main.errors.*`（完整規則與它推翻了什麼，見 `sessions-main.errors.ts`）。
+ * 前綴與權限碼／`cmd` 長得像是刻意的：它們本來就都等於路徑，同一個字串在 log 上搜得到全部相關紀錄。
  */
 export const EmployeeErrorCode = {
-  CodeDuplicated: 'employee.code-duplicated',
-  IdentityNumberDuplicated: 'employee.identity-number-duplicated',
-  NotFound: 'employee.not-found',
-  StateChanged: 'employee.state-changed',
+  CodeDuplicated: 'employees.main.errors.code-duplicated',
+  IdentityNumberDuplicated: 'employees.main.errors.identity-number-duplicated',
+  NotFound: 'employees.main.errors.not-found',
+  StateChanged: 'employees.main.errors.state-changed',
 } as const satisfies Record<string, ErrorCode>
 
 export type EmployeeErrorCodeValue = (typeof EmployeeErrorCode)[keyof typeof EmployeeErrorCode]

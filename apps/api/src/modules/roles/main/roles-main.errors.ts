@@ -15,24 +15,24 @@
 import { ErrorGroup, type DomainError, type ErrorCode, type ErrorGroupValue } from '../../../shared/service-result.ts'
 
 /**
- * 本模組的錯誤碼（§1.3 的 `<領域>.<原因>`）。
+ * 本模組的錯誤碼（§1.3，格式見下）。
  *
  * `satisfies Record<string, ErrorCode>` 把每一個碼釘在集中聯集（`shared/i18n/messages.ts`）上：
  * 新增一個碼卻忘了寫訊息時，**這一行當場編譯不過**，而不是等到執行期回一句查不到的訊息。
  *
- * 領域一律用單數的 `role`，而不是路徑上的 `roles`：錯誤碼的領域與路徑段名是兩套獨立的命名空間
- * （§1.3）。寫成 `roles.` 會讓錯誤碼看起來像權限碼／`cmd`（那兩者才等於路徑），
- * 而它們的比對規則完全不同——混淆之後，log 上用同一個字串搜尋會撈到兩種不相干的東西。
+ * **碼由模組路徑機械推導**：`<大目錄>.<次目錄>.<類別>.<訊息名>`，本模組在 `modules/roles/main/`，
+ * 因此一律 `roles.main.errors.*`（完整規則與它推翻了什麼，見 `sessions-main.errors.ts`）。
+ * 前綴與權限碼／`cmd` 長得像是刻意的：它們本來就都等於路徑，同一個字串在 log 上搜得到全部相關紀錄。
  */
 export const RoleErrorCode = {
-  CodeDuplicated: 'role.code-duplicated',
-  NotFound: 'role.not-found',
-  PermissionNotFound: 'role.permission-not-found',
-  PermissionNotAssignable: 'role.permission-not-assignable',
-  SystemRoleProtected: 'role.system-role-protected',
-  InUse: 'role.in-use',
-  LastAdminRole: 'role.last-admin-role',
-  StateChanged: 'role.state-changed',
+  CodeDuplicated: 'roles.main.errors.code-duplicated',
+  NotFound: 'roles.main.errors.not-found',
+  PermissionNotFound: 'roles.main.errors.permission-not-found',
+  PermissionNotAssignable: 'roles.main.errors.permission-not-assignable',
+  SystemRoleProtected: 'roles.main.errors.system-role-protected',
+  InUse: 'roles.main.errors.in-use',
+  LastAdminRole: 'roles.main.errors.last-admin-role',
+  StateChanged: 'roles.main.errors.state-changed',
 } as const satisfies Record<string, ErrorCode>
 
 export type RoleErrorCodeValue = (typeof RoleErrorCode)[keyof typeof RoleErrorCode]

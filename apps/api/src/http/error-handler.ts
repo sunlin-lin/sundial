@@ -126,7 +126,7 @@ const mapFrameworkError = (
         violations: readValidationErrors(error),
       })
       // 傳的是訊息 key，不是字串：翻譯只發生在出口層（§1.8.2，見 `response-envelope.ts`）。
-      return { status: HttpStatus.BadRequest, body: dataInvalid('request.invalid-schema') }
+      return { status: HttpStatus.BadRequest, body: dataInvalid('platform.request.errors.invalid-schema') }
     }
 
     case 'PARSE':

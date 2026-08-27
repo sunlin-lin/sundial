@@ -403,7 +403,7 @@ describe('employees/main endpoints (integration)', () => {
     expect(byName.payload.data.pagination.totalCount).toBe(1)
   })
 
-  test('員工編號重複回 409／300 與 employee.code-duplicated，且不回聲既有員工', async () => {
+  test('員工編號重複回 409／300 與 employees.main.errors.code-duplicated，且不回聲既有員工', async () => {
     const company = await registerCompany()
     const employeeCode = uniqueCode('DUP')
 
@@ -498,7 +498,7 @@ describe('employees/main endpoints (integration)', () => {
     expect(recreated.payload.data.id).not.toBe(created.payload.data.id)
   })
 
-  test('重複刪除同一位員工，第二次回 employee.state-changed', async () => {
+  test('重複刪除同一位員工，第二次回 employees.main.errors.state-changed', async () => {
     const company = await registerCompany()
     const created = await call<EmployeeDetailShape>('/employees/main/create', company.token, profileBody())
 
@@ -514,7 +514,7 @@ describe('employees/main endpoints (integration)', () => {
     expect(declaredCodes(EMPLOYEE_ENDPOINT_ERRORS.delete)).toContain(EmployeeErrorCode.NotFound)
   })
 
-  test('修改不存在的員工回 422／300 與 employee.not-found', async () => {
+  test('修改不存在的員工回 422／300 與 employees.main.errors.not-found', async () => {
     const company = await registerCompany()
 
     const updated = await call('/employees/main/update', company.token, {

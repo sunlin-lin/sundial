@@ -219,7 +219,7 @@ export const logicError = (
  * 系統錯誤（`400`）。訊息一律一般化：例外訊息可能含 SQL 原文或內部路徑，
  * 對使用者沒有意義，對攻擊者卻有（§3.2）。細節進 log，不進回應。
  */
-export const systemError = (msg: MessageKey = 'system.unexpected-error'): EnvelopeBody<null> => ({
+export const systemError = (msg: MessageKey = 'platform.system.errors.unexpected-error'): EnvelopeBody<null> => ({
   code: WebFlowCode.SystemError,
   msg,
   errors: [],
@@ -227,7 +227,7 @@ export const systemError = (msg: MessageKey = 'system.unexpected-error'): Envelo
 })
 
 /** 資料不正確（`100`）。依 §1.3 **完全不提供 errors**——送錯代表呼叫端沒照契約來，那是開發期問題。 */
-export const dataInvalid = (msg: MessageKey = 'request.invalid-payload'): EnvelopeBody<null> => ({
+export const dataInvalid = (msg: MessageKey = 'platform.request.errors.invalid-payload'): EnvelopeBody<null> => ({
   code: WebFlowCode.DataInvalid,
   msg,
   errors: [],
@@ -235,7 +235,7 @@ export const dataInvalid = (msg: MessageKey = 'request.invalid-payload'): Envelo
 })
 
 /** 無有效身分（`900`）。前端據此導向登入頁。 */
-export const authRequired = (msg: MessageKey = 'auth.session-required'): EnvelopeBody<null> => ({
+export const authRequired = (msg: MessageKey = 'platform.auth.errors.session-required'): EnvelopeBody<null> => ({
   code: WebFlowCode.AuthRequired,
   msg,
   errors: [],
@@ -249,7 +249,7 @@ export const authRequired = (msg: MessageKey = 'auth.session-required'): Envelop
  * 前端對 `901` 的處置本來就只有一種（顯示無權限），而揭露「你是因為不是本人才被擋」
  * 本身就是一種資訊外洩。
  */
-export const permissionDenied = (msg: MessageKey = 'auth.permission-denied'): EnvelopeBody<null> => ({
+export const permissionDenied = (msg: MessageKey = 'platform.auth.errors.permission-denied'): EnvelopeBody<null> => ({
   code: WebFlowCode.PermissionDenied,
   msg,
   errors: [],
