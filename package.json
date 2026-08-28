@@ -15,13 +15,14 @@
     "check": "eslint . && prettier --check .",
     "check:layers": "depcruise --config .dependency-cruiser.cjs apps/api/src",
     "check:i18n": "bun run apps/api/scripts/check-message-params.ts",
+    "check:audit-policy": "bun run apps/api/scripts/check-audit-policy.ts",
     "db:up": "docker compose -f docker-compose.dev.yml up -d --wait",
     "db:down": "docker compose -f docker-compose.dev.yml down",
     "db:generate": "bun run --filter @sundial/api db:generate",
     "db:migrate": "bun run --filter @sundial/api db:migrate",
     "db:migrate:test": "bun run --filter @sundial/api db:migrate:test",
     "seed:dev": "bun run --filter @sundial/api seed:dev",
-    "ci": "bun run check && bun run typecheck && bun run typecheck:web && bun run check:layers && bun run check:i18n && bun run test"
+    "ci": "bun run check && bun run typecheck && bun run typecheck:web && bun run check:layers && bun run check:i18n && bun run check:audit-policy && bun run test"
   },
   "devDependencies": {
     "typescript": "^5.9.0",

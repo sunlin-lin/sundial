@@ -58,6 +58,7 @@
   理由：命名不一致時，join 條件與 mapping 全部要逐表查，也讓自動產生型別與查詢輔助無法成立。
 - **主檔表必備 `created_at`、`updated_at`；需保留歷史者一律 `deleted_at` 軟刪除，禁止實體 DELETE。** ✅（schema 掃描）
   理由：本系統的資料大多是可稽核事實。實體刪除一筆已被其他紀錄引用的資料，會讓引用方（尤其是已鎖定的計算快照）對不上來源，且無法復原。
+  **補集（§7.6 要求規則的定義域必須可判定）：append-only 的事件流水表不是主檔表，它只需 `created_at`，且不得有 `updated_at` 與 `deleted_at`。** 判準是「這張表的列在寫入之後永遠不會被修改」——`audit_logs` 是這一類。不寫出這個補集的話，這種表沒有一類可歸，而掃描器實作那天只能各自解讀；更糟的是「稽核紀錄不可修改」這件事會被 `updated_at` 這一欄的存在**在 schema 上直接否定掉**，而下一個人看到別的表都有、這張沒有，第一個念頭就是補上去。
 - **不使用 DB ENUM；固定代碼用 `string`/`integer`，語意寫進欄位註釋，TypeScript 端以 union 或 const object 定義唯一來源。** ✅（掃描禁止 `mysqlEnum`）
   理由：MariaDB 改 ENUM 需 `ALTER TABLE` 重建，在大表上是鎖表操作；新增一個代碼值這種業務常態不該變成 DDL 變更。
 - **TypeScript 端欄位維持 `camelCase`，由 Drizzle 對應 DB 的 `snake_case`，兩邊不得各自發明。** ⚠️（PR review）

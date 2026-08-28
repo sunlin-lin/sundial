@@ -71,6 +71,13 @@
       "when": 1787788809000,
       "tag": "0009_seed_permission_codes_employees",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1787788810000,
+      "tag": "0010_create_audit_logs",
+      "breakpoints": true
     }
   ]
 }

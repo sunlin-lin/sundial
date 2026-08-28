@@ -118,7 +118,40 @@
 
 ## 稽核日誌
 
-原對話已確認稽核功能，但最終表名與逐欄 Schema 尚未定案，因此本文件仍不自行命名 `audit_logs`。
+表名已定案為 `audit_logs`，逐欄 Schema 見下。實作計畫見 [實作計畫：稽核紀錄](../plans/02-audit-logs.md)。
+
+### `audit_logs`
+
+**註釋：** 誰在什麼時候改了哪一筆資料，以及改了什麼。
+
+**設計理由：** 稽核紀錄獨立且只承載「資料異動」一種語意，不混入登入行為、系統 log 或查詢行為——稽核要求「一筆不少、永久保存、不可修改」，行為紀錄要求「量大、可過期清理、可取樣」，兩種保存策略互斥；混在同一張表就只能取其一，而通常取到的是後者，稽核紀錄會跟著被清掉。
+
+| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
+|---|---|---|---|
+| `id` | `uuid` | 必填 | 主鍵，資料唯一識別碼 |
+| `company_id` | `uuid` | 必填 | 所屬公司外鍵 |
+| `actor_type_code` | `integer` | 必填 | 1 公司成員、2 系統（排程／驗證器） |
+| `actor_company_user_id` | `uuid` | 條件必填 | 操作者公司成員外鍵；`actor_type_code=1` 時必填 |
+| `action` | `varchar(150)` | 必填 | 動作碼，由模組路徑推導，例如 `employees.main.update` |
+| `subject_table` | `varchar(64)` | 必填 | 資料主體所在的表，例如 `employees` |
+| `subject_id` | `varchar(64)` | 必填 | 資料主體主鍵的字串形式；uuid 直接存，`bigint` 存十進位字串 |
+| `changes` | `json` | 必填 | 逐欄差異；新增時 `before` 為 NULL，刪除時 `after` 為 NULL |
+| `effective_date` | `date` | 選填 | 適用時的生效日；帶生效日的異動才有 |
+| `created_at` | `datetime` | 必填 | 建立時間，即「操作時間」——稽核與業務同一交易寫入，兩者必然相同 |
+
+**`subject_id` 為何是字串而非 `uuid`：** 全站主鍵型態不只一種（法規三表與 `company_regulatory_settings` 用 `bigint`），而公司投保設定正是稽核表要服務的第一個對象。訂成 `uuid` 會讓它存不進去，且要到那個模組動工才會發現，屆時已套用的 migration 不得修改。
+
+**明確不含：** `updated_at`、`deleted_at`。稽核紀錄不得修改或刪除，schema 上不提供這兩欄，等同於不宣告「這筆可以改」。判準見開發通用規範 §1.4 的「append-only 事件流水表」補集。
+
+**明確不含：** `occurred_at`。不設第二個時間欄位——並存的話「哪一個才是真正的操作時間」會變成每次讀稽核都要重想一次的問題。
+
+**明確不含：** IP、User-Agent、裝置資訊。登入行為屬於另一種紀錄，另有規劃。
+
+**外鍵：** `company_id → companies.id`；`(company_id, actor_company_user_id) → company_users(company_id, id)` **複合外鍵**。單欄外鍵會讓「A 公司的稽核紀錄」指向 B 公司的成員而資料庫完全接受，與 `company_user_roles.assigned_by` 當初的修正同一理由。`actor_type_code=2` 時該欄為 NULL，MATCH SIMPLE 語意下不檢查。
+
+**索引：** `(company_id, subject_table, subject_id, created_at)`、`(company_id, created_at)`、`(company_id, actor_company_user_id, created_at)`；三支索引皆以 `company_id` 起頭。
+
+**`changes` 的欄位分級：** 每一張被稽核的表逐欄宣告可入稽核的程度——`value`（記前後值）、`presence`（只記「這一欄變更了」，不記值）、`excluded`（明確不記）。未分類的欄位由檢查腳本擋下。`presence` 是「密碼與身分證不得寫入」與「重設密碼、修改身分證必須留紀錄」兩條同時成立的唯一解。
 
 依本輪「員工清單」UI 定案，稽核範圍增加並確認包含：
 
