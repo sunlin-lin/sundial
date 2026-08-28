@@ -104,3 +104,83 @@ export const parseRocCompactDate = (value: string): RocDateResult => {
 
   return { ok: true, value: `${String(year)}-${pad2(month)}-${pad2(day)}` }
 }
+
+/**
+ * 中文句子裡的「N年N月N日起適用」。
+ *
+ * `(?<!\d)` 擋的是**西元寫法**：`2026年1月1日起適用` 少了它會match到 `026年`，
+ * 算成民國 26 年（1937）——又是一個「完全合理的錯日期」。加上它之後整句比對不到，
+ * 於是走失敗分支，而那正是格式變更時該發生的事。
+ *
+ * 年份 `\d{2,3}`（民國 100 年以前是兩位）、月日 `\d{1,2}`（政府寫 `1月1日` 不補零）。
+ */
+const ROC_EFFECTIVE_TEXT_PATTERN = /(?<!\d)(\d{2,3})年(\d{1,2})月(\d{1,2})日起適用/g
+
+/**
+ * 從一段中文文字裡取出生效日（`115年1月1日起適用` → `2026-01-01`）。
+ *
+ * @param text 政府 metadata 的資源說明，例如
+ *   `勞工職業災害保險適用行業別及費率表(114年1月1日起適用)`。
+ * @param label 這段文字是什麼（`資源說明`），只用來組錯誤訊息——那句話會原樣進
+ *   `regulatory_sync_logs.error_message`，而看紀錄的人要能分辨是「政府沒寫」還是「我們讀不懂」。
+ *
+ * ## 為什麼這支函式存在：`4` 與 `6` 的生效日不在資料裡
+ *
+ * `dataset_code=1`、`3` 的每一列都帶著生效日（`適用起日`／`生效日`，民國 YYYMMDD），
+ * 但 `4`（勞就保分擔金額表）與 `6`（職災費率表）的資源內容裡**一個日期欄位都沒有**
+ * ——2026-08 的實測確認過三種格式（JSON／CSV／XML）都只有數字欄位。
+ * 它們的適用日只寫在 metadata 的資源說明裡，計畫 §3.1 的表格也是這樣記的。
+ *
+ * ## 只認「起適用」這一種句型，不做同義詞擴充
+ *
+ * 不接受「起實施」「施行」「適用於」等等，也不接受省略「日」的寫法（`115年1月起適用`）。
+ * 政府改了措辭 → 比對不到 → 整批失敗（§7.2）。這看起來很脆，但脆的方向是對的：
+ * 放寬成「找到年月就算數」的版本，會在政府把說明改成
+ * 「本表自115年1月1日起適用，114年1月1日起之費率請參閱歷史版本」時挑到**兩個日期中的一個**，
+ * 而挑錯的那一半不會有任何症狀。
+ *
+ * ## 同一段文字出現兩個**不同**日期時失敗
+ *
+ * 理由與 `dataset_code=1` 的「整批 `適用起日` 必須一致」逐字相同：這一版從哪天生效沒有唯一答案時，
+ * 挑其中一個正是計畫 §7.2 禁止的「推測值」。同一個日期寫兩次（標題與內文各一次）則放行，
+ * 那不是歧義。
+ */
+export const parseRocEffectiveDateFromText = (text: string, label: string): RocDateResult => {
+  const dates = new Set<string>()
+  let firstFailure: string | null = null
+
+  for (const matched of text.matchAll(ROC_EFFECTIVE_TEXT_PATTERN)) {
+    // 三段都由 `\d{1,3}` 比對而來，因此一定是數字字串；補零後交給
+    // `parseRocCompactDate` 做日曆檢查（閏年、月份、日數），這裡不重寫一份。
+    const compact = `${matched[1] ?? ''}${pad2(Number(matched[2] ?? ''))}${pad2(Number(matched[3] ?? ''))}`
+    const parsed = parseRocCompactDate(compact)
+    if (!parsed.ok) {
+      firstFailure ??= parsed.reason
+      continue
+    }
+    dates.add(parsed.value)
+  }
+
+  if (dates.size === 0) {
+    return {
+      ok: false,
+      reason:
+        firstFailure === null
+          ? `${label}裡找不到「N年N月N日起適用」的生效日：${JSON.stringify(text)}`
+          : `${label}裡的生效日不是合法日期（${firstFailure}）：${JSON.stringify(text)}`,
+    }
+  }
+
+  if (dates.size > 1) {
+    return {
+      ok: false,
+      reason: `${label}裡出現兩個以上的生效日（${[...dates].join('、')}），無法推導唯一的版本生效日：${JSON.stringify(text)}`,
+    }
+  }
+
+  // `size === 1` 已由上面兩個分支確定，但 `values().next().value` 在型別上仍可能是 undefined；
+  // 用 `as` 收掉它等於把這個不變式從編譯器手上拿走（§2.2），因此改成解構後再判一次。
+  const [only] = [...dates]
+  if (only === undefined) return { ok: false, reason: `${label}的生效日推導失敗：${JSON.stringify(text)}` }
+  return { ok: true, value: only }
+}

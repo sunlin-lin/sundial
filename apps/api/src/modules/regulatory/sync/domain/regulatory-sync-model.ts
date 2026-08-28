@@ -178,12 +178,42 @@ export type RegulatoryParseResult =
   | { readonly ok: false; readonly reason: string }
 
 /**
+ * 解析器除了資源內容之外，還看得到什麼。
+ *
+ * ## 為什麼需要它：`4` 與 `6` 的生效日不在資源內容裡
+ *
+ * `dataset_code=1`、`3` 的每一列都帶著生效日（`適用起日`／`生效日`），但 `4`（勞就保分擔金額表）
+ * 與 `6`（職災費率表）的資源內容**一個日期欄位都沒有**（2026-08 實測，JSON／CSV／XML 三種格式皆然），
+ * 生效日只寫在 metadata 的 `resourceDescription` 裡——計畫 §3.1 的表格記的就是「資源說明」。
+ * 只餵 `rawText` 的話，那兩個資料集依 §7.2 只能一律失敗，也就是做不出來。
+ *
+ * ## 這裡**刻意只有資源說明一欄**
+ *
+ * 不放 `sourceModifiedAt`、不放同步時間、不放上一版的生效日。少的那幾樣正是 §7.2 點名的
+ * fallback 材料：`modifiedDate` 看起來很像一個「合理的生效日」（它甚至常常就在生效日附近），
+ * 而用它推出來的版本邊界會**完全合理地**錯掉。型別裡沒有那一欄，那行程式碼就寫不出來。
+ */
+export type RegulatoryParseContext = {
+  /**
+   * 本次 resource discovery 探索到的資源說明（`勞工職業災害保險適用行業別及費率表(114年1月1日起適用)`）。
+   *
+   * **政府沒給時是 `null`，而不是空字串**：需要它的解析器要能分辨「政府這次沒寫」與「寫了但讀不懂」，
+   * 兩者的處置都是失敗，但 `error_message` 要指得出是哪一種（前者重跑沒用，後者要有人去看措辭）。
+   */
+  readonly resourceDescription: string | null
+}
+
+/**
  * 一個資料集的解析器。
  *
  * **簽章裡沒有時間、沒有資料庫、沒有網路**，這是計畫 §7.2 在型別上唯一的抓手：
  * 拿不到 clock，就寫不出「推導不出生效日就用今天」那個看起來很合理的 fallback。
+ * {@link RegulatoryParseContext} 也是照這條規則挑欄位的，見它自己的說明。
+ *
+ * `context` 是**必填參數**而不是選填：寫成選填之後，忘記帶的那一次會讓 `4`、`6` 在執行期
+ * 以「資源說明是 null」失敗，而那個症狀指向政府，不指向漏傳參數的那一行。必填則是編譯錯誤。
  */
-export type RegulatoryDatasetParser = (rawText: string) => RegulatoryParseResult
+export type RegulatoryDatasetParser = (rawText: string, context: RegulatoryParseContext) => RegulatoryParseResult
 
 /**
  * 一個資料集的同步來源設定。

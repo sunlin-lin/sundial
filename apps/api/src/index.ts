@@ -8,7 +8,10 @@ import { buildApp } from './app/app.ts'
 import { createAccessControlPorts, createRefreshControlPorts } from './app/session-access-control.ts'
 import { createDatabase } from './db/client.ts'
 import { assertFieldEncryptionKeys, createFieldCipher, createKeyRing } from './db/field-encryption.ts'
+import { RegulatorySyncTriggerType } from './db/schema/index.ts'
 import { assertDatabaseTimeZone } from './db/time-zone-guard.ts'
+import { runSync, type RegulatorySyncContext } from './modules/regulatory/index.ts'
+import { SCHEDULED_DATASET_CODES, startRegulatorySyncScheduler } from './scheduler/regulatory-sync-scheduler.ts'
 import { systemClock } from './shared/clock.ts'
 import { loadConfig } from './shared/config.ts'
 import { LogCategory, logger } from './shared/logger.ts'
@@ -54,3 +57,82 @@ const app = buildApp({
 app.listen(config.port)
 
 logger.info(LogCategory.Startup, '服務已啟動', { port: config.port, nodeEnv: config.nodeEnv })
+
+/**
+ * 計時器的正式實作。
+ *
+ * 心跳（`runSync` 內部）與排程器各要一個，而兩者的型別結構相同，因此只寫一份——
+ * 抄兩份的話，其中一份日後改成 `unref()` 或換掉實作時另一份不會跟著改，
+ * 而症狀（某一個計時器在關機後還活著）只會在關機那一刻出現。
+ *
+ * `void tick()`：計時器回呼不能是 async 函式的回傳值接收者，忽略掉的 Promise 由 `tick` 自己
+ * 保證不會 reject（心跳與排程器內部都各自接住了例外）。
+ */
+const startIntervalTimer = (intervalMs: number, tick: () => Promise<void>): (() => void) => {
+  const timer = setInterval(() => {
+    void tick()
+  }, intervalMs)
+  return () => {
+    clearInterval(timer)
+  }
+}
+
+/**
+ * 法規同步的執行相依（計畫 §7.1）。
+ *
+ * `fetch` 直接用標準的那一支（`FetchResource` 的簽章刻意與它相容，不需要轉接層）；
+ * 逾時由 `runSync` 自己用 `AbortSignal.timeout` 帶進來，不是在這裡決定。
+ */
+const regulatorySyncContext: RegulatorySyncContext = {
+  db: database,
+  clock: systemClock,
+  fetch,
+  startHeartbeatTimer: startIntervalTimer,
+}
+
+/**
+ * 法規同步排程器（`scheduler/regulatory-sync-scheduler.ts`）。
+ *
+ * **它在這裡而不是在 `app/app.ts`**：那裡是純組裝，`bun run gen:api` 只載入它就要能產出契約，
+ * 因此不連資料庫也不起計時器（§1.7）。計時器是副作用，本檔是唯一產生副作用的地方。
+ *
+ * 預設停用，由 `REGULATORY_SYNC_SCHEDULER_ENABLED` 開啟（理由見 `shared/config.ts`）。
+ */
+startRegulatorySyncScheduler({
+  enabled: config.regulatorySyncScheduler.enabled,
+  clock: systemClock,
+  datasetCodes: SCHEDULED_DATASET_CODES,
+  // 排程觸發的同步一律 `triggerTypeCode = Scheduled`：排程失敗要進告警，人工觸發失敗是操作者
+  // 當場就看得到的事（見 `db/schema/regulatory-sync-logs.ts`）。分不出來的話，
+  // 「昨晚的排程有沒有跑」與「誰在伺服器上手動跑了一次」在歷程上是同一件事。
+  runDatasetSync: (datasetCode) =>
+    runSync(regulatorySyncContext, { datasetCode, triggerTypeCode: RegulatorySyncTriggerType.Scheduled }),
+  startTimer: startIntervalTimer,
+  /**
+   * 關機：**先把排程器停乾淨，再讓程序結束**。
+   *
+   * 順序不能反。`process.exit()` 會當場結束程序，正在跑的那一次同步就會留下一列停在
+   * `status_code=1` 的紀錄，而它要等三分鐘後的下一次同步才會被心跳判死（計畫 §3.4）——
+   * 關機是可預期的事件，沒有理由讓它走那條為「沒有預期的死亡」準備的路。
+   *
+   * `once` 而不是 `on`：關機途中再收到一次訊號不該再跑一次流程（`stop()` 本身也是冪等的，
+   * 兩道防線是刻意的——Ctrl-C 按兩下是常見動作）。
+   *
+   * **只有排程器啟用時才會走到這裡**（停用時 `onShutdownSignal` 根本不會被呼叫），
+   * 於是開發機的 Ctrl-C 行為與加這支排程器之前完全一樣：立刻結束，不多等任何東西。
+   */
+  onShutdownSignal: (stopScheduler) => {
+    const shutdown = (signal: NodeJS.Signals): void => {
+      void (async () => {
+        logger.info(LogCategory.Startup, '收到關機訊號，開始收尾', { signal })
+        await stopScheduler()
+        await app.stop()
+        logger.info(LogCategory.Startup, '服務已停止', { signal })
+        process.exit(0)
+      })()
+    }
+
+    process.once('SIGINT', shutdown)
+    process.once('SIGTERM', shutdown)
+  },
+})

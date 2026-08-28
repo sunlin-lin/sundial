@@ -135,7 +135,9 @@ const checkDataset = async (datasetCode: SyncableDatasetCode): Promise<void> => 
   }
 
   // ③ 解析。生效日推導不出來也在這一步失敗（計畫 §7.2）。
-  const parsed = source.parse(downloaded.body)
+  // 資源說明一起餵進去，與正式流程逐字相同：`dataset_code=4`、`6` 的生效日只在說明文字裡，
+  // 少傳這一個參數等於這支指令檢查的是一條正式流程不會走的路。
+  const parsed = source.parse(downloaded.body, { resourceDescription: resource.value.resourceDescription })
   if (!parsed.ok) {
     failures.push({ datasetCode, resourceUrl, detail: `解析失敗：${parsed.reason}` })
     return

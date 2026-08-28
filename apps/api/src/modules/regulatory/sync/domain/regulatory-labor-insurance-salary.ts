@@ -37,9 +37,16 @@
  * ## 數值一律 decimal 字串，全程沒有一個 `Number(...)` 參與金額
  *
  * §4.7 逐字點名這個場景：級距在邊界值上會選錯級距，錯的是法定金額。本檔的 `Number` 只出現在
- * `序號`（列序，不是金額）與長度比較上；金額從政府那串字串進來、以字串出去，中間只做去逗號。
+ * `序號`（列序，不是金額）上；金額從政府那串字串進來、以字串出去，中間只做去逗號
+ *（去逗號、句型判讀與比大小都在 `regulatory-amount.ts`，`dataset_code=3` 用的是同一份）。
  */
 import type { RegulatoryRecordData } from '../../datasets/regulatory-datasets.service.ts'
+import {
+  INTEGER_AMOUNT_PATTERN,
+  normalizeAmount,
+  parseAmountRange,
+  type AmountRangeResult,
+} from './regulatory-amount.ts'
 import type { ParsedRegulatoryRecord, RegulatoryParseResult } from './regulatory-sync-model.ts'
 import { parseRocCompactDate } from './regulatory-roc-date.ts'
 
@@ -102,85 +109,21 @@ const FIELD = {
   insuredSalary: '月投保薪資',
 } as const
 
-/** 純整數金額（去逗號之後）。政府這一份的金額都是整數元；出現小數即代表格式變了。 */
-const INTEGER_AMOUNT_PATTERN = /^\d+$/
-
 /** 級數：正整數字串。 */
 const GRADE_PATTERN = /^\d+$/
-
-/** 「29500元以下」：沒有下限。 */
-const RANGE_UPTO_PATTERN = /^(\d[\d,]*)元以下$/
-/** 「29501元至30300元」：兩端都有。 */
-const RANGE_BETWEEN_PATTERN = /^(\d[\d,]*)元至(\d[\d,]*)元$/
-/** 「43901元以上」：沒有上限。 */
-const RANGE_FROM_PATTERN = /^(\d[\d,]*)元以上$/
-
-/**
- * 去掉千分位逗號與前後空白。
- *
- * 政府這一份目前沒有逗號，但同一個部會的其他資源有；**接受逗號不是「猜」**——
- * `29,500` 與 `29500` 是同一個值，這一步沒有損失任何資訊，也沒有做任何推測。
- */
-const normalizeAmount = (value: string): string => value.trim().replaceAll(',', '')
-
-type ParsedSalaryRange = {
-  readonly from: string | null
-  readonly to: string | null
-}
 
 /**
  * 「月薪資總額」的中文區間字串 → 上下限。
  *
- * 三種句型（`N元以下`／`N元至N元`／`N元以上`）之外**一律失敗**，這是計畫 §7.2 的精神：
- * 讀不懂就停下來，不要挑一個看起來合理的解釋。一個常見的誘惑是「看不懂就把上下限都設成
- * 月投保薪資」——那會產生一張每一級都只涵蓋單一金額的分級表，而它在型別、驗證、資料庫層
- * 全部合法。
+ * **句型判讀在 `regulatory-amount.ts`，本檔只釘住「這一欄長什麼樣」**：單位是「元」、欄位名是
+ * 「月薪資總額」。`dataset_code=3` 的同一種區間不帶「元」（`1501至3000`），兩邊抄成兩份的話，
+ * 其中一份哪天為了讓新格式通過而放寬 pattern，另一份不會跟著鬆——同一個概念會有兩種嚴格度。
  *
- * `null` 代表「這一邊沒有界線」，**刻意不補 `0` 或一個很大的數**（理由見形狀定義）。
+ * 這個薄包裝保留下來（而不是叫呼叫端直接用共用函式）有兩個作用：它是本資料集
+ * 「單位是元」這個事實的唯一落點，而且它是既有測試的對象。
  */
-export const parseMonthlySalaryRange = (
-  rangeText: string,
-): { readonly ok: true; readonly value: ParsedSalaryRange } | { readonly ok: false; readonly reason: string } => {
-  const text = rangeText.trim()
-
-  const upto = RANGE_UPTO_PATTERN.exec(text)
-  if (upto !== null) {
-    const to = normalizeAmount(upto[1] ?? '')
-    if (!INTEGER_AMOUNT_PATTERN.test(to)) {
-      return { ok: false, reason: `月薪資總額的金額不是整數：${JSON.stringify(rangeText)}` }
-    }
-    return { ok: true, value: { from: null, to } }
-  }
-
-  const between = RANGE_BETWEEN_PATTERN.exec(text)
-  if (between !== null) {
-    const from = normalizeAmount(between[1] ?? '')
-    const to = normalizeAmount(between[2] ?? '')
-    if (!INTEGER_AMOUNT_PATTERN.test(from) || !INTEGER_AMOUNT_PATTERN.test(to)) {
-      return { ok: false, reason: `月薪資總額的金額不是整數：${JSON.stringify(rangeText)}` }
-    }
-    // 上下限顛倒代表政府那一份的兩欄對調了（或句型變了）。金額本身都合法，
-    // 因此除了這一行沒有任何地方會發現——而級距查詢會變成一個永遠命不中的區間。
-    if (BigInt(from) > BigInt(to)) {
-      return { ok: false, reason: `月薪資總額的下限大於上限：${JSON.stringify(rangeText)}` }
-    }
-    return { ok: true, value: { from, to } }
-  }
-
-  const fromOnly = RANGE_FROM_PATTERN.exec(text)
-  if (fromOnly !== null) {
-    const from = normalizeAmount(fromOnly[1] ?? '')
-    if (!INTEGER_AMOUNT_PATTERN.test(from)) {
-      return { ok: false, reason: `月薪資總額的金額不是整數：${JSON.stringify(rangeText)}` }
-    }
-    return { ok: true, value: { from, to: null } }
-  }
-
-  return {
-    ok: false,
-    reason: `月薪資總額的區間句型無法辨識（期望「N元以下」「N元至N元」「N元以上」）：${JSON.stringify(rangeText)}`,
-  }
-}
+export const parseMonthlySalaryRange = (rangeText: string): AmountRangeResult =>
+  parseAmountRange(rangeText, { unit: '元', label: '月薪資總額' })
 
 /** 從政府那一列取一個字串欄位。**缺欄位與空字串都算缺**——後者在 CSV 轉 JSON 時很常見。 */
 const readField = (row: Record<string, unknown>, field: string): string | null => {

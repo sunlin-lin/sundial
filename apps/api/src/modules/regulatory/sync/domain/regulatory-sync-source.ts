@@ -10,17 +10,30 @@
  * 這與 `datasets/domain/regulatory-dataset-code.ts` 那個 `maintenance` 欄位是**同一件事的兩面**：
  * 那裡記的是「這個資料集打算怎麼維護」（給人看的意圖），這裡是「現在真的有沒有那支程式」
  * （編譯期的事實）。兩者刻意不合併：意圖先於實作存在，`1`–`9` 全部標著 `sync`，
- * 但本輪只有 `1` 真的做出來了。
+ * 但目前只有其中四項真的做出來了。
  *
- * ## 目前只有 `dataset_code = 1`
+ * ## 目前有 `1`、`3`、`4`、`6`
  *
- * 其餘八項的解析器與形狀要一起定（計畫 §6：形狀是跟著解析器被確定的），
+ * 四項的共同點是「單一當期資源、一次同步產生一個版本」（計畫 §7.1）。
+ * 生效日的來源分兩種，這個差別決定了解析器要不要用 `RegulatoryParseContext`：
+ *
+ * | 代碼 | 資料集 | 生效日在哪 |
+ * |---|---|---|
+ * | `1` | 勞工保險投保薪資分級表 | 資料欄位 `適用起日` |
+ * | `3` | 勞工退休金月提繳工資分級表 | 資料欄位 `生效日` |
+ * | `4` | 勞就保保險費分擔金額表 | **資源說明**（資源內容沒有日期欄位） |
+ * | `6` | 職業災害保險行業別費率 | **資源說明**（同上） |
+ *
+ * 其餘四項（`2`、`5`、`8`、`9`）的解析器與形狀要一起定（計畫 §6：形狀是跟著解析器被確定的），
  * 而 `datasets/domain/regulatory-record-shape.ts` 裡它們仍是 `Type.Never()`
  * ——就算有人在這裡偷偷加一項，寫入前的形狀驗證也會擋下來。兩道門是刻意的。
  */
 import { RegulatoryRawFormat } from '../../../../db/schema/index.ts'
 import type { RegulatoryDatasetCode } from '../../datasets/regulatory-datasets.service.ts'
+import { parseLaborEmploymentInsurancePremiumShares } from './regulatory-labor-employment-insurance-premium.ts'
 import { parseLaborInsuranceSalaryGrades } from './regulatory-labor-insurance-salary.ts'
+import { parseLaborPensionContributionWageGrades } from './regulatory-labor-pension-contribution-wage.ts'
+import { parseOccupationalAccidentInsuranceRates } from './regulatory-occupational-accident-insurance-rate.ts'
 import type { RegulatorySyncSource } from './regulatory-sync-model.ts'
 
 /**
@@ -44,6 +57,49 @@ export const REGULATORY_SYNC_SOURCES = {
     resourceFormat: 'JSON',
     rawFormatCode: RegulatoryRawFormat.Json,
     parse: parseLaborInsuranceSalaryGrades,
+  },
+
+  /**
+   * 勞工退休金月提繳工資分級表。
+   *
+   * `6274` 是**當期**那一份（62 列，每一列都帶 `生效日`）。計畫 §7.0 另外記了一個歷年版 `13335`
+   * （987 列、涵蓋民國 94 年起的 16 個生效日），**這裡刻意不用它**：本模組的同步流程是
+   * 「一次同步產生一個版本」（§7.1），而歷年版一次帶著十幾個生效日，推導不出唯一的
+   * `effective_from`。要回補歷史是另一件事（一次把十幾個版本建起來），不是這條路。
+   */
+  3: {
+    datasetId: 6274,
+    resourceFormat: 'JSON',
+    rawFormatCode: RegulatoryRawFormat.Json,
+    parse: parseLaborPensionContributionWageGrades,
+  },
+
+  /**
+   * 勞就保保險費分擔金額表。
+   *
+   * 生效日在 metadata 的資源說明裡（資源內容沒有任何日期欄位），因此它的解析器會用到
+   * `RegulatoryParseContext.resourceDescription`——這也是那個參數存在的原因。
+   *
+   * 這個資料集另有 XML 格式，仍然取 JSON：理由與 `1` 相同（欄位名在內容裡，不必處理標頭與跳脫）。
+   */
+  4: {
+    datasetId: 6259,
+    resourceFormat: 'JSON',
+    rawFormatCode: RegulatoryRawFormat.Json,
+    parse: parseLaborEmploymentInsurancePremiumShares,
+  },
+
+  /**
+   * 勞工職業災害保險行業別費率。
+   *
+   * 生效日同樣在資源說明裡。這一份每三年才調整一次，因此絕大多數同步會停在 checksum 比對
+   * （`status=4 無異動`）——生效日那條路要等到三年後政府換資料時才會被真正檢驗。
+   */
+  6: {
+    datasetId: 6262,
+    resourceFormat: 'JSON',
+    rawFormatCode: RegulatoryRawFormat.Json,
+    parse: parseOccupationalAccidentInsuranceRates,
   },
 } as const satisfies Partial<Record<RegulatoryDatasetCode, RegulatorySyncSource>>
 

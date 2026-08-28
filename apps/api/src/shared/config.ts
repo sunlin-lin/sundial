@@ -37,12 +37,25 @@ export type FieldEncryptionConfig = {
   readonly blindIndexKey: string
 }
 
+/**
+ * 法規同步排程器的設定（`scheduler/regulatory-sync-scheduler.ts`）。
+ *
+ * **只有「開不開」，沒有「多久跑一次」。** 頻率是一個有理由的決定（一年改一到兩次的資料、
+ * 對政府端點的禮貌、法規改了多久會被發現），理由寫在排程器檔頭；做成環境變數之後，
+ * 那個理由就會被一個沒有上下文的數字取代，而且每個環境可以不一樣——於是「正式環境到底多久跑一次」
+ * 要去翻部署設定才答得出來。
+ */
+export type RegulatorySyncSchedulerConfig = {
+  readonly enabled: boolean
+}
+
 export type AppConfig = {
   readonly nodeEnv: string
   readonly port: number
   readonly database: DatabaseConfig
   readonly session: SessionConfig
   readonly fieldEncryption: FieldEncryptionConfig
+  readonly regulatorySyncScheduler: RegulatorySyncSchedulerConfig
 }
 
 /**
@@ -68,6 +81,34 @@ const requireIntEnv = (key: string): number => {
   return value
 }
 
+/**
+ * 讀取「預設關閉」的開關。
+ *
+ * **本檔其餘的值一律 `requireEnv`（缺值即中止），這一支是唯一的例外，理由必須寫清楚。**
+ *
+ * 那條規則防的是「有預設值就會被用上」——資料庫密碼、token 金鑰一旦有預設，設定漏了也會正常啟動，
+ * 然後連到錯的資料庫或用一把大家都知道的金鑰簽 token。那類值的預設**沒有一個是安全的**。
+ * 開關不一樣：它的兩個值都合法，問題只在「漏設時該往哪邊倒」。
+ *
+ * **往「關閉」倒**，因為兩個方向的代價不對稱：
+ * - 預設開啟時，漏設的後果是**每一台開發機、每一次 `bun run dev`（`--watch` 下每存一次檔）
+ *   都會去打政府端點並往當下連到的資料庫寫版本**。那不是我們要的：開發機沒有理由每天對
+ *   data.gov.tw 發幾百次請求，而「本機跑一跑就多了一個法規版本」會讓開發資料庫與正式環境分岔。
+ * - 預設關閉時，漏設的後果是「沒有同步」。這件事本來會是無症狀的（正是計畫 §3.4 警告的那種安靜故障），
+ *   因此排程器在停用時**一定會留一行啟動 log**——啟動的第一秒就看得到「排程器已停用」，
+ *   而不是幾個月後才有人問「那個資料集怎麼沒有新版本」。
+ *
+ * 值一律嚴格比對 `true`／`false`，其餘（`1`、`yes`、`TRUE`、拼錯的字）**一律中止**：
+ * 寬鬆解析的失敗模式是「設了 `1` 卻靜靜地被當成關閉」，那與漏設完全無法區分。
+ */
+const optionalBooleanEnv = (key: string): boolean => {
+  const value = process.env[key]
+  if (value === undefined || value === '') return false
+  if (value === 'true') return true
+  if (value === 'false') return false
+  throw new Error(`環境變數 ${key} 只接受 true 或 false，實際為 ${value}`)
+}
+
 export const loadConfig = (): AppConfig => ({
   nodeEnv: requireEnv('NODE_ENV'),
   port: requireIntEnv('PORT'),
@@ -89,5 +130,10 @@ export const loadConfig = (): AppConfig => ({
     keys: requireEnv('FIELD_ENCRYPTION_KEYS'),
     activeKeyId: requireEnv('FIELD_ENCRYPTION_ACTIVE_KEY_ID'),
     blindIndexKey: requireEnv('FIELD_BLIND_INDEX_KEY'),
+  },
+  // 預設關閉（理由見 {@link optionalBooleanEnv}）。正式環境要明寫 `true`，
+  // 開發機保持未設定即可——`bun run dev` 不會去打政府端點。
+  regulatorySyncScheduler: {
+    enabled: optionalBooleanEnv('REGULATORY_SYNC_SCHEDULER_ENABLED'),
   },
 })

@@ -152,6 +152,189 @@ const LABOR_INSURANCE_SALARY_GRADE_SHAPE = Type.Object({
 })
 
 /**
+ * `dataset_code = 3` 勞工退休金月提繳工資分級表的 `data`（data.gov.tw `6274` 的 JSON 資源）。
+ *
+ * 政府那一份每一列長這樣（2026-08 實測，62 列）：
+ *
+ * ```json
+ * {"等級":"1","實際工資/執行業務所得":"1500以下",
+ *  "月提繳工資金額/月提繳執行業務所得金額":"1500","生效日":"1150101","備註":""}
+ * ```
+ *
+ * | 政府欄位 | 去哪裡 |
+ * |---|---|
+ * | `生效日` | **版本的 `effective_from`**，不進 `data`（理由同 `dataset_code=1`：抄一份會有第二份真相） |
+ * | `等級` | {@link grade} ＋ `records.code` ＋ `records.sort_order` |
+ * | `實際工資/執行業務所得` | {@link actualWageRangeText} ＋ `range_from`／`range_to` |
+ * | `月提繳工資金額/月提繳執行業務所得金額` | {@link monthlyContributionWage} ＋ `records.amount` |
+ * | `備註` | {@link remark} |
+ *
+ * ## 與 `dataset_code=1` 的差別：這裡沒有身分別，因此沒有字面值聯集
+ *
+ * `1` 的分級表按四種投保身分別各給一套級距，`3` 只有一套（雇主提繳與自願提繳共用同一張表），
+ * 於是**沒有任何一欄是「固定代碼」**。這不是漏了收斂——`等級` 是 1…62 的序數，
+ * 把它寫成 62 個字面值只會讓政府每次增減級距都變成編譯錯誤，而增減級距是這張表的常態。
+ * 完整性由解析器的「級數連號、級距首尾相接」守（見 `sync/domain/` 的解析器），不是由型別守。
+ *
+ * ## `備註` 保留，即使實測 62 列全是空字串
+ *
+ * 空的時候是 `null`。留著它的理由是**它一旦有值就是法規內容**（例如某一級加註適用對象），
+ * 而丟掉的那一刻不會有任何症狀：資料看起來完整、金額全對，只是少了一句政府特地寫上去的話。
+ */
+const LABOR_PENSION_CONTRIBUTION_WAGE_SHAPE = Type.Object({
+  /** 月提繳工資等級（級數）。**是字串不是數字**：它是代碼不是量，不參與任何運算。 */
+  grade: Type.String({ pattern: '^\\d+$' }),
+  /** 政府原文的實際工資區間（`1501至3000`）。**沒有「元」字**，與 `dataset_code=1` 不同。 */
+  actualWageRangeText: Type.String({ minLength: 1 }),
+  /** 實際工資下限（含）。最低一級是「N 以下」，沒有下限，因此為 `null`（理由同 `dataset_code=1`）。 */
+  actualWageFrom: Type.Union([DecimalString, Type.Null()]),
+  /** 實際工資上限（含）。最高一級是「N 以上」，沒有上限，因此為 `null`。 */
+  actualWageTo: Type.Union([DecimalString, Type.Null()]),
+  /**
+   * 這一級的月提繳工資金額：雇主據以提繳 6% 的法定基數。
+   *
+   * **不等於級距上限**——最高一級的區間是「147901以上」而金額是 `150000`，
+   * 兩者是不同的東西，因此各佔一欄而不是共用 `range_to`。
+   */
+  monthlyContributionWage: DecimalString,
+  /** 政府的 `備註` 原文；空字串一律收斂成 `null`（見上）。 */
+  remark: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+})
+
+/**
+ * `dataset_code = 4` 勞就保保險費分擔金額表的 `data`（data.gov.tw `6259` 的 JSON 資源）。
+ *
+ * 政府那一份每一列長這樣（2026-08 實測，28 列）：
+ *
+ * ```json
+ * {"序號":"1","勞保普通費率":"11.5%","就保費率":"1%","投保薪資":"11100",
+ *  "勞工應負擔保費金額":"277","單位應負擔保費金額":"972"}
+ * ```
+ *
+ * ## 這是「金額表」不是「費率表」，計畫 §3.1 為此推翻過一次設計
+ *
+ * 政府把每一級要繳多少錢都算好了，因此 Payroll **查表**即可，不必自己乘費率再取捨。
+ * 連帶好處是繞開了一個坑：勞保普通事故費率 11.5% 自**民國 114 年 1 月 1 日**起生效，
+ * 而這張分擔金額表的資源說明寫的是「自 115 年 1 月 1 日起適用」。
+ * 若這一格當初做成「勞保費率」，照資源說明建版本會讓 114 年整年的結算抓到錯的版本邊界。
+ *
+ * ⚠️ **因此 {@link laborInsuranceRate} 這一欄的生效日不是這個版本的 `effective_from`。**
+ * 版本的生效日是**這張金額表**的適用日；費率欄只是政府在每一列上重複標註的計算依據。
+ * 要「勞保費率從哪天開始是 11.5%」這個答案的人，不能從這個資料集的版本邊界去讀。
+ *
+ * ## 費率存成比率（`0.115`）而不是百分比數字（`11.5`）
+ *
+ * 與 `dataset_code=10` 已經寫進資料庫的 `{"item":"rate","rate":"0.0211"}` 同一種表達法。
+ * 兩種表達法混用是本模組最容易發生的靜默錯誤：兩者都是合法的 decimal 字串、都通得過形狀驗證，
+ * 而算出來的金額差 100 倍。轉換在 `sync/domain/regulatory-amount.ts` 一次決定。
+ */
+const LABOR_EMPLOYMENT_INSURANCE_PREMIUM_SHARE_SHAPE = Type.Object({
+  /** 這一級的月投保薪資。與 `dataset_code=1` 的 `monthlyInsuredSalary` 是同一個概念的值。 */
+  insuredSalary: DecimalString,
+  /** 勞工保險普通事故保險費率，比率（實測 `11.5%` → `0.115`）。生效日的警告見上。 */
+  laborInsuranceRate: DecimalString,
+  /** 就業保險費率，比率（實測 `1%` → `0.01`）。 */
+  employmentInsuranceRate: DecimalString,
+  /** 勞工（被保險人）應負擔的保費金額，含就業保險。政府已經算好並取捨過，不要再自己乘。 */
+  employeeShareAmount: DecimalString,
+  /** 投保單位應負擔的保費金額，含就業保險。 */
+  employerShareAmount: DecimalString,
+})
+
+/**
+ * `dataset_code = 6` 勞工職業災害保險行業別費率的 `data`（data.gov.tw `6262` 的 JSON 資源）。
+ *
+ * 政府那一份每一列長這樣（2026-08 實測，55 列、19 種大分類）：
+ *
+ * ```json
+ * {"序號":"1","大分類":"農、林、漁、牧業","費率編號":"1","行業類別":"農、林、牧業",
+ *  "行業別費率%":"0.18","上下班費率%":"0.07","災保費率%":"0.25"}
+ * ```
+ *
+ * ## `大分類` 收斂成 19 個字面值，理由與 `dataset_code=1` 的 `身分別` 逐字同構
+ *
+ * 公司在 `company_regulatory_settings` 上設定自己屬於哪一個行業，Payroll **依行業挑費率**
+ * （最低 0.04%、最高 0.89%，差 20 倍以上）。寫成 `Type.String()` 之後，政府哪天改了某個大分類的
+ * 措辭，解析會**通過驗證**，然後那個行業的公司在查詢時對不上，職災保費悄悄算成另一個數字。
+ *
+ * **代價要寫清楚：政府新增或改名一個大分類時，這個資料集會同步失敗。** 那是要的——
+ * 行業標準分類改版是三年一次的大事，Payroll 必須知道它發生了。
+ * 這 19 個值就是中華民國行業標準分類的 19 個大類，實測的順序與它一致。
+ *
+ * ## 三個費率各佔一欄，而且解析器會驗 `行業別 ＋ 上下班 = 災保`
+ *
+ * 政府自己給了三個數字，實測 55 列全部對得起來。這個檢查**不需要引進任何法規知識**
+ * ——三個數字都在同一列裡，對不起來就是欄位換了位置或我們讀錯了欄，
+ * 而欄位換位置之後每一個值單獨看都完全合法（都是 0.0x 的小數）。
+ *
+ * `records.rate` 放的是 {@link occupationalAccidentRate}（實際適用的合計費率），
+ * 不是行業別費率——那一欄是「這一列的費率是多少」，答案只有合計那一個。
+ */
+const OCCUPATIONAL_ACCIDENT_INSURANCE_RATE_SHAPE = Type.Object({
+  /**
+   * 行業大分類代碼。19 個值即政府那一份的 19 種 `大分類`（＝行業標準分類的 19 大類），理由見上。
+   *
+   * 用**我們的代碼**而不是中文原文：原文是政府的顯示字串，改一個標點（`公共行政及國防；強制性社會安全`
+   * 那個分號）就會讓每一筆的值變成新的，而 Payroll 那一側是拿代碼去比對的。
+   */
+  majorCategoryCode: Type.Union([
+    /** 農、林、漁、牧業。 */
+    Type.Literal('agricultureForestryFishingAnimalHusbandry'),
+    /** 礦業及土石採取業。 */
+    Type.Literal('miningAndQuarrying'),
+    /** 製造業。 */
+    Type.Literal('manufacturing'),
+    /** 電力及燃氣供應業。 */
+    Type.Literal('electricityAndGasSupply'),
+    /** 用水供應及污染整治業。 */
+    Type.Literal('waterSupplyAndRemediation'),
+    /** 營建工程業。 */
+    Type.Literal('construction'),
+    /** 批發及零售業。 */
+    Type.Literal('wholesaleAndRetailTrade'),
+    /** 運輸及倉儲業。 */
+    Type.Literal('transportationAndStorage'),
+    /** 住宿及餐飲業。 */
+    Type.Literal('accommodationAndFoodServices'),
+    /** 出版影音及資通訊業。 */
+    Type.Literal('publishingAudioVisualAndIct'),
+    /** 金融及保險業。 */
+    Type.Literal('financeAndInsurance'),
+    /** 不動產業。 */
+    Type.Literal('realEstate'),
+    /** 專業、科學及技術服務業。 */
+    Type.Literal('professionalScientificAndTechnicalServices'),
+    /** 支援服務業。 */
+    Type.Literal('supportServices'),
+    /** 公共行政及國防；強制性社會安全。 */
+    Type.Literal('publicAdministrationAndDefence'),
+    /** 教育業。 */
+    Type.Literal('education'),
+    /** 醫療保健及社會工作服務業。 */
+    Type.Literal('humanHealthAndSocialWork'),
+    /** 藝術、娛樂及休閒服務業。 */
+    Type.Literal('artsEntertainmentAndRecreation'),
+    /** 其他服務業。 */
+    Type.Literal('otherServices'),
+  ]),
+  /** 政府原文的大分類（`農、林、漁、牧業`）。保留原文供對帳：代碼是我們取的，原文才是公告上的字。 */
+  majorCategoryName: Type.String({ minLength: 1 }),
+  /**
+   * 政府的 `費率編號`。**這是公司設定會存下來的那個代碼**（計畫 §3.1「行業別代碼政府會改」），
+   * 也是 `record_key` 的來源。是字串不是數字：它是代碼不是量。
+   */
+  rateCode: Type.String({ pattern: '^\\d+$' }),
+  /** 政府原文的行業類別（`石油及天然氣礦業、砂、石採取及其他礦業`）。這是 55 個細項那一層。 */
+  industryName: Type.String({ minLength: 1 }),
+  /** 行業別災害費率，比率（實測 `0.18`＝0.18% → `0.0018`）。欄位名的 `%` 是單位，值本身不帶百分號。 */
+  industryRate: DecimalString,
+  /** 上下班災害費率，比率（實測 55 列全為 `0.07`＝0.07% → `0.0007`）。 */
+  commutingRate: DecimalString,
+  /** 實際適用的職災保險費率＝行業別＋上下班，比率（實測 `0.25`＝0.25% → `0.0025`）。 */
+  occupationalAccidentRate: DecimalString,
+})
+
+/**
  * 「這個資料集的 `data` 形狀還沒有定義」。
  *
  * **這是一個明確的宣告，不是留空**，而且它**驗什麼都不會過**。理由與計畫 §7.2
@@ -180,14 +363,14 @@ const SHAPE_NOT_YET_DEFINED = Type.Never({
  * 刻意不寫 `as const`：`as const` 會把 TypeBox 的內部結構一起變成唯讀，`Static<>` 就算不出型別了。
  */
 export const REGULATORY_RECORD_SHAPES = {
-  // `1` 是唯一一個已經有解析器的自動同步資料集（`sync` 次目錄）。其餘八項維持 `Type.Never()`
+  // `1`、`3`、`4`、`6` 已經有解析器（`sync` 次目錄）。其餘四項維持 `Type.Never()`
   // ——它們的形狀要跟著各自的解析器一起定，先寫一個「看起來合理」的寬鬆形狀會**通過**驗證。
   1: LABOR_INSURANCE_SALARY_GRADE_SHAPE,
   2: SHAPE_NOT_YET_DEFINED,
-  3: SHAPE_NOT_YET_DEFINED,
-  4: SHAPE_NOT_YET_DEFINED,
+  3: LABOR_PENSION_CONTRIBUTION_WAGE_SHAPE,
+  4: LABOR_EMPLOYMENT_INSURANCE_PREMIUM_SHARE_SHAPE,
   5: SHAPE_NOT_YET_DEFINED,
-  6: SHAPE_NOT_YET_DEFINED,
+  6: OCCUPATIONAL_ACCIDENT_INSURANCE_RATE_SHAPE,
   // `7` 是永久空號（見 `regulatory-dataset-code.ts`），因此這裡也沒有它——
   // 補一個進來就等於讓那個空號變成「一個沒有形狀的資料集」。
   8: SHAPE_NOT_YET_DEFINED,

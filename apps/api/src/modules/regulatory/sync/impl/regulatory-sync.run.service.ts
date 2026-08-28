@@ -270,7 +270,9 @@ const executeSync = async (
   }
 
   // ④ 解析。生效日推導不出來就在這一步失敗（§7.2），不會走到寫入。
-  const parsed = source.parse(rawText)
+  // 資源說明要一起餵給解析器：`dataset_code=4`、`6` 的資源內容裡沒有任何日期欄位，
+  // 生效日只寫在 metadata 的說明文字上（見 `domain/regulatory-sync-model.ts` 的 `RegulatoryParseContext`）。
+  const parsed = source.parse(rawText, { resourceDescription: resource.value.resourceDescription })
   if (!parsed.ok) return failSync(context, datasetCode, syncLogId, resourceUrl, `解析失敗：${parsed.reason}`)
 
   if (parsed.records.length === 0) {
