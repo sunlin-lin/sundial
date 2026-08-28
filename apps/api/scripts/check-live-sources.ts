@@ -133,7 +133,11 @@ const checkRecordShapes = (
   for (const record of records) {
     const shape = parseRegulatoryRecordData(datasetCode, record.data)
     if (!shape.ok) {
-      failures.push({ datasetCode, resourceUrl, detail: `record_key=${record.recordKey} 形狀驗證失敗：${shape.reason}` })
+      failures.push({
+        datasetCode,
+        resourceUrl,
+        detail: `record_key=${record.recordKey} 形狀驗證失敗：${shape.reason}`,
+      })
     }
   }
 }
@@ -218,7 +222,9 @@ const checkMultiVersionDataset = async (
   const undatable: string[] = []
   let datedCount = 0
 
-  process.stdout.write(`  [代碼 ${String(datasetCode)}] ${String(resources.values.length)} 個資源（每一個是一個版本）\n`)
+  process.stdout.write(
+    `  [代碼 ${String(datasetCode)}] ${String(resources.values.length)} 個資源（每一個是一個版本）\n`,
+  )
 
   for (const resource of resources.values) {
     const effective = source.deriveEffectiveFrom(resource.resourceDescription)

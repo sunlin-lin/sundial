@@ -17,7 +17,11 @@ const NO_DEFINITIONS = {}
 
 describe('形狀比對', () => {
   test('必填欄位缺一個就不符（`hasOwnProperty`，不是 `!== undefined`）', () => {
-    const schema = { type: 'object', required: ['a', 'b'], properties: { a: { type: 'string' }, b: { type: 'string' } } }
+    const schema = {
+      type: 'object',
+      required: ['a', 'b'],
+      properties: { a: { type: 'string' }, b: { type: 'string' } },
+    }
     expect(matchesContractSchema(schema, { a: 'x', b: 'y' }, NO_DEFINITIONS)).toBe(true)
     expect(matchesContractSchema(schema, { a: 'x' }, NO_DEFINITIONS)).toBe(false)
   })
@@ -75,7 +79,14 @@ describe('形狀比對', () => {
 
   test('`$ref` 解析得到就照著檢查（遞迴 schema：權限樹）', () => {
     const definitions = {
-      Node: { type: 'object', required: ['id', 'children'], properties: { id: { type: 'string' }, children: { type: 'array', items: { $ref: '#/components/schemas/Node' } } } },
+      Node: {
+        type: 'object',
+        required: ['id', 'children'],
+        properties: {
+          id: { type: 'string' },
+          children: { type: 'array', items: { $ref: '#/components/schemas/Node' } },
+        },
+      },
     }
     const schema = { $ref: '#/components/schemas/Node' }
     expect(matchesContractSchema(schema, { id: 'a', children: [{ id: 'b', children: [] }] }, definitions)).toBe(true)

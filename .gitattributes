@@ -1,0 +1,41 @@
+# 換行一律 LF，工作目錄也一樣（不只是 repo 內）。
+#
+# ## 為什麼需要這個檔案
+#
+# 少了它，Windows 上 `git config core.autocrlf` 的預設值（true）會在 checkout 時把所有
+# 文字檔換成 CRLF，而 Prettier 預設寫入 LF（`endOfLine: 'lf'`）。兩者相撞的結果是：
+#
+# 1. Windows 上剛 clone 下來的工作目錄，`bun run check` 的 `prettier --check` **每一個檔案都紅**。
+# 2. 照它說的跑 `prettier --write` 之後，`git status` 卻是**乾淨的**——因為 autocrlf 在比對時
+#    會先把 CRLF 正規化成 LF，git 看不到任何差異。
+#
+# 於是那個人看到的是「檢查說有 171 個檔案格式不對，修完之後沒有任何檔案被改動」。
+# 這種紅燈修不掉也解釋不了，最後的結果一定是所有人習慣性跳過 `bun run check`
+# ——而通用規範 §7.1 那句「一條永遠是綠的規則比沒有規則更糟」的對偶同樣成立：
+# **一條永遠是紅的規則，紅燈本身就失去訊號價值**，真的壞掉的那天沒有人會發現。
+#
+# `eol=lf` 而不是 `eol=crlf`：LF 是 repo 內的儲存格式，也是 Prettier、ESLint、CI（Linux）
+# 三者的預設；把工作目錄也統一成 LF，是讓「本機看到的」與「CI 看到的」完全一致的唯一作法。
+# 現代 Windows 的編輯器與工具鏈（VS Code、Git Bash、PowerShell、bun）都不需要 CRLF。
+#
+# `text=auto` 讓 git 自行判斷二進位檔並跳過它們，不必逐一列出副檔名——漏列一個副檔名的
+# 後果是那個二進位檔被當成文字檔做換行轉換，內容當場損壞，而且損壞的是 checkout 出來的
+# 那一份，repo 裡看起來完全正常。
+* text=auto eol=lf
+
+# 二進位檔明確標記，不依賴自動判斷：自動判斷是看檔案開頭有沒有 NUL 位元組，
+# 而下列格式**可能**整個檔案都沒有 NUL（例如某些 PNG 的前幾 KB、部分字型的表頭），
+# 一旦被誤判成文字檔就會被做換行轉換而損壞。判斷錯的代價是檔案壞掉，
+# 明寫的代價只是多幾行，兩邊不對等。
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.pdf binary
+*.xlsx binary

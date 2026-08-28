@@ -176,9 +176,7 @@ const toSymbolName = (path: string): string => {
     .split('/')
     .flatMap((segment) => segment.split('-'))
     .filter((word) => word.length > 0)
-  return words
-    .map((word, index) => (index === 0 ? word : `${word.charAt(0).toUpperCase()}${word.slice(1)}`))
-    .join('')
+  return words.map((word, index) => (index === 0 ? word : `${word.charAt(0).toUpperCase()}${word.slice(1)}`)).join('')
 }
 
 /** `/sessions/main/logout-all` → `SessionsMainLogoutAll`。 */

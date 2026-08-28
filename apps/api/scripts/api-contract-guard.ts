@@ -54,7 +54,11 @@ const hasOwn = (record: Record<string, unknown>, key: string): boolean =>
  * 用 `!== undefined` 判斷會把「後端明確回了 `null`」與「後端根本沒回這個欄位」混為一談，
  * 而那兩件事在契約上是不同的（前者要 schema 允許 `null` 才合法）。
  */
-const matchesObject = (schema: Record<string, unknown>, value: unknown, definitions: ContractSchemaDefinitions): boolean => {
+const matchesObject = (
+  schema: Record<string, unknown>,
+  value: unknown,
+  definitions: ContractSchemaDefinitions,
+): boolean => {
   if (!isRecord(value)) return false
 
   const properties: unknown = schema['properties']

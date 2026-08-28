@@ -11,23 +11,25 @@
  *
  * 執行方式：`bun run seed:dev`（根目錄或 apps/api 皆可）。
  */
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { createDatabase, TenantDatabase, type QueryRunner } from '../src/db/client.ts'
 import {
   companies,
+  companyScopedTablesInDeleteOrder,
   CompanyLegalType,
   CompanyStatus,
   companyUserRoles,
   companyUsers,
   CompanyUserStatus,
   CompanyType,
-  employees,
   permissions,
   PermissionStatus,
-  refreshTokens,
   rolePermissions,
   roles,
   RoleStatus,
+  shiftBreaks,
+  shiftDefinitions,
+  shiftWorkPeriods,
   users,
 } from '../src/db/schema/index.ts'
 import { hashPassword } from '../src/modules/sessions/main/domain/session-password.ts'
@@ -106,24 +108,38 @@ const assertDevelopmentDatabase = (): string => {
 /**
  * 清掉上一次種的資料。
  *
- * 刪除順序是外鍵的相反方向：先刪指向別人的，最後才刪被指的。順序錯了不會靜默出錯，
- * 而是被 MariaDB 以外鍵違反擋下——但錯誤訊息只會說某個 constraint 失敗，
- * 看不出「應該先刪哪一張」，所以順序寫在這裡並附上理由。
+ * **刪除順序不是這裡手排的，是 `db/schema/index.ts` 的 `companyScopedTablesInDeleteOrder`。**
+ * 那份清單與 `CompanyScopedTable` 型別聯集綁在一起、漏表會編譯不過（見該檔案註解）——本檔
+ * 不再維護第二份「哪些表帶 company_id」的清單，這正是 `shift_definitions` 那次事故的根因：
+ * 兩份清單各自增修，這一份沒人記得同步改，症狀要等到跑 seed 撞見外鍵錯誤才會被發現。
  *
- * `employees` 這支腳本不種（登入不需要它），仍然一併清：手動測試時可能透過端點建了員工，
- * 而它有指向 `companies` 的外鍵，不清就刪不掉公司。
+ * `employees` 這支腳本不種（登入不需要它），`shift_definitions` 與其兩張子表這支腳本也不種，
+ * 仍然一併清：手動測試時可能透過端點建了員工或班別，而它們都有指向 `companies`（或間接指向）
+ * 的外鍵，不清就刪不掉公司。
  */
 const clearPreviousSeed = async (tenant: TenantDatabase, runner: QueryRunner): Promise<void> => {
-  // 指派紀錄同時指向 company_users 與 roles，必須最先刪。
-  await tenant.delete(companyUserRoles)
-  // 角色與權限的關聯指向 roles。
-  await tenant.delete(rolePermissions)
-  // 換票紀錄指向 company_users；手動登入過就會有。
-  await tenant.delete(refreshTokens)
-  // 員工指向 companies；company_users.employee_id 也可能指向它。
-  await tenant.delete(employees)
-  await tenant.delete(companyUsers)
-  await tenant.delete(roles)
+  /**
+   * `shift_work_periods`／`shift_breaks` 都沒有 `company_id`（見兩表各自的檔頭註解），公司範圍
+   * 由 `shift_definition_id` 間接決定，因此不在 `CompanyScopedTable` 之列，走不了 `tenant.delete`，
+   * 也不會出現在 `companyScopedTablesInDeleteOrder` 裡。這裡先查出本公司名下的班別 id，
+   * 再用裸 runner 清掉這兩張子表——順序上必須先於下面 `shiftDefinitions` 的刪除，
+   * 否則會撞上與本次事故一樣的外鍵錯誤，只是換成 `fk_shift_work_periods_shift_definition`。
+   */
+  const demoShiftDefinitions = await runner
+    .select({ id: shiftDefinitions.id })
+    .from(shiftDefinitions)
+    .where(eq(shiftDefinitions.companyId, IDS.company))
+  const demoShiftDefinitionIds = demoShiftDefinitions.map((row) => row.id)
+
+  if (demoShiftDefinitionIds.length > 0) {
+    await runner.delete(shiftBreaks).where(inArray(shiftBreaks.shiftDefinitionId, demoShiftDefinitionIds))
+    await runner.delete(shiftWorkPeriods).where(inArray(shiftWorkPeriods.shiftDefinitionId, demoShiftDefinitionIds))
+  }
+
+  // 帶 company_id 的表：清空順序見 `companyScopedTablesInDeleteOrder` 的註解（子表先、父表後）。
+  for (const table of companyScopedTablesInDeleteOrder) {
+    await tenant.delete(table)
+  }
 
   // companies 與 users 都不帶 `company_id`，不在 `TenantDatabase` 的適用範圍（§4.2），
   // 因此走裸 runner；兩者都以本腳本自己的固定 id／帳號為條件，刪不到別人的資料。

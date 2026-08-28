@@ -162,9 +162,7 @@ if (sectionStartIndex === -1) {
   ])
 }
 
-const sectionEndOffset = docLines
-  .slice(sectionStartIndex + 1)
-  .findIndex((line) => DOC_SECTION_END_PATTERN.test(line))
+const sectionEndOffset = docLines.slice(sectionStartIndex + 1).findIndex((line) => DOC_SECTION_END_PATTERN.test(line))
 const sectionEndIndex = sectionEndOffset === -1 ? docLines.length : sectionStartIndex + 1 + sectionEndOffset
 
 // 在節內找出「第一欄標題是 code」的表格。連續的表格列算同一張表，中間隔了非表格列就換一張。

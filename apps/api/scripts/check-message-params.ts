@@ -117,8 +117,11 @@ if (scannedPlaceholders === 0) {
 
 if (selfCheckFailures.length > 0) {
   process.stderr.write(
-    ['插值掃描器自我檢查失敗（掃描結果不可信，一律視為失敗）：', ...selfCheckFailures.map((line) => `  ✗ ${line}`), '']
-      .join('\n'),
+    [
+      '插值掃描器自我檢查失敗（掃描結果不可信，一律視為失敗）：',
+      ...selfCheckFailures.map((line) => `  ✗ ${line}`),
+      '',
+    ].join('\n'),
   )
   process.exit(1)
 }

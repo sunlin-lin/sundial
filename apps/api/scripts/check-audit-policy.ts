@@ -304,7 +304,13 @@ const fieldsOfSource = (table: PolicyTable): ReadonlySet<string> | undefined => 
   // 猜錯的話會去比對一個不相干的型別，而那份比對結果看起來一樣合理。
   const segments = table.source.split('#')
   const [relativePath, typeName] = segments
-  if (segments.length !== 2 || relativePath === undefined || relativePath === '' || typeName === undefined || typeName === '') {
+  if (
+    segments.length !== 2 ||
+    relativePath === undefined ||
+    relativePath === '' ||
+    typeName === undefined ||
+    typeName === ''
+  ) {
     return fail(`source 格式錯誤：'${table.source}'，預期 '<相對於 apps/api/src 的路徑>#<型別名>'`)
   }
 
@@ -324,7 +330,9 @@ const fieldsOfSource = (table: PolicyTable): ReadonlySet<string> | undefined => 
   const symbol = (exported.flags & ts.SymbolFlags.Alias) !== 0 ? checker.getAliasedSymbol(exported) : exported
 
   const declarations = symbol.declarations ?? []
-  const typeDeclaration = declarations.find((node) => ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node))
+  const typeDeclaration = declarations.find(
+    (node) => ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node),
+  )
   if (typeDeclaration === undefined) return fail(`src/${relativePath} 的 ${typeName} 不是型別別名或介面`)
 
   // 泛型沒有帶入型別參數就取不到確定的欄位集合，checker 會回一堆型別參數當屬性——

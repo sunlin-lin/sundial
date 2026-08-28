@@ -1,0 +1,4 @@
+# apps/api/drizzle/ 是 migration 產物（.sql 本體與 drizzle-kit 自己寫的 meta/*.json 快照、
+# _journal.json）。這些檔案的格式由 drizzle-kit 決定，不是人手寫的程式碼；用 Prettier 重排
+# 等於在改寫 migration 歷史的隨附檔案，而後端規範 §4.1 明文禁止修改已套用的 migration。
+apps/api/drizzle/
