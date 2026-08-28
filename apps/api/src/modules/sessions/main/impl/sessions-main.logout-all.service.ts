@@ -33,7 +33,7 @@ export const logoutAllDevices = async (
 ): Promise<ServiceResult<RevocationOutcome>> => {
   const now = context.clock.now()
 
-  const revokedCount = await revokeMemberChains(context.db, identity.companyId, identity.companyUserId, {
+  const revokedTokenIds = await revokeMemberChains(context.db, identity.companyId, identity.companyUserId, {
     at: now,
     reason: RefreshTokenRevokeReason.LogoutAll,
   })
@@ -41,5 +41,5 @@ export const logoutAllDevices = async (
   // 含**當前這台裝置**在內，沒有例外（比照 §5.4.5 對改密碼的要求）。
   // 留一個例外就要多一段「哪一條鏈是當前這條」的判斷，而那段邏輯寫錯的後果是
   // 「以為作廢了、其實沒有」——沒有效果卻讓人放心，比什麼都沒做更危險。
-  return succeed({ revokedCount })
+  return succeed({ revokedCount: revokedTokenIds.length })
 }

@@ -128,10 +128,8 @@ export const finalizeEnvelope = <TData>(
 
 /** 出口層 middleware。註冊在所有路由之前，`as: 'global'` 讓它涵蓋每一個群組。 */
 export const responseEnvelope = (clock: Clock) =>
-  new Elysia({ name: 'response-envelope' })
-    .use(requestContext)
-    .onAfterHandle({ as: 'global' }, (context): unknown => {
-      const { response } = context
-      if (!isEnvelopeBody(response)) return response
-      return finalizeEnvelope(response, context.body, context.requestContext.session, clock)
-    })
+  new Elysia({ name: 'response-envelope' }).use(requestContext).onAfterHandle({ as: 'global' }, (context): unknown => {
+    const { response } = context
+    if (!isEnvelopeBody(response)) return response
+    return finalizeEnvelope(response, context.body, context.requestContext.session, clock)
+  })

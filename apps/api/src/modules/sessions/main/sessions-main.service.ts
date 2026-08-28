@@ -80,10 +80,8 @@ export const getSessionContext = (
 ): Promise<SessionContextOutcome> => getSessionContextImpl(context, identity)
 
 /** 無端點：已登入群組的憑證驗證器用。含 §5.4.6 的即時撤銷檢查。 */
-export const verifyAccessToken = (
-  context: SessionsMainContext,
-  rawToken: string,
-): Promise<VerifiedIdentity | null> => verifyAccessTokenImpl(context, rawToken)
+export const verifyAccessToken = (context: SessionsMainContext, rawToken: string): Promise<VerifiedIdentity | null> =>
+  verifyAccessTokenImpl(context, rawToken)
 
 /** 無端點：已登入群組的憑證驗證器用（§1.3 來源①的秒數，與發證共用同一份實作）。 */
 export const renewSession = (context: SessionsMainContext): SessionRenewal => renewSessionImpl(context)
@@ -98,4 +96,5 @@ export const verifyRefreshTicket = (
 export const revokeChainsOnReuse = (
   context: SessionsMainContext,
   identity: VerifiedIdentity,
-): Promise<RevocationOutcome> => revokeChainsOnReuseImpl(context, identity)
+  reusedTicketId: string,
+): Promise<RevocationOutcome> => revokeChainsOnReuseImpl(context, identity, reusedTicketId)

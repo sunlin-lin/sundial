@@ -17,7 +17,13 @@
 import type { QueryRunner } from '../../../db/client.ts'
 import type { FieldCipher } from '../../../db/field-encryption.ts'
 import type { EmployeeWriteOutcome } from './domain/employee-duplicate.ts'
-import type { EmployeeDetail, EmployeeListPage, EmployeeListQuery } from './domain/employee-model.ts'
+import type {
+  EmployeeDetail,
+  EmployeeListPage,
+  EmployeeListQuery,
+  EmployeeProfileInput,
+} from './domain/employee-model.ts'
+import { findEmployeeAuditSnapshot as findEmployeeAuditSnapshotImpl } from './impl/employees-main.find-audit-snapshot.repository.ts'
 import { findEmployeeDetail as findEmployeeDetailImpl } from './impl/employees-main.find.repository.ts'
 import {
   insertEmployee as insertEmployeeImpl,
@@ -58,6 +64,14 @@ export const findEmployeeDetail = (
   companyId: string,
   employeeId: string,
 ): Promise<EmployeeDetail | null> => findEmployeeDetailImpl(runner, cipher, companyId, employeeId)
+
+/** 稽核用明文快照（稽核計畫 §4.4）。**只給 `buildAuditChanges` 用**，見 impl 切片檔頭。 */
+export const findEmployeeAuditSnapshot = (
+  runner: QueryRunner,
+  cipher: FieldCipher,
+  companyId: string,
+  employeeId: string,
+): Promise<EmployeeProfileInput | null> => findEmployeeAuditSnapshotImpl(runner, cipher, companyId, employeeId)
 
 export const insertEmployee = (
   runner: QueryRunner,

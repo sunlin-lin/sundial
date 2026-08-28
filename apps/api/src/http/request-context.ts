@@ -43,8 +43,7 @@ export type VerifiedRefreshTicket = {
  * 要改的地方只有傳輸層一處，不必回頭找哪幾支端點自己寫過 `Set-Cookie`。
  */
 export type RefreshTicketDelivery =
-  | { readonly kind: 'issue'; readonly ticket: string; readonly maxAgeSeconds: number }
-  | { readonly kind: 'revoke' }
+  { readonly kind: 'issue'; readonly ticket: string; readonly maxAgeSeconds: number } | { readonly kind: 'revoke' }
 
 export type RequestContext = {
   /** `null` 代表本次請求未經 Session 授權（公開端點、身分驗證未通過，或登出成功後）。 */

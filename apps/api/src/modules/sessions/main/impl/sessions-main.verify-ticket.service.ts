@@ -53,7 +53,8 @@ export const verifyRefreshTicket = async (
       // §5.4.2：**已作廢的票再次被使用 → 一律視為外洩**。不區分它當初是為什麼被作廢
       //（輪替、登出、上一次的偷用偵測）——「一律」是規範的用字，而且它讓這裡沒有分支可以寫錯。
       // 全鏈作廢的動作由驗證器負責（副作用集中在入口層，見 `http/refresh-guard.ts`）。
-      return { outcome: 'reuse-detected', identity }
+      // `ticketId` 取 `stored.id`：與 `identity` 同一列來源，就是這次被重用的那張票（§5.4.2 的鑑識欄位）。
+      return { outcome: 'reuse-detected', identity, ticketId: stored.id }
     }
 
     // 鏈的絕對截止（§5.4.1 的 30 天）。過期**不是**偷用：正常使用者放著不用滿 30 天就會走到這裡，
@@ -68,7 +69,8 @@ export const verifyRefreshTicket = async (
     if (consumed === 0) {
       // 讀到「未作廢」與寫入之間，別人已經把這張票用掉了——兩個持有者同時在用同一張票，
       // 那正是 §5.4.2 描述的情形。與上面那條 `revokedAt !== null` 走同一種處置。
-      return { outcome: 'reuse-detected', identity }
+      // 這裡的 `stored.id` 等同 `claims.ticketId`（同一列），一併帶出被重用的票 id。
+      return { outcome: 'reuse-detected', identity, ticketId: stored.id }
     }
 
     return { outcome: 'valid', identity, ticketId: claims.ticketId }

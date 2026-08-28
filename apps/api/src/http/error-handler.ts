@@ -29,8 +29,7 @@ const INVALID_FIELD_CODE = 'request.invalid-field'
  * 而框架的錯誤物件把有用的東西放在 prototype 的 getter 上（Elysia 的 `ValidationError.all`
  * 就是），展開之後那些欄位會**靜靜消失**——讀出來永遠是 `undefined`，而不是任何錯誤。
  */
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 
 const asRecord = (value: unknown): Record<string, unknown> | null => (isRecord(value) ? value : null)
 
@@ -147,23 +146,21 @@ const mapFrameworkError = (
 }
 
 export const errorHandler = (clock: Clock) =>
-  new Elysia({ name: 'error-handler' })
-    .use(requestContext)
-    .onError({ as: 'global' }, (context): unknown => {
-      // 404 與 500 在前端都是 `'400'`，兩者的差別只能靠 log 與 trace id 補回來（§1.3）。
-      const traceId = crypto.randomUUID()
-      context.set.headers['x-trace-id'] = traceId
+  new Elysia({ name: 'error-handler' }).use(requestContext).onError({ as: 'global' }, (context): unknown => {
+    // 404 與 500 在前端都是 `'400'`，兩者的差別只能靠 log 與 trace id 補回來（§1.3）。
+    const traceId = crypto.randomUUID()
+    context.set.headers['x-trace-id'] = traceId
 
-      const failure = mapFrameworkError(context.code, context.error, traceId, context.path)
-      context.set.status = failure.status
+    const failure = mapFrameworkError(context.code, context.error, traceId, context.path)
+    context.set.status = failure.status
 
-      // 走與成功路徑完全相同的出口（§1.8.4）：錯誤回應同樣要有 `cmd`／`locale`／`expiresIn`，
-      // 否則前端的統一處理剛好在最需要它的時候失效。
-      //
-      // `requestContext` 在這裡是**可能不存在**的，不是型別寫壞了：它由 `derive` 建立，
-      // 而 `PARSE`／`NOT_FOUND` 這兩種錯誤發生在 derive 跑到之前（body 還沒解析完、
-      // 路由還沒配對到），那時候整個請求上下文都還沒建立。取不到就是 `null`，
-      // 語意與「本次請求未經 Session 授權」完全相同（見 `request-context.ts`）：
-      // `expiresIn`／`exp` 回 `null`，而不是讓出口層在最需要回應的錯誤路徑上炸掉。
-      return finalizeEnvelope(failure.body, context.body, context.requestContext?.session ?? null, clock)
-    })
+    // 走與成功路徑完全相同的出口（§1.8.4）：錯誤回應同樣要有 `cmd`／`locale`／`expiresIn`，
+    // 否則前端的統一處理剛好在最需要它的時候失效。
+    //
+    // `requestContext` 在這裡是**可能不存在**的，不是型別寫壞了：它由 `derive` 建立，
+    // 而 `PARSE`／`NOT_FOUND` 這兩種錯誤發生在 derive 跑到之前（body 還沒解析完、
+    // 路由還沒配對到），那時候整個請求上下文都還沒建立。取不到就是 `null`，
+    // 語意與「本次請求未經 Session 授權」完全相同（見 `request-context.ts`）：
+    // `expiresIn`／`exp` 回 `null`，而不是讓出口層在最需要回應的錯誤路徑上炸掉。
+    return finalizeEnvelope(failure.body, context.body, context.requestContext?.session ?? null, clock)
+  })

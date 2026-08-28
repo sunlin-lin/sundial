@@ -43,9 +43,9 @@ export const createAccessControlPorts = (context: SessionsMainContext): AccessCo
 /** refresh 群組的兩個 port。偷用偵測的副作用由驗證器編排（見 `http/refresh-guard.ts`）。 */
 export const createRefreshControlPorts = (context: SessionsMainContext): RefreshControlPorts => ({
   verifyRefreshTicket: (rawTicket) => verifyRefreshTicket(context, rawTicket),
-  revokeAllChainsOnReuse: async (identity) => {
+  revokeAllChainsOnReuse: async (identity, reusedTicketId) => {
     // 刻意丟掉回傳值（作廢了幾條鏈）：驗證器不需要它，而把它往上傳會讓人想拿它去做判斷
     //（例如「0 條代表沒事」），但偷用偵測的結論與作廢了幾條無關——它已經發生了。
-    await revokeChainsOnReuse(context, identity)
+    await revokeChainsOnReuse(context, identity, reusedTicketId)
   },
 })

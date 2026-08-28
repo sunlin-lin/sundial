@@ -20,6 +20,7 @@ import { requestContext } from '../../../http/request-context.ts'
 import { envelope } from '../../../shared/envelope.ts'
 import {
   BaseRequest,
+  codeField,
   IsoDate,
   Nullable,
   PageRequest,
@@ -40,17 +41,10 @@ import {
 import { describeEmployeeErrors, EMPLOYEE_ENDPOINT_ERRORS } from './employees-main.errors.ts'
 
 /**
- * 員工編號。
- *
- * 限制成英數與 `-`／`_`，是因為這個值同時是**公司內的唯一鍵**與人要輸入、比對、在報表上
- * 唸出來的識別字串：允許空白與全形字元之後，「A01」與「A 01」「Ａ０１」會是三個不同的員工，
- * 而畫面上看起來幾乎一樣。長度上限對齊 `employees.employee_code` 的 `VARCHAR(64)`。
- *
- * 註：§2 要求共用欄位型別集中在 `shared/field-schemas.ts`，但下列這幾個都是**員工特有**的欄位，
- * 不在 §2 列舉的共用清單內，且目前只有本模組用得到（比照 `roles-main.routes.ts` 的處置）。
- * 第二個模組要用時應該升格上去（已寫進交付回報）。
+ * 員工編號。字元格式與長度上限說明見 {@link codeField}——長度對齊
+ * `employees.employee_code` 的 `VARCHAR(64)`。
  */
-const EmployeeCode = t.String({ minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]*$' })
+const EmployeeCode = codeField(64)
 
 /** 員工姓名。長度上限對齊 `employees.name` 的 `VARCHAR(128)`。 */
 const EmployeeName = t.String({ minLength: 1, maxLength: 128 })

@@ -8,7 +8,12 @@
  *
  * 本檔**只收集錯誤、不拋例外**（§3.1.1）：業務拒絕是設計時就知道會發生的結果，不是意外。
  */
-import { CompanyUserStatus, RoleStatus, type CompanyUserStatusValue, type RoleStatusValue } from '../../../../db/schema/index.ts'
+import {
+  CompanyUserStatus,
+  RoleStatus,
+  type CompanyUserStatusValue,
+  type RoleStatusValue,
+} from '../../../../db/schema/index.ts'
 import type { DomainError } from '../../../../shared/service-result.ts'
 import {
   assignmentNotFound,

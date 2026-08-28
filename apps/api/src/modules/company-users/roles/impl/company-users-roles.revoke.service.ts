@@ -8,10 +8,15 @@
  * 2. **條件式 UPDATE**，把「尚未撤銷」寫進 `WHERE` 並比對影響列數。
  *
  * 業務拒絕一律收集後回傳、不拋例外（§3.1.1）。
+ *
+ * **稽核與寫入同一交易**（稽核計畫 §5），且必須在 {@link RevocationConflict} 判定「這次撤銷確實
+ * 成立」之後才記——半套的撤銷不該留下一筆「撤銷成功」的稽核。
  */
+import { buildAuditChanges, recordAudit } from '../../../audit/index.ts'
 import type { ServiceResult } from '../../../../shared/service-result.ts'
 import { fail, succeed } from '../../../../shared/service-result.ts'
 import { assignmentStateChanged } from '../company-users-roles.errors.ts'
+import { serializeRoleIds } from '../domain/role-assignment-audit.ts'
 import { planRoleRevocation } from '../domain/role-assignment-plan.ts'
 import {
   findCompanyUserForUpdate,
@@ -67,12 +72,11 @@ export const revokeRoles = async (
         return fail(plan.errors)
       }
 
-      const affectedRows = await revokeAssignments(
-        transaction,
-        context.companyId,
-        plan.assignmentIdsToRevoke,
-        { revokedAt, revokedBy: context.operatorCompanyUserId, revokedSeq },
-      )
+      const affectedRows = await revokeAssignments(transaction, context.companyId, plan.assignmentIdsToRevoke, {
+        revokedAt,
+        revokedBy: context.operatorCompanyUserId,
+        revokedSeq,
+      })
 
       // 成員列已被鎖住，理論上不會走到這裡；仍然檢查，因為「理論上不會發生」與
       // 「發生了也沒人知道」之間的差別，就是這一個 if（§4.4 要求檢查影響列數）。
@@ -81,6 +85,23 @@ export const revokeRoles = async (
       }
 
       const roles = await listActiveAssignments(transaction, context.companyId, input.companyUserId)
+
+      await recordAudit(transaction, {
+        companyId: context.companyId,
+        actor: { type: 'company-user', companyUserId: context.operatorCompanyUserId },
+        action: 'company-users.roles.revoke',
+        subjectTable: 'company_users',
+        subjectId: input.companyUserId,
+        // 理由與 create 切片相同：before／after 是撤銷前後**完整**的有效角色集合，不是只記
+        // 「撤了哪幾個」。
+        changes: buildAuditChanges(
+          'company_users',
+          { roleIds: serializeRoleIds(activeAssignments.map((assignment) => assignment.roleId)) },
+          { roleIds: serializeRoleIds(roles.map((role) => role.roleId)) },
+        ),
+        effectiveDate: null,
+        now: revokedAt,
+      })
 
       return succeed({
         companyUserId: input.companyUserId,

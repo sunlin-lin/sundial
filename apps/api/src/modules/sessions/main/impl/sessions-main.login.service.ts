@@ -19,10 +19,7 @@ import { passwordHashToVerify, verifyPassword } from '../domain/session-password
 import { invalidCredentials } from '../sessions-main.errors.ts'
 import { findSessionProfile, insertRefreshTicket, resolveLoginIdentity } from '../sessions-main.repository.ts'
 
-export const login = async (
-  context: SessionsMainContext,
-  input: LoginInput,
-): Promise<ServiceResult<LoginOutcome>> => {
+export const login = async (context: SessionsMainContext, input: LoginInput): Promise<ServiceResult<LoginOutcome>> => {
   // 身分解析查詢（§4.2 的排除適用範圍）：公司不存在、公司停用、帳號不存在、帳號不屬於這家公司、
   // 成員已停用——全部在這一支查詢裡收斂成同一個 `null`。
   const resolved = await resolveLoginIdentity(context.db, input.companyCode, input.username)

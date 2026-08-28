@@ -49,11 +49,7 @@ export const endSession = (requestContext: RequestContext): void => {
  * 端點只說「交付這張票、有效這麼久」，**通道是入口層的事**（§1.5）：cookie 名稱與
  * `httpOnly`／`Secure`／`SameSite` 三個屬性都在 `refresh-ticket-transport.ts`。
  */
-export const deliverRefreshTicket = (
-  requestContext: RequestContext,
-  ticket: string,
-  maxAgeSeconds: number,
-): void => {
+export const deliverRefreshTicket = (requestContext: RequestContext, ticket: string, maxAgeSeconds: number): void => {
   requestContext.refreshTicketDelivery = { kind: 'issue', ticket, maxAgeSeconds }
 }
 

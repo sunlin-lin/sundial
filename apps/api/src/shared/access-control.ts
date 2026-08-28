@@ -69,18 +69,35 @@ export type AccessControlPorts = {
  *
  * 對前端而言三者的回應**完全相同**（401 ＋ `900`）：差別只在伺服器端做了什麼、log 記了什麼。
  * 讓呼叫端看得出差別會變成一個可探測的介面（§3.2）。
+ *
+ * **這一條講的是 HTTP 回應的形狀，不是這個內部型別。** `reuse-detected` 分支上的 `ticketId`
+ * 只在伺服器端流動（`verifyRefreshTicket` → 憑證驗證器 → `revokeChainsOnReuse` → 稽核），
+ * 從來不會被序列化進回應——三者對前端仍然完全相同。加這個欄位擴充的是「伺服器端記得住什麼」，
+ * 不是「呼叫端看不看得出差別」，兩件事不衝突。
  */
 export type RefreshTicketVerification =
   | {
       readonly outcome: 'valid'
       readonly identity: VerifiedIdentity
-      /** 這一張票在資料上的識別；輪替時要作廢的就是它。 */
+      /** 這一張票在資料上的識別；輪替時**即將被換掉的**就是它。 */
       readonly ticketId: string
     }
   | {
       readonly outcome: 'reuse-detected'
       /** 由**已作廢的那一列**解析出來的身分——全鏈作廢的範圍以它為準。 */
       readonly identity: VerifiedIdentity
+      /**
+       * 由**已作廢的那一列**解析出來的票 id——這次被第二次拿來用的就是它。
+       *
+       * **與 `valid.ticketId` 語意不同，不要混用**：那邊是「即將被輪替掉的票」，這裡是
+       * 「被重用的票」。差別不是文字遊戲：作廢清單（`revokedTokenIds`）在「重用的是上一張票」
+       * 與「重用的是三次輪替之前的票」兩種情況下完全相同——都是「這個成員目前所有活躍的票」，
+       * 因為兩種情況的處置（全鏈作廢）本來就一樣。少了這一個欄位，事後翻稽核只看得到
+       * 「作廢了哪幾張」，看不出「是哪一張舊票冒出來觸發的」，於是分不出前者（多半是網路重送，
+       * 良性）與後者（票在外面躺了一段時間才出現，真正的資安事件）——而分不出來的結果是
+       * 每一次都只能當良性處理。這是這筆稽核紀錄最有鑑識價值的一欄。
+       */
+      readonly ticketId: string
     }
   | { readonly outcome: 'invalid' }
 
@@ -93,8 +110,13 @@ export type RefreshTicketVerification =
  */
 export type RefreshTicketVerifier = (rawTicket: string) => Promise<RefreshTicketVerification>
 
-/** 作廢某個身分的所有輪替鏈（偷用偵測的副作用，§5.4.2）。 */
-export type SessionChainRevoker = (identity: VerifiedIdentity) => Promise<void>
+/**
+ * 作廢某個身分的所有輪替鏈（偷用偵測的副作用，§5.4.2）。
+ *
+ * @param reusedTicketId 觸發這次全鏈作廢的那張票的 id（`RefreshTicketVerification` 的
+ *   `reuse-detected.ticketId`）。一路傳到稽核紀錄裡，理由見該欄位的檔頭。
+ */
+export type SessionChainRevoker = (identity: VerifiedIdentity, reusedTicketId: string) => Promise<void>
 
 /** refresh 群組的憑證驗證器（§1.9.1）的完整相依。由組裝點提供。 */
 export type RefreshControlPorts = {

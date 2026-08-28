@@ -97,3 +97,37 @@ export const toMaskedDetail = (cipher: FieldCipher, row: EmployeeDetailRow): Emp
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
 })
+
+/** 稽核用明文快照實際 select 回來的欄位：只有寫進 `EmployeeProfileInput` 那八欄需要的密文。 */
+export type EmployeeProfileRow = {
+  readonly employeeCode: string
+  readonly name: string
+  readonly gender: GenderValue
+  readonly identityNumberEncrypted: Buffer
+  readonly birthdayEncrypted: Buffer
+  readonly phoneEncrypted: Buffer
+  readonly emailEncrypted: Buffer | null
+  readonly addressEncrypted: Buffer
+}
+
+/**
+ * 單筆列 → **明文**業務快照，只給稽核用（稽核計畫 §4.4）。
+ *
+ * **這是本檔唯一一支解密後不遮罩的函式，因此呼叫者必須被嚴格限制。** 它的回傳型別是
+ * `EmployeeProfileInput`——與端點回應型別（一律 `xxxMasked`，見 `employee-model.ts` 檔頭）完全
+ * 不同，因此被 handler 誤用會是一個編譯錯誤，不是一個要在 review 時抓的疏忽。目前唯一合法的
+ * 呼叫者是 `impl/employees-main.find-audit-snapshot.repository.ts`，它只把結果交給
+ * `buildAuditChanges`：稽核的 `presence` 級變更判定必須基於明文（拿密文比對的話，AES-256-GCM
+ * 每次寫入不同的 IV 會讓「什麼都沒改」的欄位也被誤判為變更，理由完整寫在
+ * `modules/audit/main/domain/audit-change-set.ts` 檔頭）。
+ */
+export const toPlaintextProfile = (cipher: FieldCipher, row: EmployeeProfileRow): EmployeeProfileInput => ({
+  employeeCode: row.employeeCode,
+  name: row.name,
+  gender: row.gender,
+  identityNumber: cipher.decrypt(row.identityNumberEncrypted),
+  birthday: cipher.decrypt(row.birthdayEncrypted),
+  phone: cipher.decrypt(row.phoneEncrypted),
+  email: row.emailEncrypted === null ? null : cipher.decrypt(row.emailEncrypted),
+  address: cipher.decrypt(row.addressEncrypted),
+})

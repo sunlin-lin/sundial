@@ -5,7 +5,11 @@
  * （任職）一起建立，而「一次建立分散在多張表的關聯資料」只成功一半會留下
  * 「有員工卻沒有任何任職紀錄」這種永遠用不了、也沒人會發現的孤兒。交易邊界屬於 service 層，
  * 現在就放對位置，比日後補上時再回頭把三支切片重排便宜。
+ *
+ * **稽核與寫入同一交易**（稽核計畫 §5）：`recordAudit` 失敗會讓這個交易一起失敗，
+ * 「員工建好了但沒有稽核」在稽核的語意下本來就是不該發生的事。
  */
+import { buildAuditChanges, recordAudit } from '../../../audit/index.ts'
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import type { EmployeesMainContext } from '../domain/employee-context.ts'
 import type { CreateEmployeeInput, EmployeeDetail } from '../domain/employee-model.ts'
@@ -32,6 +36,19 @@ export const createEmployee = async (
     // `domain/employee-duplicate.ts` 的 `classifyEmployeeDuplicate` 上。
     if (outcome === 'duplicate-code') return fail([employeeCodeDuplicated()])
     if (outcome === 'duplicate-identity-number') return fail([employeeIdentityNumberDuplicated()])
+
+    // 新增事件：before 為 null（稽核計畫 §4.2）。`input` 已經是 `EmployeeProfileInput` 的形狀
+    // （不含 `id`），與政策的內層 key 定義域逐字對應，不必再另外裁切。
+    await recordAudit(tx, {
+      companyId: context.companyId,
+      actor: { type: 'company-user', companyUserId: context.operatorCompanyUserId },
+      action: 'employees.main.create',
+      subjectTable: 'employees',
+      subjectId: employeeId,
+      changes: buildAuditChanges('employees', null, input),
+      effectiveDate: null,
+      now,
+    })
 
     const detail = await findEmployeeDetail(tx, context.cipher, context.companyId, employeeId)
     if (detail === null) {

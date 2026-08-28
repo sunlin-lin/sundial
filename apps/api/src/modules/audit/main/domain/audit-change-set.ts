@@ -120,9 +120,7 @@ export const buildChangeSet = (
     if (level === undefined) {
       // 訊息只帶欄位名與型別來源，**不帶值**（§3.2 末條：例外訊息禁止含個資明文，
       // 而例外訊息一定會進 log，log 的保存期會跟著變成個資保存期）。
-      throw new Error(
-        `稽核欄位政策未分類的欄位 ${field}（政策來源 ${policy.source}），請先在 AUDIT_FIELD_POLICY 分級`,
-      )
+      throw new Error(`稽核欄位政策未分類的欄位 ${field}（政策來源 ${policy.source}），請先在 AUDIT_FIELD_POLICY 分級`)
     }
 
     // `excluded` 是「刻意不記」：連欄位名都不出現，與「沒有變更」在 `changes` 上無從區分

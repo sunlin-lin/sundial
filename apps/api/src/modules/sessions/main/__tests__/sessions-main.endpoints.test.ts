@@ -124,24 +124,26 @@ const buildTestApp = (db: Database) => {
   const accessControl = createAccessControlPorts(dependencies)
   const refreshControl = createRefreshControlPorts(dependencies)
 
-  return new Elysia()
-    .use(requestContext)
-    .use(errorHandler(clock))
-    .use(responseEnvelope(clock))
-    // **刻意不在這裡掛 refresh 票的傳輸層**：那個 plugin 由 routes 自己帶進來
-    //（見 `sessions-main.routes.ts` 的檔頭）。這裡不掛，測試順便證明了那件事
-    // ——若 routes 沒帶，下面每一條 cookie 相關的斷言都會紅。
-    .use(new Elysia({ name: 'test-public-group' }).use(publicGuard).use(sessionsMainPublicRoutes(dependencies)))
-    .use(
-      new Elysia({ name: 'test-refresh-group' })
-        .use(refreshGuard(refreshControl))
-        .use(sessionsMainRefreshRoutes(dependencies)),
-    )
-    .use(
-      new Elysia({ name: 'test-authenticated-group' })
-        .use(identityGuard(accessControl))
-        .use(sessionsMainAuthenticatedRoutes(dependencies)),
-    )
+  return (
+    new Elysia()
+      .use(requestContext)
+      .use(errorHandler(clock))
+      .use(responseEnvelope(clock))
+      // **刻意不在這裡掛 refresh 票的傳輸層**：那個 plugin 由 routes 自己帶進來
+      //（見 `sessions-main.routes.ts` 的檔頭）。這裡不掛，測試順便證明了那件事
+      // ——若 routes 沒帶，下面每一條 cookie 相關的斷言都會紅。
+      .use(new Elysia({ name: 'test-public-group' }).use(publicGuard).use(sessionsMainPublicRoutes(dependencies)))
+      .use(
+        new Elysia({ name: 'test-refresh-group' })
+          .use(refreshGuard(refreshControl))
+          .use(sessionsMainRefreshRoutes(dependencies)),
+      )
+      .use(
+        new Elysia({ name: 'test-authenticated-group' })
+          .use(identityGuard(accessControl))
+          .use(sessionsMainAuthenticatedRoutes(dependencies)),
+      )
+  )
 }
 
 let app: ReturnType<typeof buildTestApp>
@@ -812,7 +814,11 @@ describe('sessions/main/context（integration，任務三）', () => {
     expect(response.payload.expiresIn).toBe(sessionConfig.accessTokenTtlSeconds)
 
     const data = response.payload.data
-    expect(data.user).toEqual({ id: account.userId, companyUserId: account.companyUserId, displayName: account.displayName })
+    expect(data.user).toEqual({
+      id: account.userId,
+      companyUserId: account.companyUserId,
+      displayName: account.displayName,
+    })
     expect(data.company).toEqual({ id: account.companyId, companyCode: account.companyCode, name: account.companyName })
 
     // **這個成員實際擁有的權限碼**，不是全部權限碼清單（任務三）：只有這兩碼被授予，

@@ -133,6 +133,36 @@ export const AUDIT_FIELD_POLICY = {
        */
     },
   },
+  /**
+   * **這個主體上發生的事，不是它自己欄位的差異**——角色指派／撤銷改的是 `company_user_roles`，
+   * refresh token 重用偵測改的是 `refresh_tokens`。因此 `source` 不指向某個輸入型別（那裡沒有
+   * 一個天然存在的「company_users 輸入型別」可指），而是指向 `audit` 模組自己宣告的**稽核內容型別**
+   * ——完整理由見 `domain/audit-company-users-content.ts` 檔頭，計畫 §4.5 也有現成的說明。
+   */
+  company_users: {
+    source: 'modules/audit/main/domain/audit-company-users-content.ts#CompanyUsersAuditContent',
+    fields: {
+      /**
+       * 角色 id 陣列不是敏感資料（角色本身就是可見的組織資訊），記值才能回答「這個成員被指派／
+       * 撤銷了哪些角色」——這正是資料字典要求稽核的內容（計畫 §1：「誰在什麼時候把某個角色指派
+       * 給某人／撤銷」）。序列化成字串的理由見 `audit-company-users-content.ts`。
+       */
+      roleIds: AuditFieldLevel.Value,
+      /**
+       * 作廢的 token id 同樣不是敏感資料——它是資料庫的主鍵，不是 token 原值本身（原值連
+       * DB 都不存明文，見 `db/schema/refresh-tokens.ts` 的 `token_hash`）。記值能讓事後追查
+       * 「這次重用偵測到底作廢了哪幾張票」一次查到，而不必再去猜時間範圍。
+       */
+      revokedTokenIds: AuditFieldLevel.Value,
+      /**
+       * 被重用的那張票的 id。與 `revokedTokenIds` 同理，是資料庫主鍵不是 token 原值，
+       * 記值不擴大任何外洩面。它是這筆稽核紀錄最有鑑識價值的一欄——沒有它，「重用的是上一張
+       * 票（良性）」與「重用的是很久以前的票（資安事件）」在稽核上分不出來，理由完整寫在
+       * `domain/audit-company-users-content.ts` 的 `reusedTokenId` 檔頭。
+       */
+      reusedTokenId: AuditFieldLevel.Value,
+    },
+  },
 } as const satisfies Readonly<Record<string, AuditTablePolicy>>
 
 /**

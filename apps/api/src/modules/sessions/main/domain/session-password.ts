@@ -32,8 +32,7 @@ const ABSENT_ACCOUNT_PASSWORD_HASH =
  * @param storedHash 查到的帳號的 hash；查無帳號時傳 `null`。
  * @returns 查無帳號時回「陪跑」用的假 hash，讓兩條路徑跑**同一行**驗證程式碼。
  */
-export const passwordHashToVerify = (storedHash: string | null): string =>
-  storedHash ?? ABSENT_ACCOUNT_PASSWORD_HASH
+export const passwordHashToVerify = (storedHash: string | null): string => storedHash ?? ABSENT_ACCOUNT_PASSWORD_HASH
 
 /** 建立密碼 hash。目前只有測試與日後的 `credentials/main/*` 會用到。 */
 export const hashPassword = (plainPassword: string): Promise<string> =>

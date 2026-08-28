@@ -57,11 +57,8 @@ export const findSessionProfile = (
   companyUserId: string,
 ): Promise<SessionProfile | null> => findSessionProfileImpl(runner, companyId, companyUserId)
 
-export const insertRefreshTicket = (
-  runner: QueryRunner,
-  companyId: string,
-  ticket: NewRefreshTicket,
-): Promise<void> => insertRefreshTicketImpl(runner, companyId, ticket)
+export const insertRefreshTicket = (runner: QueryRunner, companyId: string, ticket: NewRefreshTicket): Promise<void> =>
+  insertRefreshTicketImpl(runner, companyId, ticket)
 
 export const findRefreshTicket = (
   runner: QueryRunner,
@@ -83,12 +80,13 @@ export const revokeSessionChain = (
   revocation: TicketRevocation,
 ): Promise<number> => revokeSessionChainImpl(runner, companyId, sessionId, revocation)
 
+/** @returns 實際被作廢的 token id 清單（稽核計畫 §7 Stage 2 用得到；`logout-all` 只取 `.length`）。 */
 export const revokeMemberChains = (
   runner: QueryRunner,
   companyId: string,
   companyUserId: string,
   revocation: TicketRevocation,
-): Promise<number> => revokeMemberChainsImpl(runner, companyId, companyUserId, revocation)
+): Promise<readonly string[]> => revokeMemberChainsImpl(runner, companyId, companyUserId, revocation)
 
 export const touchAccessSession = (
   runner: QueryRunner,

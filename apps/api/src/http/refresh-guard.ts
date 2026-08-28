@@ -50,7 +50,7 @@ export const refreshGuard = (ports: RefreshControlPorts) =>
         // 舊票再次出現，代表同一張票有第二方持有——不是攻擊者拿舊票來換，就是攻擊者已經換過
         // 而真正的使用者拿著舊票來。兩種情形都無法從單次請求判斷誰是誰，**也不需要判斷**：
         // 兩邊一起作廢，被偷的一方最多重登一次，攻擊者則失去全部存取權。
-        await ports.revokeAllChainsOnReuse(verification.identity)
+        await ports.revokeAllChainsOnReuse(verification.identity, verification.ticketId)
 
         // §5.4.2 要求寫稽核與告警：這是少數「系統自己能發現的安全事件」，靜靜作廢等於浪費了訊號。
         // 分類用 `security_event` 而不是借用 `unhandled_exception`：兩者的告警處置完全不同，

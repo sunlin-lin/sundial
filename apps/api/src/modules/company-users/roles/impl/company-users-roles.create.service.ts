@@ -7,9 +7,15 @@
  *
  * 業務拒絕一律**收集後回傳**，不拋例外（§3.1.1）：使用者一次勾了五個角色，
  * 沒有理由讓他修一個、送一次、再被退回。
+ *
+ * **稽核與寫入同一交易**（稽核計畫 §5）。**主體是成員（`company_users`），不是每一個角色**：
+ * 一次指派多個角色只留一筆稽核，`changes` 帶的是指派前後**完整的有效角色集合**，而不是逐一
+ * 角色各記一筆——後者會讓「一次指派五個角色」在稽核裡看起來像五個各自獨立的事件。
  */
+import { buildAuditChanges, recordAudit } from '../../../audit/index.ts'
 import type { ServiceResult } from '../../../../shared/service-result.ts'
 import { fail, succeed } from '../../../../shared/service-result.ts'
+import { serializeRoleIds } from '../domain/role-assignment-audit.ts'
 import { planRoleAssignment } from '../domain/role-assignment-plan.ts'
 import {
   findCompanyUserForUpdate,
@@ -70,6 +76,24 @@ export const assignRoles = (
     // 回變更後的全部有效角色，而不是把剛剛寫進去的那幾筆湊出來：湊出來的版本會漏掉
     // 「他本來就有的角色」，而使用者要看的是最終狀態。在同一交易內讀，看到的一定是這次寫入後的樣子。
     const roles = await listActiveAssignments(transaction, context.companyId, input.companyUserId)
+
+    await recordAudit(transaction, {
+      companyId: context.companyId,
+      actor: { type: 'company-user', companyUserId: context.operatorCompanyUserId },
+      action: 'company-users.roles.create',
+      subjectTable: 'company_users',
+      subjectId: input.companyUserId,
+      // before／after 各是指派前／後的**完整**有效角色 id 集合（已排序序列化，見
+      // `domain/role-assignment-audit.ts`）——不是只記「這次加了哪幾個」，因為稽核要回答的是
+      // 「這個成員現在有哪些角色、之前有哪些角色」，兩者對比才看得出真正的異動範圍。
+      changes: buildAuditChanges(
+        'company_users',
+        { roleIds: serializeRoleIds(activeAssignments.map((assignment) => assignment.roleId)) },
+        { roleIds: serializeRoleIds(roles.map((role) => role.roleId)) },
+      ),
+      effectiveDate: null,
+      now: assignedAt,
+    })
 
     return succeed({
       companyUserId: input.companyUserId,

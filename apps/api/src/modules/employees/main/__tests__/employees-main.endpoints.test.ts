@@ -88,7 +88,11 @@ type EmployeeListShape = {
   readonly search: Record<string, unknown>
   readonly sort: { readonly field: string; readonly order: string }
   readonly pagination: { readonly currentPage: number; readonly perPage: number; readonly totalCount: number }
-  readonly data: readonly { readonly id: string; readonly employeeCode: string; readonly identityNumberMasked: string }[]
+  readonly data: readonly {
+    readonly id: string
+    readonly employeeCode: string
+    readonly identityNumberMasked: string
+  }[]
 }
 
 /** 每個 token 對應一個已驗證身分。測試以此模擬「不同公司的使用者」。 */

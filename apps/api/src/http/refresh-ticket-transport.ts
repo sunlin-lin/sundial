@@ -76,11 +76,9 @@ const toSetCookieValue = (delivery: RefreshTicketDelivery): string => {
   if (delivery.kind === 'revoke') {
     return [`${REFRESH_TICKET_COOKIE_NAME}=`, ...attributes, 'Max-Age=0'].join('; ')
   }
-  return [
-    `${REFRESH_TICKET_COOKIE_NAME}=${delivery.ticket}`,
-    ...attributes,
-    `Max-Age=${delivery.maxAgeSeconds}`,
-  ].join('; ')
+  return [`${REFRESH_TICKET_COOKIE_NAME}=${delivery.ticket}`, ...attributes, `Max-Age=${delivery.maxAgeSeconds}`].join(
+    '; ',
+  )
 }
 
 /**

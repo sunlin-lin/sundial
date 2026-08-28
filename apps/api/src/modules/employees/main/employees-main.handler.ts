@@ -27,16 +27,14 @@ import type {
   EmployeeSummary,
   GenderValue,
 } from './domain/employee-model.ts'
-import {
-  createEmployee,
-  deleteEmployee,
-  getEmployee,
-  listEmployees,
-  updateEmployee,
-} from './employees-main.service.ts'
+import { createEmployee, deleteEmployee, getEmployee, listEmployees, updateEmployee } from './employees-main.service.ts'
 
-/** 由組裝點注入的相依。公司範圍不在裡面——它只能來自每一次請求的已驗證身分（§4.2）。 */
-export type EmployeesMainDependencies = Omit<EmployeesMainContext, 'companyId'>
+/**
+ * 由組裝點注入的相依。**公司範圍與操作者都不在裡面**——兩者只能來自每一次請求的已驗證身分
+ * （§4.2、稽核計畫 §5），放進模組層級的相依會變成整個服務共用一個值，那正是跨公司外洩／
+ * 稽核冒名的形狀。
+ */
+export type EmployeesMainDependencies = Omit<EmployeesMainContext, 'companyId' | 'operatorCompanyUserId'>
 
 /**
  * handler 需要的請求上下文。
@@ -81,6 +79,8 @@ const toEmployeeContext = (
   cipher: dependencies.cipher,
   clock: dependencies.clock,
   companyId: identity.companyId,
+  // 稽核的操作者一律由已驗證身分推導，不信任請求帶來的任何識別碼（§5.2）。
+  operatorCompanyUserId: identity.companyUserId,
 })
 
 /**

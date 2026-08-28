@@ -109,6 +109,23 @@ const BusinessFailureResponses = {
 const ValidationFailureResponse = { 422: envelope(t.Null()) } as const
 
 /**
+ * 每支端點都可能出現的非業務回應（比照 `roles-main.routes.ts`／`employees-main.routes.ts`）。
+ *
+ * §2 要求 `response` 涵蓋該端點可能回的每一種狀態碼。這三種與業務邏輯無關，由 middleware 與
+ * 統一 error handler 產生（`900` 未登入／`901` 無權限／`400` 系統錯誤），`data` 恆為 `null`、
+ * `errors` 恆為空陣列（§1.3）。
+ *
+ * **這個目錄原本漏了這三個狀態碼**：三支端點都落在已登入群組內，憑證驗證失敗一樣會回 401、
+ * 沒有對應權限碼一樣會回 403，統一 error handler 一樣可能回 500——契約沒宣告，前端由
+ * `bun run gen:api` 產生的型別就看不到這幾種狀態，會誤以為這幾支端點不會回未授權，而實際上會。
+ */
+const CommonFailureResponses = {
+  401: envelope(t.Null()),
+  403: envelope(t.Null()),
+  500: envelope(t.Null()),
+} as const
+
+/**
  * 取出本次請求的已驗證身分。
  *
  * 走到 `null` 代表這支端點沒有落在掛著身分驗證 middleware 的群組裡（§1.9.2），
@@ -145,6 +162,7 @@ export const companyUsersRolesRoutes = (dependencies: CompanyUsersRolesDependenc
         response: {
           200: envelope(ListData),
           ...ValidationFailureResponse,
+          ...CommonFailureResponses,
         },
         detail: {
           summary: '查詢成員角色指派紀錄',
@@ -171,6 +189,7 @@ export const companyUsersRolesRoutes = (dependencies: CompanyUsersRolesDependenc
         response: {
           200: envelope(SnapshotData),
           ...BusinessFailureResponses,
+          ...CommonFailureResponses,
         },
         detail: {
           summary: '指派角色給公司成員',
@@ -195,6 +214,7 @@ export const companyUsersRolesRoutes = (dependencies: CompanyUsersRolesDependenc
         response: {
           200: envelope(SnapshotData),
           ...BusinessFailureResponses,
+          ...CommonFailureResponses,
         },
         detail: {
           summary: '撤銷公司成員的角色',

@@ -35,4 +35,10 @@ export type EmployeesMainContext = {
    * 任何人改一個字串就能讀別家公司的資料，那是本系統最嚴重的單點風險。
    */
   readonly companyId: string
+  /**
+   * 執行本次操作的人（稽核用，稽核計畫 §5）。**只能來自已驗證的 token**，與 `companyId` 同一個
+   * 道理——寫進 `audit_logs.actor_company_user_id` 的值若能被使用者操控，稽核紀錄就可以被
+   * 冒名。命名比照 `company-users/roles` 的 `RoleAssignmentContext.operatorCompanyUserId`。
+   */
+  readonly operatorCompanyUserId: string
 }
