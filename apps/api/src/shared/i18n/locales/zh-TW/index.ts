@@ -9,12 +9,14 @@
  * ——這是「key 由路徑機械推導」這條規則唯一需要人維護的接點，其餘三段都在各語系檔裡跟著目錄長。
  */
 import { COMPANY_USERS } from './company-users.ts'
+import { DEPARTMENTS } from './departments.ts'
 import { EMPLOYEES } from './employees.ts'
 import { PERMISSIONS } from './permissions.ts'
 import { PLATFORM } from './platform.ts'
 import { REGULATORY } from './regulatory.ts'
 import { ROLES } from './roles.ts'
 import { SESSIONS } from './sessions.ts'
+import { SHIFTS } from './shifts.ts'
 
 /**
  * 業務錯誤碼的訊息樹（§1.3）。**這棵樹的 key 攤平之後就是 `ErrorCode` 聯集**（見 `../../messages.ts`）。
@@ -30,6 +32,8 @@ export const ZH_TW_ERRORS = {
   employees: EMPLOYEES,
   'company-users': COMPANY_USERS,
   regulatory: REGULATORY,
+  shifts: SHIFTS,
+  departments: DEPARTMENTS,
 } as const
 
 /** 平台層訊息樹（envelope 頂層 `msg` 在非 `300` 路徑上用的那幾句）。理由見 `platform.ts` 檔頭。 */

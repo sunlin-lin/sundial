@@ -114,11 +114,7 @@ import {
   type StopHeartbeatTimer,
   type SyncOutcome,
 } from '../domain/regulatory-sync-model.ts'
-import {
-  REGULATORY_SYNC_SOURCES,
-  toVersionCode,
-  type SyncableDatasetCode,
-} from '../domain/regulatory-sync-source.ts'
+import { REGULATORY_SYNC_SOURCES, toVersionCode, type SyncableDatasetCode } from '../domain/regulatory-sync-source.ts'
 import { regulatorySyncAlreadyRunning, regulatorySyncFailed } from '../regulatory-sync.errors.ts'
 import {
   completeSyncLog,
@@ -158,7 +154,10 @@ const fetchText = async (context: RegulatorySyncContext, url: string, label: str
     }
     return { ok: true, body: await response.text() }
   } catch (error) {
-    return { ok: false, reason: `${label}連線失敗（${error instanceof Error ? error.message : String(error)}）：${url}` }
+    return {
+      ok: false,
+      reason: `${label}連線失敗（${error instanceof Error ? error.message : String(error)}）：${url}`,
+    }
   }
 }
 
@@ -206,7 +205,8 @@ const reapAndFindLiveSync = async (
 
 /** 這一次同步在 `regulatory_sync_logs` 上的結案動作。 */
 type SyncLogClosure = {
-  readonly statusCode: typeof RegulatorySyncStatus.Succeeded | typeof RegulatorySyncStatus.NoChange | typeof RegulatorySyncStatus.Failed
+  readonly statusCode:
+    typeof RegulatorySyncStatus.Succeeded | typeof RegulatorySyncStatus.NoChange | typeof RegulatorySyncStatus.Failed
   readonly datasetVersionId: number | null
   readonly governmentResourceId: string | null
   readonly recordsReceived: number | null
@@ -471,8 +471,7 @@ type CreatedVersion = {
 }
 
 type CreateVersionOutcome =
-  | { readonly ok: true; readonly value: CreatedVersion }
-  | { readonly ok: false; readonly reason: string }
+  { readonly ok: true; readonly value: CreatedVersion } | { readonly ok: false; readonly reason: string }
 
 /**
  * 多版本流程裡的**一個**版本：下載 → 解析 → 形狀驗證 → 自己的交易寫入。

@@ -52,8 +52,10 @@ const write = (level: 'info' | 'warn' | 'error', category: LogCategoryValue, mes
 }
 
 export const logger = {
-  info: (category: LogCategoryValue, message: string, fields: LogFields = {}) => write('info', category, message, fields),
-  warn: (category: LogCategoryValue, message: string, fields: LogFields = {}) => write('warn', category, message, fields),
+  info: (category: LogCategoryValue, message: string, fields: LogFields = {}) =>
+    write('info', category, message, fields),
+  warn: (category: LogCategoryValue, message: string, fields: LogFields = {}) =>
+    write('warn', category, message, fields),
   error: (category: LogCategoryValue, message: string, fields: LogFields = {}) =>
     write('error', category, message, fields),
 }

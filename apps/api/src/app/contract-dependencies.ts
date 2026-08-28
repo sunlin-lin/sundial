@@ -46,9 +46,7 @@ const UNREACHABLE_DATABASE = {
  * TypeScript 允許以較少參數的函式滿足較多參數的簽章），不需要為每一個 port 各寫一份假實作。
  */
 const notReachable = (): never => {
-  throw new Error(
-    '契約產生用的 app 只用來讀取路由宣告，不得實際處理請求。走到這裡代表有人把它當成可執行的服務在用。',
-  )
+  throw new Error('契約產生用的 app 只用來讀取路由宣告，不得實際處理請求。走到這裡代表有人把它當成可執行的服務在用。')
 }
 
 /**

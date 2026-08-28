@@ -53,8 +53,7 @@ const daysInMonth = (year: number, month: number): number =>
  * 記錄裡只剩一句「解析失敗」，看的人分不出是格式變了、還是某一列的日期壞了。
  */
 export type RocDateResult =
-  | { readonly ok: true; readonly value: string }
-  | { readonly ok: false; readonly reason: string }
+  { readonly ok: true; readonly value: string } | { readonly ok: false; readonly reason: string }
 
 /** `YYYMMDD`（民國年三位）或 `YYMMDD`（民國 100 年以前的兩位年）。 */
 const ROC_COMPACT_PATTERN = /^(\d{2,3})(\d{2})(\d{2})$/
@@ -99,7 +98,10 @@ export const parseRocCompactDate = (value: string): RocDateResult => {
     // 這一條擋的是 `1140229`：民國 114 年（西元 2025）不是閏年，2 月只有 28 天。
     // 少了它會得到一個 `2025-02-29`，寫進 DB 的 `date` 欄位會被 MariaDB 悄悄轉成 `0000-00-00`
     // 或直接報一個看不出成因的錯，兩種都比在這裡明講「哪一個值壞了」差。
-    return { ok: false, reason: `民國日期的日不合法（${year}-${pad2(month)} 只有 ${lastDay} 天）：${JSON.stringify(value)}` }
+    return {
+      ok: false,
+      reason: `民國日期的日不合法（${year}-${pad2(month)} 只有 ${lastDay} 天）：${JSON.stringify(value)}`,
+    }
   }
 
   return { ok: true, value: `${String(year)}-${pad2(month)}-${pad2(day)}` }
@@ -194,8 +196,7 @@ const ROC_FISCAL_YEAR_PATTERN = /(?<!\d)(\d{2,3})年度/g
 
 /** 一個會計年度的起訖日。 */
 export type RocFiscalYearResult =
-  | { readonly ok: true; readonly from: string; readonly to: string }
-  | { readonly ok: false; readonly reason: string }
+  { readonly ok: true; readonly from: string; readonly to: string } | { readonly ok: false; readonly reason: string }
 
 /**
  * 從一段文字裡取出「民國 N 年度」，讀成那一年的**起日與訖日**

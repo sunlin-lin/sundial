@@ -16,8 +16,7 @@
  * **用型別述詞而不是物件展開**：展開只複製 own enumerable 屬性，驅動與 ORM 的錯誤物件
  * 常把欄位放在 prototype 上，展開之後會靜靜讀成 `undefined`。
  */
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 
 /** 沿 `cause` 鏈往下找第一個帶 `errno` 的物件；找不到回 `null`。 */
 export const findDriverError = (error: unknown): Record<string, unknown> | null => {

@@ -46,10 +46,8 @@ export type {
 export const listRoles = (context: RolesMainContext, query: RoleListQuery): Promise<ServiceResult<RoleListPage>> =>
   listRolesImpl(context, query)
 
-export const getRole = (
-  context: RolesMainContext,
-  input: RoleTargetInput,
-): Promise<ServiceResult<RoleDetail | null>> => getRoleImpl(context, input)
+export const getRole = (context: RolesMainContext, input: RoleTargetInput): Promise<ServiceResult<RoleDetail | null>> =>
+  getRoleImpl(context, input)
 
 export const createRole = (context: RolesMainContext, input: CreateRoleInput): Promise<ServiceResult<RoleDetail>> =>
   createRoleImpl(context, input)

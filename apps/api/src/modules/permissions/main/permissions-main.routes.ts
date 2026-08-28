@@ -36,6 +36,24 @@ const PermissionNodeSchema = t.Recursive(
 
 const PermissionTreeData = t.Object({ nodes: t.Array(PermissionNodeSchema) })
 
+/**
+ * 每支端點都可能出現的非業務回應（比照 `roles-main.routes.ts`／`employees-main.routes.ts`）。
+ *
+ * §2 要求 `response` 涵蓋該端點可能回的每一種狀態碼。這三種與業務邏輯無關，由 middleware 與
+ * 統一 error handler 產生（`900` 未登入／`901` 無權限／`400` 系統錯誤），`data` 恆為 `null`、
+ * `errors` 恆為空陣列（§1.3）。
+ *
+ * **這支端點原本漏了這三個狀態碼**：它落在已登入群組內，憑證驗證失敗一樣會回 401、
+ * 沒有 `permissions.main.tree` 這個權限碼一樣會回 403，統一 error handler 一樣可能回 500——
+ * 契約沒宣告，前端由 `bun run gen:api` 產生的型別就看不到這幾種狀態，會誤以為這支端點不會
+ * 回未授權，而實際上會。
+ */
+const CommonFailureResponses = {
+  401: envelope(t.Null()),
+  403: envelope(t.Null()),
+  500: envelope(t.Null()),
+} as const
+
 /** 沒有業務錯誤時仍要寫出清單（§1.8.3），這裡把它帶進 OpenAPI 的說明文字，讓前端看得到「確實是空的」。 */
 const describeErrorCodes = (codes: readonly string[]): string =>
   codes.length === 0 ? '本端點不會吐出任何業務錯誤碼。' : `可能的業務錯誤碼：${codes.join('、')}`
@@ -55,6 +73,7 @@ export const permissionsMainRoutes = (dependencies: PermissionsMainDependencies)
         // schema 驗證不符會走統一 error handler 的 `VALIDATION` 分支（422／`300`）；
         // 宣告出來前端才知道這個 status 也是這包信封的形狀，而不是另一種東西。
         422: envelope(t.Null()),
+        ...CommonFailureResponses,
       },
       detail: {
         summary: '取得角色設定用的權限樹',

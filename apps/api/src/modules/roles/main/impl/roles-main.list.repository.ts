@@ -60,7 +60,11 @@ const buildConditions = (query: RoleListQuery): readonly (SQL | undefined)[] => 
  *
  * `currentPage` 超出範圍時自然回空陣列與正確的 `pagination`，不另外判斷、也不回 404（§1.4）。
  */
-export const listRolePage = async (runner: QueryRunner, companyId: string, query: RoleListQuery): Promise<RoleListPage> => {
+export const listRolePage = async (
+  runner: QueryRunner,
+  companyId: string,
+  query: RoleListQuery,
+): Promise<RoleListPage> => {
   const tenant = new TenantDatabase(runner, companyId)
   const conditions = buildConditions(query)
   const direction = query.sort.order === 'desc' ? desc : asc

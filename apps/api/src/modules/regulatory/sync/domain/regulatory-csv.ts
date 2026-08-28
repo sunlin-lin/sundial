@@ -50,7 +50,8 @@ export type CsvQuoting =
   | 'rfc4180'
 
 /** 一列 CSV → 各欄的原始字串（未 trim）。失敗代表引號用法讀不懂。 */
-type CsvLineResult = { readonly ok: true; readonly cells: readonly string[] } | { readonly ok: false; readonly reason: string }
+type CsvLineResult =
+  { readonly ok: true; readonly cells: readonly string[] } | { readonly ok: false; readonly reason: string }
 
 /**
  * 拆一列 RFC 4180 的 CSV。
@@ -74,7 +75,10 @@ const splitRfc4180Line = (line: string): CsvLineResult => {
       for (;;) {
         const closing = line.indexOf('"', index)
         if (closing === -1) {
-          return { ok: false, reason: `引號欄位沒有結尾的引號（本解析器不支援跨列的引號欄位）：${JSON.stringify(line)}` }
+          return {
+            ok: false,
+            reason: `引號欄位沒有結尾的引號（本解析器不支援跨列的引號欄位）：${JSON.stringify(line)}`,
+          }
         }
         value += line.slice(index, closing)
         // `""` 是一個引號字元本身；否則這個引號就是欄位的結尾。
@@ -120,8 +124,7 @@ const splitCsvLine = (line: string, quoting: CsvQuoting): CsvLineResult =>
 export type CsvRow = Readonly<Record<string, string>>
 
 export type CsvTableResult =
-  | { readonly ok: true; readonly rows: readonly CsvRow[] }
-  | { readonly ok: false; readonly reason: string }
+  { readonly ok: true; readonly rows: readonly CsvRow[] } | { readonly ok: false; readonly reason: string }
 
 /**
  * 把政府的 CSV 讀成一批「欄位名 → 值」。

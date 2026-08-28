@@ -124,7 +124,11 @@ export const REGULATORY_DATASETS = {
    * 它們是同一次公告裡的同一件事，分開維護必然漂移。
    * 預設值由 migration `0015` 帶入；日後調整一律**新增版本**，不覆寫既有的值。
    */
-  10: { key: 'health-insurance-supplementary-premium', name: '健保補充保險費（費率與計費門檻）', maintenance: 'manual' },
+  10: {
+    key: 'health-insurance-supplementary-premium',
+    name: '健保補充保險費（費率與計費門檻）',
+    maintenance: 'manual',
+  },
 } as const satisfies Record<number, { key: string; name: string; maintenance: RegulatoryDatasetMaintenance }>
 
 /**

@@ -237,7 +237,10 @@ export type RegulatoryDatasetParser = (rawText: string, context: RegulatoryParse
  * 它們早就進來了）。因此生效日的推導被抽成 {@link DeriveEffectiveFrom} 放在來源設定上，
  * 解析器就不再需要、也不再有資格回答那個問題——**同一個答案只有一個出處**。
  */
-export type RegulatoryVersionRecordsParser = (rawText: string, context: RegulatoryParseContext) => RegulatoryRecordsResult
+export type RegulatoryVersionRecordsParser = (
+  rawText: string,
+  context: RegulatoryParseContext,
+) => RegulatoryRecordsResult
 
 /**
  * 生效日推導的結果。

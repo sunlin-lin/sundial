@@ -18,7 +18,11 @@
  */
 import type { Database } from '../../../../db/client.ts'
 import type { RegulatoryRawFormatValue, RegulatorySyncStatusValue } from '../../../../db/schema/index.ts'
-import { REGULATORY_DATASETS, type RegulatoryDatasetCode, type RegulatoryDatasetMaintenance } from './regulatory-dataset-code.ts'
+import {
+  REGULATORY_DATASETS,
+  type RegulatoryDatasetCode,
+  type RegulatoryDatasetMaintenance,
+} from './regulatory-dataset-code.ts'
 import type { RegulatoryRecordData } from './regulatory-record-shape.ts'
 
 /**

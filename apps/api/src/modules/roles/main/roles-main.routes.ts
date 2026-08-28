@@ -17,6 +17,7 @@ import { requestContext } from '../../../http/request-context.ts'
 import { envelope } from '../../../shared/envelope.ts'
 import {
   BaseRequest,
+  codeField,
   Nullable,
   PageRequest,
   paginationResponse,
@@ -38,16 +39,9 @@ import {
 import { describeRoleErrors, ROLE_ENDPOINT_ERRORS } from './roles-main.errors.ts'
 
 /**
- * 角色代碼。
- *
- * 限制成英數與 `-`／`_`，是因為這個值同時是**公司內的唯一鍵**與人要輸入、比對、在權限設定畫面上
- * 唸出來的識別字串：允許空白與全形字元之後，「HR」與「H R」「ＨＲ」會是三個不同的角色，
- * 而畫面上看起來幾乎一樣。長度上限對齊 `roles.code` 的 `VARCHAR(64)`。
- *
- * 註：§2 要求共用欄位型別集中在 `shared/field-schemas.ts`，但那是骨架的檔案（本次不得修改），
- * 且目前只有本模組用得到這三個欄位。第二個模組要用時應該升格上去（已寫進交付回報）。
+ * 角色代碼。字元格式與長度上限說明見 {@link codeField}——長度對齊 `roles.code` 的 `VARCHAR(64)`。
  */
-const RoleCode = t.String({ minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]*$' })
+const RoleCode = codeField(64)
 
 /** 角色名稱。長度上限對齊 `roles.name` 的 `VARCHAR(128)`。 */
 const RoleName = t.String({ minLength: 1, maxLength: 128 })

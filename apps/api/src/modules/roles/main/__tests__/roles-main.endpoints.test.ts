@@ -118,7 +118,11 @@ const buildTestApp = (db: Database) =>
     .use(requestContext)
     .use(errorHandler(clock))
     .use(responseEnvelope(clock))
-    .use(new Elysia({ name: 'test-authenticated-group' }).use(identityGuard(accessControl)).use(rolesMainRoutes({ db, clock })))
+    .use(
+      new Elysia({ name: 'test-authenticated-group' })
+        .use(identityGuard(accessControl))
+        .use(rolesMainRoutes({ db, clock })),
+    )
 
 let database: Database
 let app: ReturnType<typeof buildTestApp>

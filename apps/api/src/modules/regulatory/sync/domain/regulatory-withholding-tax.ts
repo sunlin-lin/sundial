@@ -145,7 +145,9 @@ export const listWithholdingTaxResources = (pageHtml: string): RegulatorySourceR
  * 這與 `dataset_code=2` 的「100年」不同（那一年可能有兩次調整，因此推不出唯一的生效日）
  * ——完整論述在 `regulatory-roc-date.ts` 的 `parseRocFiscalYear`。
  */
-export const deriveWithholdingTaxEffectiveFrom = (resourceDescription: string | null): RegulatoryEffectiveFromResult => {
+export const deriveWithholdingTaxEffectiveFrom = (
+  resourceDescription: string | null,
+): RegulatoryEffectiveFromResult => {
   if (resourceDescription === null) {
     return { ok: false, excluded: true, reason: '這個下載連結沒有 title（檔名），無從得知它是哪一個年度' }
   }
@@ -253,7 +255,8 @@ const selectHeader = (rawText: string): readonly string[] | null => {
 }
 
 /** 一列的十二個稅額。整批成功或整批失敗，理由同 `RegulatoryRecordsResult`。 */
-type TaxAmountsResult = { readonly ok: true; readonly value: readonly string[] } | { readonly ok: false; readonly reason: string }
+type TaxAmountsResult =
+  { readonly ok: true; readonly value: readonly string[] } | { readonly ok: false; readonly reason: string }
 
 const readTaxAmounts = (
   row: Readonly<Record<string, string>>,
@@ -346,11 +349,17 @@ export const parseWithholdingTaxTable = (rawText: string): RegulatoryRecordsResu
     const from = normalizeAmount(matched[1] ?? '')
     const to = normalizeAmount(matched[2] ?? '')
     if (!INTEGER_AMOUNT_PATTERN.test(from) || !INTEGER_AMOUNT_PATTERN.test(to)) {
-      return { ok: false, reason: `${position}的「${FIELD.monthlySalaryRangeText}」金額不是整數：${JSON.stringify(rangeText)}` }
+      return {
+        ok: false,
+        reason: `${position}的「${FIELD.monthlySalaryRangeText}」金額不是整數：${JSON.stringify(rangeText)}`,
+      }
     }
     if (BigInt(from) > BigInt(to)) {
       // 上下限顛倒代表兩欄對調了。兩個值單獨看都合法，而級距查詢會變成一個永遠命不中的區間。
-      return { ok: false, reason: `${position}的「${FIELD.monthlySalaryRangeText}」下限大於上限：${JSON.stringify(rangeText)}` }
+      return {
+        ok: false,
+        reason: `${position}的「${FIELD.monthlySalaryRangeText}」下限大於上限：${JSON.stringify(rangeText)}`,
+      }
     }
 
     // 完整性檢查（一）：上一級的上限 ＋ 1 ＝ 這一級的下限。

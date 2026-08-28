@@ -269,11 +269,11 @@ describe('regulatory/sync/list (integration)', () => {
     expect(listed.payload.data.pagination.totalCount).toBe(3)
 
     const statuses = [...listed.payload.data.data].map((log) => log.statusCode).sort((a, b) => a - b)
-    expect(statuses).toEqual([
-      RegulatorySyncStatus.Succeeded,
-      RegulatorySyncStatus.Failed,
-      RegulatorySyncStatus.NoChange,
-    ].sort((a, b) => a - b))
+    expect(statuses).toEqual(
+      [RegulatorySyncStatus.Succeeded, RegulatorySyncStatus.Failed, RegulatorySyncStatus.NoChange].sort(
+        (a, b) => a - b,
+      ),
+    )
 
     const failed = listed.payload.data.data.find((log) => log.statusCode === RegulatorySyncStatus.Failed)
     expect(failed).toBeDefined()

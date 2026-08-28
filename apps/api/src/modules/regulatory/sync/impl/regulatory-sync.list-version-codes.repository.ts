@@ -18,10 +18,7 @@ import { eq } from 'drizzle-orm'
 import type { QueryRunner } from '../../../../db/client.ts'
 import { regulatoryDatasetVersions } from '../../../../db/schema/index.ts'
 
-export const listDatasetVersionCodes = async (
-  runner: QueryRunner,
-  datasetCode: number,
-): Promise<readonly string[]> => {
+export const listDatasetVersionCodes = async (runner: QueryRunner, datasetCode: number): Promise<readonly string[]> => {
   const rows = await runner
     .select({ versionCode: regulatoryDatasetVersions.versionCode })
     .from(regulatoryDatasetVersions)

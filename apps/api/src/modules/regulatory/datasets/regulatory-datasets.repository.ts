@@ -28,18 +28,10 @@ import type {
   RegulatoryRecordView,
 } from './domain/regulatory-dataset-model.ts'
 import { findDatasetVersion as findDatasetVersionImpl } from './impl/regulatory-datasets.find-version.repository.ts'
-import {
-  findEffectiveDatasetVersion as findEffectiveDatasetVersionImpl,
-} from './impl/regulatory-datasets.find-effective-version.repository.ts'
-import {
-  listEffectiveVersionsAsOf as listEffectiveVersionsAsOfImpl,
-} from './impl/regulatory-datasets.list-effective-versions.repository.ts'
-import {
-  listDatasetVersionPage as listDatasetVersionPageImpl,
-} from './impl/regulatory-datasets.list-versions.repository.ts'
-import {
-  listDatasetVersionRecords as listDatasetVersionRecordsImpl,
-} from './impl/regulatory-datasets.list-records.repository.ts'
+import { findEffectiveDatasetVersion as findEffectiveDatasetVersionImpl } from './impl/regulatory-datasets.find-effective-version.repository.ts'
+import { listEffectiveVersionsAsOf as listEffectiveVersionsAsOfImpl } from './impl/regulatory-datasets.list-effective-versions.repository.ts'
+import { listDatasetVersionPage as listDatasetVersionPageImpl } from './impl/regulatory-datasets.list-versions.repository.ts'
+import { listDatasetVersionRecords as listDatasetVersionRecordsImpl } from './impl/regulatory-datasets.list-records.repository.ts'
 
 /**
  * 資料存取的執行器，直接沿用 `db/client.ts` 的正典型別。

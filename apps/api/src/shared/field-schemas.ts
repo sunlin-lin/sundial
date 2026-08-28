@@ -42,6 +42,32 @@ export const TransportTS = t.String({
 /** 月份 `YYYY-MM`（§6.1）。 */
 export const YearMonth = t.String({ pattern: '^\\d{4}-(?:0[1-9]|1[0-2])$' })
 
+/**
+ * 「代碼」欄位的共用字元格式：開頭須為英數字，其餘可含英數字與 `-`／`_`。
+ *
+ * `employees`（員工編號）／`roles`／`shifts`／`departments` 四個模組原本各自在自己的
+ * `*-main.routes.ts` 裡逐字重複這一條正則——理由完全相同（代碼同時是**公司內的唯一鍵**與人要
+ * 輸入、比對、唸出來的識別字串，禁止空白與全形字元是為了不讓「A01」與「Ａ０１」被當成兩個不同的
+ * 值），但四份定義各自獨立表示日後要調整規則時得記得改滿四處。漏改的那一份**不會有任何地方報
+ * 錯**——它只是繼續用舊規則驗證，症狀是使用者回報「同樣的代碼在 A 頁面存得進去、B 頁面卻說格式
+ * 錯誤」，而排查時完全看不出兩處用的是不同的正則字面值。第四個模組（`departments`）落地後升格到
+ * 這裡（`shifts-main.routes.ts` 檔頭原本就預告「第二個模組要用時應該升格」）。
+ *
+ * 只 export 正則本體，不 export 固定死長度上限的完整 schema：四個模組目前的長度上限都是 64，
+ * 但那是四張資料表各自的 `code`／`employee_code` 欄位都選了 `VARCHAR(64)` 的巧合，不是規則本身
+ * 要求一致——任何一個模組日後改欄位寬度，不代表其他三個要跟著改。長度改由呼叫端經 {@link codeField}
+ * 傳入。
+ */
+export const CODE_FIELD_PATTERN = '^[A-Za-z0-9][A-Za-z0-9_-]*$'
+
+/**
+ * 代碼欄位的 schema 工廠，套用 {@link CODE_FIELD_PATTERN}。
+ *
+ * @param maxLength 對齊該模組資料表代碼欄位的 `VARCHAR` 寬度（例如 `employees.employee_code`、
+ *   `roles.code`、`shift_definitions.code`、`departments.code`）。
+ */
+export const codeField = (maxLength: number) => t.String({ minLength: 1, maxLength, pattern: CODE_FIELD_PATTERN })
+
 /** 原因欄位。上限 500 是全站唯一值，需要調整時改這裡而不是在端點放寬。 */
 export const Reason = t.String({ minLength: 1, maxLength: 500 })
 

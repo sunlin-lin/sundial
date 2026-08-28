@@ -29,7 +29,18 @@
  * 沒有 `company_id`（平台全域資料，見 `regulatory-dataset-versions.ts` 檔頭），
  * 也沒有 `updated_at`／`deleted_at`（append-only，通用規範 §1.4 的補集）。
  */
-import { bigint, datetime, decimal, foreignKey, index, int, json, mysqlTable, uniqueIndex, varchar } from 'drizzle-orm/mysql-core'
+import {
+  bigint,
+  datetime,
+  decimal,
+  foreignKey,
+  index,
+  int,
+  json,
+  mysqlTable,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/mysql-core'
 import { regulatoryDatasetVersions } from './regulatory-dataset-versions.ts'
 
 export const regulatoryRecords = mysqlTable(

@@ -55,7 +55,10 @@ export type RegulatorySyncErrorCodeValue = (typeof RegulatorySyncErrorCode)[keyo
  * 而這一次根本沒有開始；為它寫一列會讓歷程裡混進一堆沒有做任何事的紀錄，
  * 把真正的失敗淹掉。要知道「有東西在跑」，看的是那一筆 `status_code=1` 的紀錄本身。
  */
-export const regulatorySyncAlreadyRunning = (datasetCode: RegulatoryDatasetCode, runningLogId: number): DomainError => ({
+export const regulatorySyncAlreadyRunning = (
+  datasetCode: RegulatoryDatasetCode,
+  runningLogId: number,
+): DomainError => ({
   group: ErrorGroup.Conflict,
   code: RegulatorySyncErrorCode.AlreadyRunning,
   msg: RegulatorySyncErrorCode.AlreadyRunning,

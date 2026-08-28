@@ -37,14 +37,20 @@ export {
   RegulatorySyncStatus,
   type RegulatorySyncStatusValue,
 } from './regulatory-sync-logs.ts'
+export { shiftDefinitions, ShiftWorkType, type ShiftWorkTypeValue } from './shift-definitions.ts'
+export { shiftWorkPeriods } from './shift-work-periods.ts'
+export { shiftBreaks } from './shift-breaks.ts'
+export { departments, DepartmentStatus, type DepartmentStatusValue } from './departments.ts'
 
 import { auditLogs } from './audit-logs.ts'
 import { companyUserRoles } from './company-user-roles.ts'
 import { companyUsers } from './company-users.ts'
+import { departments } from './departments.ts'
 import { employees } from './employees.ts'
 import { refreshTokens } from './refresh-tokens.ts'
 import { rolePermissions } from './role-permissions.ts'
 import { roles } from './roles.ts'
+import { shiftDefinitions } from './shift-definitions.ts'
 
 /**
  * 帶公司範圍的資料表。`TenantDatabase`（`db/client.ts`）只接受這個聯集，
@@ -77,6 +83,104 @@ export type CompanyScopedTable =
    * 而不是靠結構型別自動納入。
    */
   | typeof auditLogs
+  /**
+   * `shift_definitions` 有 `company_id`，因此屬於這個聯集（實作計畫 `plans/04-shift-definitions.md` §5.1）。
+   *
+   * **`shift_work_periods` 與 `shift_breaks` 刻意不在這裡，這不是漏加。** 兩張表都沒有
+   * `company_id` 欄位——公司範圍由 `shift_definition_id` 間接決定，硬把它們納進來會變成
+   * 「用 company_id 過濾一張沒有 company_id 的表」，型別上就寫不出來，與法規三表不進本聯集
+   * 是同一類理由（見下方法規三表的段落）。這兩張子表只能經由 `shift_definitions` 的 service
+   * 存取，不單獨開端點，因此也不需要 `TenantDatabase` 替它們強制公司條件。
+   */
+  | typeof shiftDefinitions
+  /**
+   * `departments` 有 `company_id`，因此屬於這個聯集（實作計畫 `plans/05-employee-onboarding.md` §5）。
+   *
+   * **加入的位置很重要，這裡先說清楚為什麼放在 `employees` 附近，而不是照字母或建立順序排。**
+   * 這張表日後會被 `employee_department_histories`（複合外鍵 `(company_id, employment_id) →
+   * employee_employments(company_id, id)` 之類，那條線尚未動工）參照，屆時 `departments` 必須
+   * 排在 `employee_department_histories` 之後、且晚於 `employees`／`employee_employments` 被清空
+   * ——但那張表現在還不存在，這裡沒有東西可以「排在它之前」。**現階段放在 `employees` 附近即可
+   * （見下方陣列），日後那張表出現時，第一件要做的事就是回來重排這裡的順序**，不是把新表加進來
+   * 就當作完工：先前 `shift_definitions` 那次事故就是因為「加進聯集」與「想清楚放哪裡」被當成
+   * 同一步做完了，結果順序判斷被省略、直到跑 seed 撞見外鍵錯誤才發現漏了東西。
+   *
+   * 自我參照的 `fk_departments_parent`（`db/schema/departments.ts`）不影響這裡的排序考量：
+   * 那條外鍵是 `ON DELETE CASCADE`（該檔已詳述理由），同一張表內的父子順序由資料庫自己處理，
+   * 這裡的順序只需要管「哪些其他表參照了 `departments`」。
+   */
+  | typeof departments
+
+/**
+ * 對「窮舉一個聯集的所有成員」做編譯期檢查的小工具，供下方 {@link companyScopedTablesInDeleteOrder} 使用。
+ *
+ * **為什麼不能只用 `satisfies readonly CompanyScopedTable[]`。** 那只能擋住一個方向——陣列裡
+ * 混進一張不屬於聯集的表，元素型別對不上會編譯錯誤。但它擋不住另一個方向：聯集新增了一張表、
+ * 陣列忘了加，`satisfies` 完全看不出來，因為「聯集的子集」本來就永遠滿足 `satisfies` 的檢查。
+ * 而**這次事故正是那個方向**——`shift_definitions` 加進了 `CompanyScopedTable`，`seed-dev.ts`
+ * 的清理清單沒有人記得同步改，且沒有任何地方變紅，要等到跑 seed 撞見外鍵錯誤才發現。
+ *
+ * 這裡改用一個 curry 過的泛型把兩個方向一起釘住：先呼叫一次固定「要窮舉的聯集是誰」
+ * （`exhaustiveCompanyScopedTables<CompanyScopedTable>()`），再把陣列字面量傳進第二次呼叫。
+ *
+ * **條件型別兩側都刻意包一層 tuple（`[TUnion] extends [TArray[number]]`），不是隨手加的括號。**
+ * 條件型別預設是分配式的：`TUnion extends TArray[number] ? TArray : never` 會把 `TUnion` 拆成
+ * 一個個成員分別檢查，再把每個成員的檢查結果**聯集**起來——而聯集會吃掉 `never`
+ * （`TArray | never` 化簡為 `TArray`）。後果是只要陣列裡有任何一張表通過檢查，
+ * 少掉的那幾張表各自產出的 `never` 就會在聯集中直接消失，整個型別依然是 `TArray`，
+ * 檢查形同虛設——這是實作時第一版踩到的坑，`bun run typecheck` 在少了一張表時完全沒有變紅。
+ * 包一層 tuple 可以關掉分配式行為，讓 TS 把 `TUnion` 當成一個整體去比對「是不是
+ * `TArray[number]` 的子集合」，這樣才真的是「聯集裡每一個成員都必須出現在陣列裡」。
+ */
+const exhaustiveCompanyScopedTables =
+  <TUnion>() =>
+  <TArray extends readonly TUnion[]>(tables: [TUnion] extends [TArray[number]] ? TArray : never): TArray =>
+    tables
+
+/**
+ * `CompanyScopedTable` 的執行期版本，`apps/api/scripts/seed-dev.ts` 清理上一輪種子資料時要用來
+ * 逐張表清空——型別聯集在執行期完全不存在，for 迴圈走不過去，必須另外有一份實際的陣列可以疊代。
+ *
+ * **這份陣列與上面的型別聯集綁在一起，不是另一份手抄清單**：漏一張、或多一張不屬於聯集的表，
+ * 都會在 `exhaustiveCompanyScopedTables` 那一行編譯不過（見上方說明），因此不會出現「兩邊各自
+ * 增修、各自漂移」的情況——這正是本檔要修的那個問題本身。
+ *
+ * **順序是子表先、父表後，這件事沒辦法從型別推導出來——型別只管「有沒有漏表」，
+ * 不管「先刪哪一張」，所以這份陣列本身是有序的，且順序由外鍵決定：**
+ *
+ *   - `auditLogs`／`companyUserRoles`／`refreshTokens` 都以複合外鍵指向 `companyUsers`
+ *     （欄位分別是 `actor_company_user_id`、`company_user_id`、`assigned_by`/`revoked_by`、
+ *     `company_user_id`），必須先於 `companyUsers` 清掉。
+ *   - `companyUserRoles`／`rolePermissions` 都以複合外鍵指向 `roles`，必須先於 `roles` 清掉。
+ *   - `employees`／`shiftDefinitions`／`departments` 只以外鍵指向 `companies`（`companies` 不在
+ *     本聯集之列，由呼叫端另外處理），與本清單內其他表互不依賴，放在依賴鏈中段即可。
+ *     `departments` 的自我參照外鍵是 `ON DELETE CASCADE`（見 `db/schema/departments.ts`），
+ *     同一張表內的父子刪除順序由資料庫自己處理，不影響它在本陣列裡的位置。
+ *   - `companyUsers`／`roles` 被上面數張表參照，必須放在最後。
+ *
+ * **加新表時想清楚放哪裡**：把新表放進去只解決「編譯過不過」，不會告訴你它該排第幾個——
+ * 那要靠讀新表的外鍵去判斷它依賴誰、被誰依賴，比照上面的分組邏輯插進正確的位置。
+ * `departments` 現在放在 `employees` 之後即可（見上方型別聯集的註解：日後
+ * `employee_department_histories` 出現時要回來重排，`departments` 屆時必須排在它之後）。
+ *
+ * **`audit_logs` 雖是 append-only 的稽核紀錄，這裡仍然清空，不是例外。** `seed-dev.ts` 刪的是
+ * 整間 demo 公司，`audit_logs.company_id` 對 `companies.id` 有外鍵（`fk_audit_logs_company`）；
+ * 公司都不在了，稽核紀錄留著只會指向一個不存在的公司——那不是「保留歷史」，是孤兒列。
+ * 而且不清的話，刪 `companies` 那一步會被同一種外鍵錯誤擋下，與這次 `shift_definitions`
+ * 是同一個症狀、同一個成因（漏清子表），只是換了一張表發作。
+ */
+export const companyScopedTablesInDeleteOrder = exhaustiveCompanyScopedTables<CompanyScopedTable>()([
+  auditLogs,
+  companyUserRoles,
+  rolePermissions,
+  refreshTokens,
+  employees,
+  shiftDefinitions,
+  departments,
+  companyUsers,
+  roles,
+] as const)
+
 /*
  * **法規三表（`regulatory_dataset_versions`、`regulatory_records`、`regulatory_sync_logs`）
  * 刻意不在這個聯集裡，這不是漏加**（實作計畫 `plans/01-regulatory-dataset-versioning.md` §3.2 (b)）。

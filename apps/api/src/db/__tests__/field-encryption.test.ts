@@ -121,9 +121,7 @@ describe('blind index', () => {
     const cipher = cipherFrom()
     expect(cipher.blindIndex('A123456789').byteLength).toBe(BLIND_INDEX_BYTE_LENGTH)
     expect(cipher.blindIndex('').byteLength).toBe(BLIND_INDEX_BYTE_LENGTH)
-    expect(cipher.blindIndex('這是一段很長很長的中文字串，長度與雜湊長度無關').byteLength).toBe(
-      BLIND_INDEX_BYTE_LENGTH,
-    )
+    expect(cipher.blindIndex('這是一段很長很長的中文字串，長度與雜湊長度無關').byteLength).toBe(BLIND_INDEX_BYTE_LENGTH)
   })
 
   test('換一把索引金鑰就算出不同的雜湊（索引金鑰確實有進到計算裡）', () => {

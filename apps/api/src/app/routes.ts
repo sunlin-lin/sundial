@@ -27,10 +27,12 @@ import { identityGuard } from '../http/identity-guard.ts'
 import { publicGuard } from '../http/public-guard.ts'
 import { refreshGuard } from '../http/refresh-guard.ts'
 import { companyUsersRolesRoutes } from '../modules/company-users/routes.ts'
+import { departmentsMainRoutes } from '../modules/departments/routes.ts'
 import { employeesMainRoutes } from '../modules/employees/routes.ts'
 import { permissionsMainRoutes } from '../modules/permissions/routes.ts'
 import { regulatoryDatasetsRoutes, regulatorySyncRoutes } from '../modules/regulatory/routes.ts'
 import { rolesMainRoutes } from '../modules/roles/routes.ts'
+import { shiftsMainRoutes } from '../modules/shifts/routes.ts'
 import {
   sessionsMainAuthenticatedRoutes,
   sessionsMainPublicRoutes,
@@ -62,9 +64,7 @@ const toSessionsContext = (dependencies: AppDependencies) => ({
  * 而「它會發一張新票」是端點自己的業務，不是群組的屬性。
  */
 const publicGroup = (dependencies: AppDependencies) =>
-  new Elysia({ name: 'public-group' })
-    .use(publicGuard)
-    .use(sessionsMainPublicRoutes(toSessionsContext(dependencies)))
+  new Elysia({ name: 'public-group' }).use(publicGuard).use(sessionsMainPublicRoutes(toSessionsContext(dependencies)))
 
 /**
  * refresh 群組：以 refresh 票（cookie）驗證，驗過**不續期而是發證**。
@@ -89,21 +89,29 @@ const refreshGroup = (dependencies: AppDependencies) =>
  */
 const authenticatedGroup = (dependencies: AppDependencies) => {
   const { database, clock, cipher } = dependencies
-  return new Elysia({ name: 'authenticated-group' })
-    .use(identityGuard(dependencies.accessControl))
-    .use(sessionsMainAuthenticatedRoutes(toSessionsContext(dependencies)))
-    .use(rolesMainRoutes({ db: database, clock }))
-    .use(permissionsMainRoutes({ database }))
-    .use(companyUsersRolesRoutes({ database, clock }))
-    .use(employeesMainRoutes({ db: database, cipher, clock }))
-    // 法規資料集：**刻意不注入 clock**（實作計畫 §4.2）。這四支端點的時間維度只有呼叫端送來的
-    // `asOfDate`，拿得到 clock 就寫得出「沒帶就用今天」，而那會讓補算去年 12 月的薪資
-    // 抓到今年的費率，算出一個完全合理的數字。也沒有公司範圍——法規三表是平台全域資料。
-    .use(regulatoryDatasetsRoutes({ db: database }))
-    // 同步歷程：**同樣只注入 `db`**。`sync` 次目錄的另一個動作（`runSync`）需要網路與計時器，
-    // 而它們刻意不在這裡——一支 HTTP 查詢不該有能力去打政府端點並寫入版本。人工觸發同步的端點
-    // 依計畫 D3 不開放（一家公司的管理者按一個鈕，平台上每一家公司的 Payroll 都跟著換版本）。
-    .use(regulatorySyncRoutes({ db: database }))
+  return (
+    new Elysia({ name: 'authenticated-group' })
+      .use(identityGuard(dependencies.accessControl))
+      .use(sessionsMainAuthenticatedRoutes(toSessionsContext(dependencies)))
+      .use(rolesMainRoutes({ db: database, clock }))
+      .use(permissionsMainRoutes({ database }))
+      .use(companyUsersRolesRoutes({ database, clock }))
+      .use(employeesMainRoutes({ db: database, cipher, clock }))
+      // 班別主檔：不需要 cipher（班別沒有個資欄位），理由與 `regulatoryDatasetsRoutes` 不注入 clock
+      // 是同一類決定——只給這個次實體真的用得到的相依。
+      .use(shiftsMainRoutes({ db: database, clock }))
+      // 部門主檔：同樣不需要 cipher（部門沒有個資欄位，也刻意不含部門主管欄位，見
+      // `db/schema/departments.ts` 檔頭）。
+      .use(departmentsMainRoutes({ db: database, clock }))
+      // 法規資料集：**刻意不注入 clock**（實作計畫 §4.2）。這四支端點的時間維度只有呼叫端送來的
+      // `asOfDate`，拿得到 clock 就寫得出「沒帶就用今天」，而那會讓補算去年 12 月的薪資
+      // 抓到今年的費率，算出一個完全合理的數字。也沒有公司範圍——法規三表是平台全域資料。
+      .use(regulatoryDatasetsRoutes({ db: database }))
+      // 同步歷程：**同樣只注入 `db`**。`sync` 次目錄的另一個動作（`runSync`）需要網路與計時器，
+      // 而它們刻意不在這裡——一支 HTTP 查詢不該有能力去打政府端點並寫入版本。人工觸發同步的端點
+      // 依計畫 D3 不開放（一家公司的管理者按一個鈕，平台上每一家公司的 Payroll 都跟著換版本）。
+      .use(regulatorySyncRoutes({ db: database }))
+  )
 }
 
 /**

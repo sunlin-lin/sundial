@@ -159,7 +159,9 @@ export const planMultiVersionSync = (
 
   // `localeCompare` 用不上：`YYYY-MM-DD` 是固定寬度、由大到小的格式，字典序即時間序
   //（同 `isHeartbeatStale` 對 `heartbeat_at` 的處置）。
-  dated.sort((left, right) => (left.effectiveFrom < right.effectiveFrom ? -1 : left.effectiveFrom > right.effectiveFrom ? 1 : 0))
+  dated.sort((left, right) =>
+    left.effectiveFrom < right.effectiveFrom ? -1 : left.effectiveFrom > right.effectiveFrom ? 1 : 0,
+  )
 
   return [...dated, ...excluded, ...failed]
 }

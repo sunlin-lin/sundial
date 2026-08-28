@@ -4,6 +4,11 @@ exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | �
 "/company-users/roles/create | company-users.roles.create | authenticated | cmd,companyUserId,locale,roleIds,rqTS
 /company-users/roles/list | company-users.roles.list | authenticated | cmd,currentPage,includeRevoked,locale,perPage,rqTS
 /company-users/roles/revoke | company-users.roles.revoke | authenticated | cmd,companyUserId,locale,roleIds,rqTS
+/departments/main/create | departments.main.create | authenticated | cmd,code,locale,name,parentId,rqTS
+/departments/main/delete | departments.main.delete | authenticated | cmd,id,locale,rqTS
+/departments/main/get | departments.main.get | authenticated | cmd,id,locale,rqTS
+/departments/main/tree | departments.main.tree | authenticated | cmd,locale,rqTS
+/departments/main/update | departments.main.update | authenticated | cmd,code,id,locale,name,parentId,rqTS,status
 /employees/main/create | employees.main.create | authenticated | address,birthday,cmd,employeeCode,gender,identityNumber,locale,name,phone,rqTS
 /employees/main/delete | employees.main.delete | authenticated | cmd,id,locale,rqTS
 /employees/main/get | employees.main.get | authenticated | cmd,id,locale,rqTS
@@ -26,5 +31,11 @@ exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | �
 /sessions/main/login | sessions.main.login | public | cmd,companyCode,locale,password,rqTS,username
 /sessions/main/logout | sessions.main.logout | authenticated | cmd,locale,rqTS
 /sessions/main/logout-all | sessions.main.logout-all | authenticated | cmd,locale,rqTS
-/sessions/main/refresh | sessions.main.refresh | refresh | cmd,locale,rqTS"
+/sessions/main/refresh | sessions.main.refresh | refresh | cmd,locale,rqTS
+/shifts/main/copy | shifts.main.copy | authenticated | cmd,code,description,isActive,locale,name,rqTS,sourceId
+/shifts/main/create | shifts.main.create | authenticated | breaks,cmd,code,description,isActive,isFlexible,locale,name,rqTS,workPeriods,workTypeCode
+/shifts/main/delete | shifts.main.delete | authenticated | cmd,id,locale,rqTS
+/shifts/main/get | shifts.main.get | authenticated | cmd,id,locale,rqTS
+/shifts/main/list | shifts.main.list | authenticated | cmd,currentPage,locale,perPage,rqTS
+/shifts/main/update | shifts.main.update | authenticated | breaks,cmd,code,description,id,isActive,isFlexible,locale,name,rqTS,workPeriods,workTypeCode"
 `;

@@ -98,7 +98,13 @@ const salaryRow = (overrides: Record<string, unknown> = {}): Record<string, unkn
  * 一件都走不到——而失敗訊息會指向身分別，看起來像是測試資料寫錯，不像規則生效。
  */
 const otherCategoryRows = [
-  salaryRow({ 序號: '4', 身分別: '庇護性身心障礙者', 投保薪資等級: '1', 月薪資總額: '11100元以下', 月投保薪資: '11100' }),
+  salaryRow({
+    序號: '4',
+    身分別: '庇護性身心障礙者',
+    投保薪資等級: '1',
+    月薪資總額: '11100元以下',
+    月投保薪資: '11100',
+  }),
   salaryRow({ 序號: '5', 身分別: '部分工時勞工', 投保薪資等級: '1', 月薪資總額: '11100元以下', 月投保薪資: '11100' }),
   salaryRow({ 序號: '6', 身分別: '職訓機構受訓者', 投保薪資等級: '1', 月薪資總額: '11100元以下', 月投保薪資: '11100' }),
 ]
@@ -341,7 +347,12 @@ describe('失敗一律 status=3，且不得動到已存在的有效版本（字�
     const records = await database
       .select({ id: regulatoryRecords.id, recordKey: regulatoryRecords.recordKey })
       .from(regulatoryRecords)
-      .where(inArray(regulatoryRecords.datasetVersionId, versions.map((version) => version.id)))
+      .where(
+        inArray(
+          regulatoryRecords.datasetVersionId,
+          versions.map((version) => version.id),
+        ),
+      )
     return { versions, recordIds: records.map((record) => record.id).sort((a, b) => a - b) }
   }
 

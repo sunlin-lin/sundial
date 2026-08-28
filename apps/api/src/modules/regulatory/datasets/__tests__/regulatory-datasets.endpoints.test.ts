@@ -126,13 +126,22 @@ type VersionListShape = {
 type OverviewLastSyncShape =
   | { readonly kind: 'not-applicable' }
   | { readonly kind: 'never-synced' }
-  | { readonly kind: 'synced'; readonly startedAt: string; readonly finishedAt: string | null; readonly statusCode: number }
+  | {
+      readonly kind: 'synced'
+      readonly startedAt: string
+      readonly finishedAt: string | null
+      readonly statusCode: number
+    }
 
 type OverviewRowShape = {
   readonly datasetCode: number
   readonly name: string
   readonly maintenance: 'sync' | 'manual'
-  readonly effectiveVersion: { readonly versionCode: string; readonly effectiveFrom: string; readonly recordCount: number | null } | null
+  readonly effectiveVersion: {
+    readonly versionCode: string
+    readonly effectiveFrom: string
+    readonly recordCount: number | null
+  } | null
   readonly lastSync: OverviewLastSyncShape
 }
 

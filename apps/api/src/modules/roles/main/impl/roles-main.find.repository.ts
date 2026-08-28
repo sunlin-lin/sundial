@@ -16,7 +16,11 @@ import type { RoleDetail } from '../domain/role-model.ts'
  *   ——公司條件由 `TenantDatabase` 寫進 `WHERE`（§4.2），因此「不存在」與「屬於其他公司」
  *   想寫出不一致的回應都寫不出來（§3.2）。
  */
-export const findRoleDetail = async (runner: QueryRunner, companyId: string, roleId: string): Promise<RoleDetail | null> => {
+export const findRoleDetail = async (
+  runner: QueryRunner,
+  companyId: string,
+  roleId: string,
+): Promise<RoleDetail | null> => {
   const tenant = new TenantDatabase(runner, companyId)
 
   const [role] = await tenant.select(

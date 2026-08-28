@@ -12,7 +12,11 @@
  */
 import { and, eq } from 'drizzle-orm'
 import type { QueryRunner } from '../../../../db/client.ts'
-import { regulatorySyncLogs, RegulatorySyncStatus, type RegulatorySyncStatusValue } from '../../../../db/schema/index.ts'
+import {
+  regulatorySyncLogs,
+  RegulatorySyncStatus,
+  type RegulatorySyncStatusValue,
+} from '../../../../db/schema/index.ts'
 
 export type CompleteSyncLogInput = {
   readonly id: number
@@ -41,9 +45,7 @@ export const completeSyncLog = async (runner: QueryRunner, input: CompleteSyncLo
       errorMessage: input.errorMessage,
       updatedAt: input.finishedAt,
     })
-    .where(
-      and(eq(regulatorySyncLogs.id, input.id), eq(regulatorySyncLogs.statusCode, RegulatorySyncStatus.Running)),
-    )
+    .where(and(eq(regulatorySyncLogs.id, input.id), eq(regulatorySyncLogs.statusCode, RegulatorySyncStatus.Running)))
 
   return header.affectedRows
 }

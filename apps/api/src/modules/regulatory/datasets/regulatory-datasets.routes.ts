@@ -38,10 +38,7 @@ import {
   handleDatasetVersionResolve,
   type RegulatoryDatasetsDependencies,
 } from './regulatory-datasets.handler.ts'
-import {
-  describeRegulatoryDatasetErrors,
-  REGULATORY_DATASET_ENDPOINT_ERRORS,
-} from './regulatory-datasets.errors.ts'
+import { describeRegulatoryDatasetErrors, REGULATORY_DATASET_ENDPOINT_ERRORS } from './regulatory-datasets.errors.ts'
 
 /**
  * 資料集代碼，聯集字面值（§2：固定代碼欄位必須用聯集字面值，不可只寫 `t.Integer()`）。
@@ -270,8 +267,7 @@ export const regulatoryDatasetsRoutes = (dependencies: RegulatoryDatasetsDepende
       detail: {
         summary: '查詢單一法規資料版本的 metadata（不含 raw_data）',
         description:
-          `${describeRegulatoryDatasetErrors(REGULATORY_DATASET_ENDPOINT_ERRORS.get)}` +
-          ' 查無此版本時回 data: null。',
+          `${describeRegulatoryDatasetErrors(REGULATORY_DATASET_ENDPOINT_ERRORS.get)}` + ' 查無此版本時回 data: null。',
       },
     })
     .post('/regulatory/datasets/resolve', (context) => handleDatasetVersionResolve(dependencies, context), {

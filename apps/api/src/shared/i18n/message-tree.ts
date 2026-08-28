@@ -41,8 +41,9 @@ export type MessageKeysOf<TTree> = {
   [TDirectory in keyof TTree & string]: {
     [TSubdirectory in keyof TTree[TDirectory] & string]: {
       [TCategory in keyof TTree[TDirectory][TSubdirectory] & string]: {
-        [TName in keyof TTree[TDirectory][TSubdirectory][TCategory] &
-          string]: `${TDirectory}.${TSubdirectory}.${TCategory}.${TName}`
+        [
+          TName in keyof TTree[TDirectory][TSubdirectory][TCategory] & string
+        ]: `${TDirectory}.${TSubdirectory}.${TCategory}.${TName}`
       }[keyof TTree[TDirectory][TSubdirectory][TCategory] & string]
     }[keyof TTree[TDirectory][TSubdirectory] & string]
   }[keyof TTree[TDirectory] & string]
@@ -55,9 +56,7 @@ export type MessageKeysOf<TTree> = {
  * 而不是靜靜多出一個永遠查不到的分支、少掉一則永遠回落中文的訊息。
  */
 export type PartialMessageTree<TTree> = {
-  readonly [TSegment in keyof TTree]?: TTree[TSegment] extends string
-    ? string
-    : PartialMessageTree<TTree[TSegment]>
+  readonly [TSegment in keyof TTree]?: TTree[TSegment] extends string ? string : PartialMessageTree<TTree[TSegment]>
 }
 
 /**

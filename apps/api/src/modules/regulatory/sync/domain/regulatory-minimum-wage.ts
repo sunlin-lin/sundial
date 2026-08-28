@@ -148,8 +148,7 @@ type Announcement = {
 }
 
 type AnnouncementResult =
-  | { readonly ok: true; readonly value: Announcement }
-  | { readonly ok: false; readonly reason: string }
+  { readonly ok: true; readonly value: Announcement } | { readonly ok: false; readonly reason: string }
 
 /**
  * 一則公告原文 → 拆解結果。
@@ -170,7 +169,8 @@ const parseAnnouncement = (text: string): AnnouncementResult => {
   }
 
   const announcedOn = parseRocCompactDate(`${matched[1] ?? ''}${pad2(matched[2] ?? '')}${pad2(matched[3] ?? '')}`)
-  if (!announcedOn.ok) return { ok: false, reason: `公告的發布日不合法（${announcedOn.reason}）：${JSON.stringify(text)}` }
+  if (!announcedOn.ok)
+    return { ok: false, reason: `公告的發布日不合法（${announcedOn.reason}）：${JSON.stringify(text)}` }
 
   const effectiveFrom = parseRocCompactDate(`${matched[4] ?? ''}${pad2(matched[5] ?? '')}${pad2(matched[6] ?? '')}`)
   if (!effectiveFrom.ok) {

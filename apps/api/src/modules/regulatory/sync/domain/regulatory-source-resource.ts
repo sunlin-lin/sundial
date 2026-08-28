@@ -59,8 +59,7 @@ export type RegulatorySourceResource = {
 }
 
 export type RegulatorySourceResourceResult =
-  | { readonly ok: true; readonly value: RegulatorySourceResource }
-  | { readonly ok: false; readonly reason: string }
+  { readonly ok: true; readonly value: RegulatorySourceResource } | { readonly ok: false; readonly reason: string }
 
 /**
  * 探索到的**全部**資源（多版本資料集用）。

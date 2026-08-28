@@ -69,8 +69,7 @@ type DomainErrorOf<TCode extends ErrorCode> = {
 export type DomainError = { readonly [TCode in ErrorCode]: DomainErrorOf<TCode> }[ErrorCode]
 
 export type ServiceResult<T> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly errors: readonly DomainError[] }
+  { readonly ok: true; readonly value: T } | { readonly ok: false; readonly errors: readonly DomainError[] }
 
 export const succeed = <T>(value: T): ServiceResult<T> => ({ ok: true, value })
 

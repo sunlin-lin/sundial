@@ -28,7 +28,5 @@ export const loadPermissionTree = (runner: QueryRunner): Promise<readonly Permis
  * 檢查一組權限 id 是否存在且可授權，供角色建立／更新驗證使用者勾選的權限。
  * 回傳「不存在」與「存在但不可授權」兩份清單，錯誤怎麼組由呼叫端決定。
  */
-export const checkAssignable = (
-  runner: QueryRunner,
-  permissionIds: readonly string[],
-): Promise<AssignabilityCheck> => checkAssignableImpl(runner, permissionIds)
+export const checkAssignable = (runner: QueryRunner, permissionIds: readonly string[]): Promise<AssignabilityCheck> =>
+  checkAssignableImpl(runner, permissionIds)

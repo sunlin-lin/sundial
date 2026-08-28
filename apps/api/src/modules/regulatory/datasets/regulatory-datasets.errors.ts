@@ -113,9 +113,7 @@ export const REGULATORY_DATASET_ENDPOINT_ERRORS = {
  * 清單必須進契約（§1.8.3），而 Elysia 的 `detail` 只吃標準 OpenAPI 欄位；塞進 `description`
  * 是目前唯一不需要自訂擴充欄位就能讓前端看到這份清單的位置。
  */
-export const describeRegulatoryDatasetErrors = (
-  declarations: readonly RegulatoryDatasetErrorDeclaration[],
-): string =>
+export const describeRegulatoryDatasetErrors = (declarations: readonly RegulatoryDatasetErrorDeclaration[]): string =>
   declarations.length === 0
     ? '本端點不會回傳任何業務錯誤（errors 恆為空陣列）。'
     : `可能的 errors[].code：${declarations

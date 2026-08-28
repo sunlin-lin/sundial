@@ -15,7 +15,11 @@ import type { QueryRunner } from '../../../db/client.ts'
 import type { AdminCapableRole } from './domain/admin-capability.ts'
 import type { RoleDetail, RoleListPage, RoleListQuery } from './domain/role-model.ts'
 import { findRoleDetail as findRoleDetailImpl } from './impl/roles-main.find.repository.ts'
-import { insertRole as insertRoleImpl, type NewRole, type RoleInsertOutcome } from './impl/roles-main.insert.repository.ts'
+import {
+  insertRole as insertRoleImpl,
+  type NewRole,
+  type RoleInsertOutcome,
+} from './impl/roles-main.insert.repository.ts'
 import { listAdminCapableRoles as listAdminCapableRolesImpl } from './impl/roles-main.list-admin-roles.repository.ts'
 import { listRolePage as listRolePageImpl } from './impl/roles-main.list.repository.ts'
 import { markRoleDeleted as markRoleDeletedImpl, type RoleDeletion } from './impl/roles-main.mark-deleted.repository.ts'
@@ -41,22 +45,14 @@ export type { NewRole, RoleDeletion, RoleInsertOutcome, RoleProfileUpdate, RoleS
  */
 export type { QueryRunner }
 
-export const listRolePage = (
-  runner: QueryRunner,
-  companyId: string,
-  query: RoleListQuery,
-): Promise<RoleListPage> => listRolePageImpl(runner, companyId, query)
+export const listRolePage = (runner: QueryRunner, companyId: string, query: RoleListQuery): Promise<RoleListPage> =>
+  listRolePageImpl(runner, companyId, query)
 
-export const findRoleDetail = (
-  runner: QueryRunner,
-  companyId: string,
-  roleId: string,
-): Promise<RoleDetail | null> => findRoleDetailImpl(runner, companyId, roleId)
+export const findRoleDetail = (runner: QueryRunner, companyId: string, roleId: string): Promise<RoleDetail | null> =>
+  findRoleDetailImpl(runner, companyId, roleId)
 
-export const listAdminCapableRoles = (
-  runner: QueryRunner,
-  companyId: string,
-): Promise<readonly AdminCapableRole[]> => listAdminCapableRolesImpl(runner, companyId)
+export const listAdminCapableRoles = (runner: QueryRunner, companyId: string): Promise<readonly AdminCapableRole[]> =>
+  listAdminCapableRolesImpl(runner, companyId)
 
 export const insertRole = (runner: QueryRunner, companyId: string, role: NewRole): Promise<RoleInsertOutcome> =>
   insertRoleImpl(runner, companyId, role)

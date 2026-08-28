@@ -668,8 +668,7 @@ export const RegulatoryRecordDataSchema: TSchema = Type.Union(Object.values(REGU
  * （讀出資料的那一層，見 `impl/regulatory-datasets.list-records.repository.ts`）。
  */
 export type RegulatoryRecordDataResult<TCode extends RegulatoryDatasetCode = RegulatoryDatasetCode> =
-  | { readonly ok: true; readonly value: RegulatoryRecordData<TCode> }
-  | { readonly ok: false; readonly reason: string }
+  { readonly ok: true; readonly value: RegulatoryRecordData<TCode> } | { readonly ok: false; readonly reason: string }
 
 /**
  * 驗證一筆 `data` 是不是該資料集該有的形狀（計畫 §6）。

@@ -24,7 +24,10 @@ import { parseHealthInsurancePremiumShares } from '../domain/regulatory-health-i
 import { parseHealthInsuranceSalaryGrades } from '../domain/regulatory-health-insurance-salary-grade.ts'
 import { planMultiVersionSync } from '../domain/regulatory-multi-version-plan.ts'
 import { parseLaborEmploymentInsurancePremiumShares } from '../domain/regulatory-labor-employment-insurance-premium.ts'
-import { parseLaborInsuranceSalaryGrades, parseMonthlySalaryRange } from '../domain/regulatory-labor-insurance-salary.ts'
+import {
+  parseLaborInsuranceSalaryGrades,
+  parseMonthlySalaryRange,
+} from '../domain/regulatory-labor-insurance-salary.ts'
 import { parseLaborPensionContributionWageGrades } from '../domain/regulatory-labor-pension-contribution-wage.ts'
 import { parseOccupationalAccidentInsuranceRates } from '../domain/regulatory-occupational-accident-insurance-rate.ts'
 import {
@@ -347,7 +350,10 @@ describe('isDecimalSum：三個 decimal 字串的驗算（不同小數位數）'
 describe('parseRocEffectiveDateFromText：從中文說明裡取生效日（dataset_code=4、6）', () => {
   test('實測的兩段資源說明', () => {
     expect(
-      parseRocEffectiveDateFromText('勞工保險普通事故及就業保險合計之保險費分擔金額表(自115年1月1日起適用)', '資源說明'),
+      parseRocEffectiveDateFromText(
+        '勞工保險普通事故及就業保險合計之保險費分擔金額表(自115年1月1日起適用)',
+        '資源說明',
+      ),
     ).toEqual({ ok: true, value: '2026-01-01' })
     expect(parseRocEffectiveDateFromText('勞工職業災害保險適用行業別及費率表(114年1月1日起適用)', '資源說明')).toEqual({
       ok: true,
@@ -524,7 +530,10 @@ describe('parseLaborPensionContributionWageGrades：dataset_code=3 的解析器'
 
     // 反方向：第一級如果不是「N以下」，代表低薪那一段被截掉了。
     const noLowest = parseLaborPensionContributionWageGrades(
-      JSON.stringify([{ ...pensionRows[1], 等級: '1' }, { ...pensionRows[2], 等級: '2' }]),
+      JSON.stringify([
+        { ...pensionRows[1], 等級: '1' },
+        { ...pensionRows[2], 等級: '2' },
+      ]),
     )
     expect(noLowest.ok).toBe(false)
     if (noLowest.ok) return
@@ -990,8 +999,7 @@ const HEALTH_GRADE_HEADER = '組別級距,投保等級,月投保金額（元）,
  * 而三者都各自弄壞過一次解析（BOM 讓第一個欄位名對不上、CRLF 讓最後一欄多一個 `\r`、
  * 尾端換行多出一列空的）。用真實形態當預設，那三件事就每一條測試都在驗。
  */
-const healthGradeCsv = (...rows: readonly string[]): string =>
-  `﻿${[HEALTH_GRADE_HEADER, ...rows].join('\r\n')}\r\n`
+const healthGradeCsv = (...rows: readonly string[]): string => `﻿${[HEALTH_GRADE_HEADER, ...rows].join('\r\n')}\r\n`
 
 /** 三級的完整分級表：頭一級沒有下限、末一級沒有上限、中間首尾相接。 */
 const HEALTH_GRADE_ROWS = [
@@ -1004,8 +1012,7 @@ const HEALTH_GRADE_ROWS = [
 const HEALTH_SHARE_HEADER =
   '投保金額等級,月投保金額,本人負擔金額（負擔比率30%）,本人+1眷口負擔金額,本人+2眷口負擔金額,本人+3眷口負擔金額,投保單位負擔金額（負擔比率60%）,政府補助金額（補助比率10%）'
 
-const healthShareCsv = (...rows: readonly string[]): string =>
-  `﻿${[HEALTH_SHARE_HEADER, ...rows].join('\r\n')}\r\n`
+const healthShareCsv = (...rows: readonly string[]): string => `﻿${[HEALTH_SHARE_HEADER, ...rows].join('\r\n')}\r\n`
 
 /** 兩級，值逐字取自政府 115年1月 那一份的前兩列。 */
 const HEALTH_SHARE_ROWS = ['1,29500,458,916,1374,1832,1428,238', '2,30300,470,940,1410,1880,1466,244'] as const
@@ -1334,7 +1341,12 @@ describe('planMultiVersionSync：一個資料集 → N 個版本的計畫', () =
 
   test('依生效日由舊到新排序，排除與失敗的排在最後（回補時 id 的順序才與生效日一致）', () => {
     const plan = planMultiVersionSync(
-      [resource('115年1月分級表', 'c'), resource('100年分級表', 'x'), resource(null, 'y'), resource('110年1月分級表', 'a')],
+      [
+        resource('115年1月分級表', 'c'),
+        resource('100年分級表', 'x'),
+        resource(null, 'y'),
+        resource('110年1月分級表', 'a'),
+      ],
       derive,
       [],
     )
@@ -1551,10 +1563,12 @@ describe('dataset_code=9：薪資所得扣繳稅額表（財政部下載專區�
 
   test('★ 頁面結構改變 → 抓不到 → 失敗', () => {
     // 那一項的標籤改了（例如政府把「_CSV」拿掉）→ 找不到 → 失敗，而不是抓到鄰居那一項的年度。
-    const relabelled = '<html><ul><li>財政部臺北國稅局薪資所得扣繳稅額表 [<a href="/download/a">115</a>]</li></ul></html>'
+    const relabelled =
+      '<html><ul><li>財政部臺北國稅局薪資所得扣繳稅額表 [<a href="/download/a">115</a>]</li></ul></html>'
     expect(source.listResources(relabelled).ok).toBe(false)
     // 那一項在、但連結換成別的形式。
-    const otherLink = '<html><ul><li>財政部臺北國稅局薪資所得扣繳稅額表_CSV <a href="/file?id=1">115</a></li></ul></html>'
+    const otherLink =
+      '<html><ul><li>財政部臺北國稅局薪資所得扣繳稅額表_CSV <a href="/file?id=1">115</a></li></ul></html>'
     expect(source.listResources(otherLink).ok).toBe(false)
     expect(source.listResources('<html><body>維護中</body></html>').ok).toBe(false)
   })
@@ -1650,7 +1664,10 @@ describe('dataset_code=9：薪資所得扣繳稅額表（財政部下載專區�
     expect(source.parse(truncated).ok).toBe(false)
 
     // 扶養欄位錯位：稅額不該隨扶養人數上升，而每一個值單獨看都是合法金額。
-    const ascendingRow = ['"499,501 ~ 500,000"', ...Array.from({ length: 12 }, (_, count) => String(90000 + count * 100))].join(',')
+    const ascendingRow = [
+      '"499,501 ~ 500,000"',
+      ...Array.from({ length: 12 }, (_, count) => String(90000 + count * 100)),
+    ].join(',')
     expect(source.parse(taxCsv('(元)', ascendingRow)).ok).toBe(false)
 
     // 薪資較高的級距扣得比較少：列的順序或內容不對。

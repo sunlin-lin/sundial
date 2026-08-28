@@ -12,7 +12,18 @@
  * - `<大目錄>.<次目錄>`：次目錄分類節點，`is_assignable = false`
  * - `<大目錄>.<次目錄>.<動作>`：端點葉節點，`is_assignable = true`
  */
-import { bigint, boolean, char, datetime, foreignKey, index, int, mysqlTable, uniqueIndex, varchar } from 'drizzle-orm/mysql-core'
+import {
+  bigint,
+  boolean,
+  char,
+  datetime,
+  foreignKey,
+  index,
+  int,
+  mysqlTable,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/mysql-core'
 
 /** 權限狀態。不用 DB ENUM。 */
 export const PermissionStatus = {

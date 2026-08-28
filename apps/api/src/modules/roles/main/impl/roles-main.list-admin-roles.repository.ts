@@ -23,23 +23,25 @@ export const listAdminCapableRoles = async (
 ): Promise<readonly AdminCapableRole[]> => {
   const tenant = new TenantDatabase(runner, companyId)
 
-  return tenant
-    .selectFrom({ id: roles.id, status: roles.status }, roles)
-    .innerJoin(rolePermissions, eq(rolePermissions.roleId, roles.id))
-    .innerJoin(
-      permissions,
-      and(
-        eq(permissions.id, rolePermissions.permissionId),
-        isNull(permissions.deletedAt),
-        inArray(permissions.code, [...ADMIN_CAPABILITY_PERMISSION_CODES]),
-      ),
-    )
-    // 兩張帶公司範圍的表都由 `scopeAll()` 補條件（`permissions` 是全域表，不進來）。
-    // `role_permissions` 的公司條件原本手寫在 `ON` 裡，用的是傳進來的 `companyId` 參數；
-    // 改由封裝產生之後，兩張表必定比對到同一個、而且是唯一一個公司 ID。
-    // 條件從 `ON` 移到 `WHERE` 對 INNER JOIN 而言等價（外連結才會有差）。
-    .where(tenant.scopeAll([roles, rolePermissions], isNull(roles.deletedAt)))
-    // 一個角色可能同時擁有多個管理權限碼，join 之後會出現重複列；用 groupBy 收斂成一列一角色。
-    // 沒有它，「只有一個管理角色」會被算成三個，最後一道防線就此失效。
-    .groupBy(roles.id, roles.status)
+  return (
+    tenant
+      .selectFrom({ id: roles.id, status: roles.status }, roles)
+      .innerJoin(rolePermissions, eq(rolePermissions.roleId, roles.id))
+      .innerJoin(
+        permissions,
+        and(
+          eq(permissions.id, rolePermissions.permissionId),
+          isNull(permissions.deletedAt),
+          inArray(permissions.code, [...ADMIN_CAPABILITY_PERMISSION_CODES]),
+        ),
+      )
+      // 兩張帶公司範圍的表都由 `scopeAll()` 補條件（`permissions` 是全域表，不進來）。
+      // `role_permissions` 的公司條件原本手寫在 `ON` 裡，用的是傳進來的 `companyId` 參數；
+      // 改由封裝產生之後，兩張表必定比對到同一個、而且是唯一一個公司 ID。
+      // 條件從 `ON` 移到 `WHERE` 對 INNER JOIN 而言等價（外連結才會有差）。
+      .where(tenant.scopeAll([roles, rolePermissions], isNull(roles.deletedAt)))
+      // 一個角色可能同時擁有多個管理權限碼，join 之後會出現重複列；用 groupBy 收斂成一列一角色。
+      // 沒有它，「只有一個管理角色」會被算成三個，最後一道防線就此失效。
+      .groupBy(roles.id, roles.status)
+  )
 }

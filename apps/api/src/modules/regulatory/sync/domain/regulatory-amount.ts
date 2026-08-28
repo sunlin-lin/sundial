@@ -48,8 +48,7 @@ export type AmountRange = {
 }
 
 export type AmountRangeResult =
-  | { readonly ok: true; readonly value: AmountRange }
-  | { readonly ok: false; readonly reason: string }
+  { readonly ok: true; readonly value: AmountRange } | { readonly ok: false; readonly reason: string }
 
 /** 區間字串的金額後面接什麼單位。封閉聯集：呼叫端必須明講，見檔頭。 */
 export type AmountUnit = '元' | ''
@@ -175,10 +174,7 @@ const HYPHEN_RANGE_PATTERNS: RangePatterns = {
 }
 
 /** 連字號分隔的中文區間字串 → 上下限。參數與回傳的語意同 {@link parseAmountRange}。 */
-export const parseHyphenatedAmountRange = (
-  rangeText: string,
-  options: { readonly label: string },
-): AmountRangeResult =>
+export const parseHyphenatedAmountRange = (rangeText: string, options: { readonly label: string }): AmountRangeResult =>
   matchAmountRange(rangeText, HYPHEN_RANGE_PATTERNS, { label: options.label, expectation: '「N以下」「N-N」「N以上」' })
 
 /** 百分比字串後面接不接百分號。封閉聯集，理由與 {@link AmountUnit} 相同。 */

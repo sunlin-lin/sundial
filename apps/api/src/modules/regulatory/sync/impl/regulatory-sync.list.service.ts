@@ -7,11 +7,7 @@
  * 本模組沒有跨公司存取這個維度：三張表是平台全域資料，沒有 `company_id`（計畫 §3.2 (b)）。
  */
 import { succeed, type ServiceResult } from '../../../../shared/service-result.ts'
-import type {
-  RegulatorySyncQueryContext,
-  SyncLogListQuery,
-  SyncLogPage,
-} from '../domain/regulatory-sync-model.ts'
+import type { RegulatorySyncQueryContext, SyncLogListQuery, SyncLogPage } from '../domain/regulatory-sync-model.ts'
 import { listSyncLogPage } from '../regulatory-sync.repository.ts'
 
 export const listSyncLogs = async (

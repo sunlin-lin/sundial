@@ -73,8 +73,7 @@ type DataGovDistribution = {
 }
 
 type DataGovDistributionResult =
-  | { readonly ok: true; readonly value: DataGovDistribution }
-  | { readonly ok: false; readonly reason: string }
+  { readonly ok: true; readonly value: DataGovDistribution } | { readonly ok: false; readonly reason: string }
 
 /**
  * metadata 的外殼：JSON → `result.distribution`。
@@ -172,7 +171,10 @@ export const selectDataGovResource = (rawMetadata: string, resourceFormat: strin
  * **任何一筆讀不出合法網址就整批失敗**，不是「跳過壞掉的那一筆」：跳過會讓某一個年度的版本
  * 安靜地永遠不進來，而症狀是幾個月後有人問「補算 111 年的薪資怎麼查不到版本」。
  */
-export const listDataGovResources = (rawMetadata: string, resourceFormat: string): RegulatorySourceResourceListResult => {
+export const listDataGovResources = (
+  rawMetadata: string,
+  resourceFormat: string,
+): RegulatorySourceResourceListResult => {
   const distribution = readDistribution(rawMetadata)
   if (!distribution.ok) return distribution
 

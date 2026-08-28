@@ -30,8 +30,7 @@ export type NewRole = {
  * 產生的 UUID 與既有列相同——那是不該發生的事，必須以系統錯誤爆出來讓人知道，而不是
  * 對使用者說「代碼重複」然後讓他換一個代碼再試一次（他怎麼換都不會成功）。
  */
-const isDuplicateRoleCode = (error: unknown): boolean =>
-  isUniqueViolation(error, ROLE_CODE_UNIQUE_INDEX)
+const isDuplicateRoleCode = (error: unknown): boolean => isUniqueViolation(error, ROLE_CODE_UNIQUE_INDEX)
 
 /**
  * 寫入一筆角色。

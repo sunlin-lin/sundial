@@ -57,9 +57,24 @@ const resourceUrl = (id: string): string => `https://info.nhi.test.invalid/api/i
  * 一致」正是那個排序存在的理由（計畫 §3.2 (d) 的 `id DESC` 次要排序鍵在同日生效時才有可預期的語意）。
  */
 const RESOURCES = [
-  { id: 'roc41', description: '41年1月全民健康保險投保金額分級表', effectiveFrom: '1952-01-01', versionCode: '1952-01' },
-  { id: 'roc40', description: '40年1月全民健康保險投保金額分級表', effectiveFrom: '1951-01-01', versionCode: '1951-01' },
-  { id: 'roc42', description: '42年1月全民健康保險投保金額分級表', effectiveFrom: '1953-01-01', versionCode: '1953-01' },
+  {
+    id: 'roc41',
+    description: '41年1月全民健康保險投保金額分級表',
+    effectiveFrom: '1952-01-01',
+    versionCode: '1952-01',
+  },
+  {
+    id: 'roc40',
+    description: '40年1月全民健康保險投保金額分級表',
+    effectiveFrom: '1951-01-01',
+    versionCode: '1951-01',
+  },
+  {
+    id: 'roc42',
+    description: '42年1月全民健康保險投保金額分級表',
+    effectiveFrom: '1953-01-01',
+    versionCode: '1953-01',
+  },
 ] as const
 
 const HEADER = '組別級距,投保等級,月投保金額（元）,實際薪資月額（元）'
@@ -139,7 +154,10 @@ const buildContext = (scenario: Scenario): { readonly context: RegulatorySyncCon
       return Promise.resolve(new Response('not found', { status: 404 }))
     },
     // 心跳的行為由單資源那一支的測試涵蓋（同一份實作）；這裡只要一個不會真的起計時器的替身。
-    startHeartbeatTimer: (_intervalMs, _tick: HeartbeatTick): StopHeartbeatTimer => () => undefined,
+    startHeartbeatTimer:
+      (_intervalMs, _tick: HeartbeatTick): StopHeartbeatTimer =>
+      () =>
+        undefined,
   }
 
   return { context, fetched }

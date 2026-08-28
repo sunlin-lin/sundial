@@ -64,8 +64,7 @@ export const RefreshTokenRevokeReason = {
   ReuseDetected: 'REUSE_DETECTED',
 } as const
 
-export type RefreshTokenRevokeReasonValue =
-  (typeof RefreshTokenRevokeReason)[keyof typeof RefreshTokenRevokeReason]
+export type RefreshTokenRevokeReasonValue = (typeof RefreshTokenRevokeReason)[keyof typeof RefreshTokenRevokeReason]
 
 export const refreshTokens = mysqlTable(
   'refresh_tokens',

@@ -3,7 +3,17 @@
  *
  * 不把 HR、主管這類名稱寫死，讓各公司建立自己的權責模型；`is_system` 用來區分系統預設與自訂角色。
  */
-import { bigint, boolean, char, datetime, foreignKey, index, mysqlTable, uniqueIndex, varchar } from 'drizzle-orm/mysql-core'
+import {
+  bigint,
+  boolean,
+  char,
+  datetime,
+  foreignKey,
+  index,
+  mysqlTable,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/mysql-core'
 import { companies } from './companies.ts'
 
 /** 角色狀態。不用 DB ENUM，代碼值以本 const object 為唯一來源。 */

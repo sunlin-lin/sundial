@@ -21,5 +21,4 @@ import { createHash } from 'node:crypto'
  * @param rawText 政府資源的原始內容（就是要寫進 `raw_data` 的那一串，未經任何前處理）。
  *   **不做 trim、不做正規化**：那些都是「兩份不同的位元組被算成同一份」的來源。
  */
-export const toContentChecksum = (rawText: string): string =>
-  createHash('sha256').update(rawText, 'utf8').digest('hex')
+export const toContentChecksum = (rawText: string): string => createHash('sha256').update(rawText, 'utf8').digest('hex')
