@@ -105,10 +105,10 @@ const unprocessable = (code: SessionErrorCodeValue): SessionErrorDeclaration => 
 /**
  * 每支端點會吐出哪些業務錯誤。
  *
- * **三支端點宣告空清單，而那是刻意的、不是忘了寫**（§1.8.3 要求空清單也必須明寫）：
- * `refresh`／`logout`／`logout-all` 的所有失敗模式都是「憑證不可用」，而那不是業務錯誤
+ * **除了登入以外全部宣告空清單，而那是刻意的、不是忘了寫**（§1.8.3 要求空清單也必須明寫）：
+ * `refresh`／`logout`／`logout-all`／`context` 的所有失敗模式都是「憑證不可用」，而那不是業務錯誤
  * ——它由認證群組的憑證驗證器就地回 `900`，**根本走不到 service**（§3.1.1）。
- * 換句話說這三支端點只要走進 handler 就一定成功，它們沒有業務規則可以不成立。
+ * 換句話說這幾支端點只要走進 handler 就一定成功，它們沒有業務規則可以不成立。
  */
 export const SESSION_ENDPOINT_ERRORS = {
   login: [unprocessable(SessionErrorCode.InvalidCredentials)],
@@ -117,6 +117,8 @@ export const SESSION_ENDPOINT_ERRORS = {
   /** 走到這裡代表 access token 已經驗過了；作廢是無條件的，重複登出也不是錯誤（見 service）。 */
   logout: [],
   'logout-all': [],
+  /** 走到這裡代表 access token 已經驗過了；純查詢，沒有業務規則可以不成立。 */
+  context: [],
 } as const satisfies Record<string, readonly SessionErrorDeclaration[]>
 
 /**

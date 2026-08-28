@@ -23,7 +23,9 @@ import type {
   LoginOutcome,
   RefreshOutcome,
   RevocationOutcome,
+  SessionContextOutcome,
 } from './domain/session-model.ts'
+import { getSessionContext as getSessionContextImpl } from './impl/sessions-main.context.service.ts'
 import { login as loginImpl } from './impl/sessions-main.login.service.ts'
 import { logoutAllDevices as logoutAllDevicesImpl } from './impl/sessions-main.logout-all.service.ts'
 import { logout as logoutImpl } from './impl/sessions-main.logout.service.ts'
@@ -41,6 +43,7 @@ export type {
   LoginOutcome,
   RefreshOutcome,
   RevocationOutcome,
+  SessionContextOutcome,
   SessionProfile,
 } from './domain/session-model.ts'
 
@@ -65,6 +68,16 @@ export const logoutAllDevices = (
   context: SessionsMainContext,
   identity: VerifiedIdentity,
 ): Promise<ServiceResult<RevocationOutcome>> => logoutAllDevicesImpl(context, identity)
+
+/**
+ * 端點動作：`POST /sessions/main/context`（已登入群組）。回身分與這個成員在這家公司
+ * 實際擁有的權限碼。**不回 `ServiceResult`**：這是查詢類動作，走到這裡代表 access token
+ * 已經驗過了，沒有業務規則可以不成立（比照 `refresh`／`logout` 的處置）。
+ */
+export const getSessionContext = (
+  context: SessionsMainContext,
+  identity: VerifiedIdentity,
+): Promise<SessionContextOutcome> => getSessionContextImpl(context, identity)
 
 /** 無端點：已登入群組的憑證驗證器用。含 §5.4.6 的即時撤銷檢查。 */
 export const verifyAccessToken = (

@@ -123,6 +123,19 @@ type VersionListShape = {
   readonly data: readonly VersionSummaryShape[]
 }
 
+type OverviewLastSyncShape =
+  | { readonly kind: 'not-applicable' }
+  | { readonly kind: 'never-synced' }
+  | { readonly kind: 'synced'; readonly startedAt: string; readonly finishedAt: string | null; readonly statusCode: number }
+
+type OverviewRowShape = {
+  readonly datasetCode: number
+  readonly name: string
+  readonly maintenance: 'sync' | 'manual'
+  readonly effectiveVersion: { readonly versionCode: string; readonly effectiveFrom: string; readonly recordCount: number | null } | null
+  readonly lastSync: OverviewLastSyncShape
+}
+
 /** 每個 token 對應一個已驗證身分。 */
 const identityByToken = new Map<string, VerifiedIdentity>()
 
@@ -304,7 +317,12 @@ const uniqueVersionCode = (prefix: string): string => `${prefix}-${crypto.random
 beforeAll(async () => {
   database = createDatabase(readTestDatabaseConfig())
   app = buildTestApp(database)
-  token = registerIdentity(['regulatory.datasets.list', 'regulatory.datasets.get', 'regulatory.datasets.resolve'])
+  token = registerIdentity([
+    'regulatory.datasets.list',
+    'regulatory.datasets.get',
+    'regulatory.datasets.resolve',
+    'regulatory.datasets.overview',
+  ])
   tokenWithoutPermission = registerIdentity([])
   await purgeReservedVersions()
 })
@@ -474,6 +492,61 @@ describe('regulatory/datasets/resolve (integration)', () => {
 
     expect(reserved.status).toBe(400)
     expect(reserved.payload.code).toBe('100')
+  })
+})
+
+describe('regulatory/datasets/overview (integration，任務一)', () => {
+  test('九個資料集固定各一列，即使某個資料集在該基準日沒有適用版本', async () => {
+    // 基準日落在本檔的保留區間（見檔頭）：真實的政府資料全部是 2020 年之後才有的，
+    // 因此除了下面特地寫進去的 dataset_code=10 之外，其餘八個資料集在這一天都不可能有適用版本
+    // ——藉此在不清空整張表的前提下，穩定地重現「某一列 effectiveVersion 為 null」這個情境。
+    const versionCode = uniqueVersionCode('overview')
+    await insertTestVersion({
+      versionCode,
+      effectiveFrom: '1920-01-01',
+      effectiveTo: '1920-12-31',
+      rate: '0.0100',
+    })
+
+    const overview = await call<readonly OverviewRowShape[]>('/regulatory/datasets/overview', token, {
+      asOfDate: '1920-06-01',
+    })
+
+    expect(overview.status).toBe(200)
+    expect(overview.payload.code).toBe('200')
+    expect(overview.payload.errors).toEqual([])
+
+    const rows = overview.payload.data
+    // 任務一明文：少一列會讓前端以為那個資料集不存在。九個代碼固定都要在，且代碼不重複。
+    expect(rows.map((row) => row.datasetCode).toSorted((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 8, 9, 10])
+
+    const byCode = new Map(rows.map((row) => [row.datasetCode, row]))
+
+    const supplementary = byCode.get(SUPPLEMENTARY_PREMIUM)
+    if (supplementary === undefined) throw new Error('dataset_code=10 那一列不見了')
+    expect(supplementary.name).toBe('健保補充保險費（費率與計費門檻）')
+    expect(supplementary.maintenance).toBe('manual')
+    // 人工維護的資料集永遠沒有同步紀錄，那是規格不是故障（任務一）——不是 `never-synced`。
+    expect(supplementary.lastSync).toEqual({ kind: 'not-applicable' })
+    expect(supplementary.effectiveVersion).toEqual({ versionCode, effectiveFrom: '1920-01-01', recordCount: 1 })
+
+    for (const datasetCode of [1, 2, 3, 4, 5, 6, 8, 9]) {
+      const row = byCode.get(datasetCode)
+      if (row === undefined) throw new Error(`dataset_code=${datasetCode} 那一列不見了`)
+      expect(row.maintenance).toBe('sync')
+      // 該基準日沒有任何一版涵蓋：回 `null`，不是整列消失（任務一）。
+      expect(row.effectiveVersion).toBeNull()
+      // 自動同步的資料集不可能是 `not-applicable`——那個 `kind` 只保留給人工維護的資料集。
+      expect(row.lastSync.kind).not.toBe('not-applicable')
+    }
+  })
+
+  test('asOfDate 是必填，沒帶就被 body schema 擋下（計畫 §4.2：不得預設今天）', async () => {
+    const missing = await call('/regulatory/datasets/overview', token, {})
+
+    expect(missing.status).toBe(400)
+    expect(missing.payload.code).toBe('100')
+    expect(missing.payload.errors).toEqual([])
   })
 })
 
@@ -648,7 +721,7 @@ describe('認證（§1.3）', () => {
     expect(payload.expiresIn).toBeNull()
   })
 
-  test('有身分但沒有權限碼：三支端點一律 403／901，且 expiresIn 仍是續期後的正整數', async () => {
+  test('有身分但沒有權限碼：四支端點一律 403／901，且 expiresIn 仍是續期後的正整數', async () => {
     // §7.1 要求每支端點都有這一條。`901` 特別容易被寫成不續期（直覺上「被拒絕」看起來像失敗），
     // 但那正是最不該的：使用者點到一個沒權限的功能，等於順便把自己的 session 熬短，
     // 下一次真正有權限的操作反而吃到 `900`（§1.3）。
@@ -663,6 +736,7 @@ describe('認證（§1.3）', () => {
         datasetCode: SUPPLEMENTARY_PREMIUM,
         asOfDate: '2026-01-01',
       }),
+      await call('/regulatory/datasets/overview', tokenWithoutPermission, { asOfDate: '2026-01-01' }),
     ]
 
     for (const response of denied) {

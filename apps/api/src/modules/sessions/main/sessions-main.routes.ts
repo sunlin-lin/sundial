@@ -3,9 +3,9 @@
  *
  * 這個檔案的用途是**一眼看完這個次實體對外開了哪些口、各自落在哪個認證群組、收什麼、回什麼**。
  *
- * **本模組的四支端點分屬三個認證群組，因此匯出三個 plugin 而不是一個**——這是本模組與其他模組
+ * **本模組的五支端點分屬三個認證群組，因此匯出三個 plugin 而不是一個**——這是本模組與其他模組
  * 最大的形狀差異，理由必須寫清楚：認證方式是**群組的屬性**（§1.9.1），群組由路由組裝點建立（§1.9）。
- * 四支端點擠在同一個 plugin 裡的話，組裝點只能把整包掛進**某一個**群組，
+ * 五支端點擠在同一個 plugin 裡的話，組裝點只能把整包掛進**某一個**群組，
  * 於是「登入需要 access token」或「登出不需要身分」兩者必居其一——而後者是一個沉默的安全漏洞。
  * 拆成三個匯出之後，「哪一支落在哪一組」在組裝點是三行看得見的程式碼，掛錯就是掛不上。
  *
@@ -15,6 +15,7 @@
  * | `/sessions/main/refresh` | refresh 群組 | refresh 票 cookie | 不續期，改為**發證** |
  * | `/sessions/main/logout` | 已登入群組 | access token | 續期（但成功後清成 `null`，§1.3） |
  * | `/sessions/main/logout-all` | 已登入群組 | access token | 同上 |
+ * | `/sessions/main/context` | 已登入群組 | access token | 續期 |
  *
  * **這裡看不到任何「這支要不要驗身分」的字眼**（§1.9.1），也看不到權限碼（§5.2.2：
  * 它等於路徑的機械轉換，由身分驗證 middleware 自己推導），更看不到 cookie
@@ -28,7 +29,7 @@
  * 寫在這裡，「這些端點要能交付票」就與端點本身綁在一起，而 Elysia 依 plugin 名稱去重，
  * 組裝點若也掛了一次不會有任何副作用。
  *
- * **三支端點的 body 只有基底三欄**，這是 §1.5 的直接結果：access token 與 refresh 票是**憑證**，
+ * **四支端點的 body 只有基底三欄**，這是 §1.5 的直接結果：access token 與 refresh 票是**憑證**，
  * 不是業務參數，一律不走 body。判準是「拿掉它之後，這支端點還知不知道要做什麼」——
  * 拿掉 refresh 票，`/refresh` 仍然知道自己要換一張票，只是不知道要換誰的。
  * 反過來 `login` 的三個欄位是業務參數：拿掉密碼，登入端點就不知道要驗什麼。
@@ -43,6 +44,7 @@ import {
   handleLogout,
   handleLogoutAll,
   handleRefresh,
+  handleSessionContext,
   type SessionsMainDependencies,
 } from './sessions-main.handler.ts'
 import { describeSessionErrors, SESSION_ENDPOINT_ERRORS } from './sessions-main.errors.ts'
@@ -103,7 +105,7 @@ const CommonFailureResponses = {
 } as const
 
 /**
- * 三支端點共用的 body 形狀：**只有基底三欄**。
+ * 四支端點共用的 body 形狀：**只有基底三欄**。
  *
  * `cmd` 由各端點收窄成自己的字面值（§1.3 的機械推導），因此這裡不含它。
  */
@@ -173,11 +175,14 @@ export const sessionsMainRefreshRoutes = (dependencies: SessionsMainDependencies
     })
 
 /**
- * 已登入群組的端點：登出、登出所有裝置。
+ * 已登入群組的端點：登出、登出所有裝置、查詢身分脈絡。
  *
- * 兩支都有權限碼（`sessions.main.logout`／`sessions.main.logout-all`，由路徑機械推導，§5.2.2），
- * 因此角色設定必須授予它們，否則使用者登不出去。「登出總不用權限吧」這個直覺為什麼要被拒絕，
- * 寫在 `drizzle/0008_seed_permission_codes_sessions.sql` 的檔頭。
+ * 三支都有權限碼（`sessions.main.logout`／`sessions.main.logout-all`／`sessions.main.context`，
+ * 由路徑機械推導，§5.2.2），因此角色設定必須授予它們，否則使用者登不出去、也重建不了身分。
+ * 「登出總不用權限吧」這個直覺為什麼要被拒絕，寫在
+ * `drizzle/0008_seed_permission_codes_sessions.sql` 的檔頭；`context` 是同一個道理——
+ * 權限碼由路徑推導**沒有例外分支**（§5.2.2），開一個「這支不用」的口子，
+ * 「權限碼必須等於路徑轉換結果」這條檢查就當場失效，而且是靜默失效。
  */
 export const sessionsMainAuthenticatedRoutes = (dependencies: SessionsMainDependencies) =>
   new Elysia({ name: 'sessions-main-authenticated-routes' })
@@ -206,5 +211,30 @@ export const sessionsMainAuthenticatedRoutes = (dependencies: SessionsMainDepend
       detail: {
         summary: '登出所有裝置',
         description: `${describeSessionErrors(SESSION_ENDPOINT_ERRORS['logout-all'])} 作廢本人在本公司的所有登入，含當前這台裝置，沒有例外。`,
+      },
+    })
+    .post('/sessions/main/context', (context) => handleSessionContext(dependencies, context), {
+      body: credentialOnlyBody('sessions.main.context'),
+      response: {
+        200: envelope(
+          t.Object({
+            user: t.Object({ id: Uuid, companyUserId: Uuid, displayName: DisplayName }),
+            company: t.Object({ id: Uuid, companyCode: CompanyCode, name: CompanyName }),
+            /**
+             * 這個成員在這家公司**實際擁有**的權限碼，不是全部權限碼清單（任務三）。
+             * 已排序（見 `sessions-main.handler.ts` 的 `toSessionContextData`）。
+             */
+            permissionCodes: t.Array(t.String({ minLength: 1 })),
+          }),
+        ),
+        403: envelope(t.Null()),
+        ...CommonFailureResponses,
+      },
+      detail: {
+        summary: '查詢目前登入者的身分脈絡與權限碼',
+        description:
+          `${describeSessionErrors(SESSION_ENDPOINT_ERRORS.context)}` +
+          ' 供前端在重新整理或直接開網址時重建身分（判斷是否已登入）與權限（判斷選單顯示與路由守衛）；' +
+          ' 回應形狀與登入端點的 user／company 一致，另外多一份 permissionCodes。',
       },
     })

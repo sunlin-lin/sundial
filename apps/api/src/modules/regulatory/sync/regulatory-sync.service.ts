@@ -8,15 +8,18 @@
  * 業務拒絕一律以 `ServiceResult` 的失敗結果 ＋ 具名分組表達。這裡不是形式主義——
  * {@link runSync} 的呼叫者根本不經過 HTTP。
  *
- * ## 兩個動作，只有一個有端點
+ * ## 三個動作，只有一個有端點
  *
  * | 動作 | 呼叫者 |
  * |---|---|
  * | {@link listSyncLogs} | HTTP `/regulatory/sync/list` |
  * | {@link runSync} | 伺服器端的程序（排程或一次性執行），**沒有端點** |
+ * | {@link listLatestSyncStatuses} | `regulatory/datasets` 次目錄的 `overview` 動作，**沒有端點** |
  *
  * §0.4 明文：「沒有端點的業務動作一樣放在入口檔」，因為它同樣是這個次實體對外的介面，
- * 只是呼叫者不是前端。`/regulatory/sync/trigger` 不開放的理由見計畫 D3。
+ * 只是呼叫者不是前端（或不是 HTTP）。`/regulatory/sync/trigger` 不開放的理由見計畫 D3；
+ * `listLatestSyncStatuses` 的呼叫者是另一個次目錄，見 §0.3「同一大目錄內的次目錄可以
+ * 互相呼叫對方的 service」。
  *
  * ## 誰來呼叫 `runSync`，是另一個決定
  *
@@ -44,6 +47,7 @@
  */
 import type { ServiceResult } from '../../../shared/service-result.ts'
 import type {
+  DatasetLatestSyncStatus,
   RegulatorySyncContext,
   RegulatorySyncQueryContext,
   RunSyncInput,
@@ -52,11 +56,13 @@ import type {
   SyncOutcome,
 } from './domain/regulatory-sync-model.ts'
 import type { SyncableDatasetCode } from './domain/regulatory-sync-source.ts'
+import { listLatestSyncStatuses as listLatestSyncStatusesImpl } from './impl/regulatory-sync.list-latest-status.service.ts'
 import { listSyncLogs as listSyncLogsImpl } from './impl/regulatory-sync.list.service.ts'
 import { runSync as runSyncImpl } from './impl/regulatory-sync.run.service.ts'
 
 export type { RegulatorySyncContext, RegulatorySyncQueryContext }
 export type {
+  DatasetLatestSyncStatus,
   HeartbeatTick,
   FetchResource,
   RunSyncInput,
@@ -108,3 +114,14 @@ export const runSync = (
   context: RegulatorySyncContext,
   input: RunSyncInput<SyncableDatasetCode>,
 ): Promise<ServiceResult<SyncOutcome>> => runSyncImpl(context, input)
+
+/**
+ * 多個資料集各自最近一次的同步狀態，不分成功或失敗。
+ *
+ * **無端點**：呼叫者是 `regulatory/datasets` 次目錄的 `overview` 動作（實作計畫 03 §3、任務一）。
+ * 跨次目錄要資料一律走這裡，不得直接 import 本次目錄的 repository（§0.3）。
+ */
+export const listLatestSyncStatuses = (
+  context: RegulatorySyncQueryContext,
+  datasetCodes: readonly number[],
+): Promise<readonly DatasetLatestSyncStatus[]> => listLatestSyncStatusesImpl(context, datasetCodes)

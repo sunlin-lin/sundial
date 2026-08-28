@@ -31,3 +31,7 @@ coverage/
 # 作業系統
 .DS_Store
 Thumbs.db
+
+# 法規資料的開發備份（apps/api/scripts/dump-regulatory-fixture.sh）。
+# 3.4 MB 的外部資料快照，可以隨時重新產生，不放進 git 歷史。
+apps/api/fixtures/

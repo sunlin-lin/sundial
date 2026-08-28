@@ -115,6 +115,8 @@ type SyncLogShape = {
 }
 
 type SyncLogListShape = {
+  readonly datasetName: string
+  readonly datasets: readonly { readonly code: number; readonly name: string }[]
   readonly search: Record<string, unknown>
   readonly sort: { readonly field: string; readonly order: string }
   readonly pagination: { readonly currentPage: number; readonly perPage: number; readonly totalCount: number }
@@ -243,6 +245,22 @@ describe('regulatory/sync/list (integration)', () => {
     expect(listed.status).toBe(200)
     expect(listed.payload.code).toBe('200')
     expect(listed.payload.errors).toEqual([])
+
+    // 資料集名稱：唯一來源是 `REGULATORY_DATASETS`，不是前端另外維護的第三份對照
+    // （這一輪的修復對象）。放在非列表部分——本端點一次只看一個資料集，每一列的名稱必然相同。
+    expect(listed.payload.data.datasetName).toBe('勞工保險投保薪資分級表')
+
+    // 「選擇資料集」的完整清單：固定九筆、固定順序（照代碼由小到大），供前端在查詢之前顯示選項，
+    // 不必為了湊選項對九個代碼各打一次本端點。`7` 是永久空號，不得出現。
+    expect(listed.payload.data.datasets.map((option) => option.code)).toEqual([1, 2, 3, 4, 5, 6, 8, 9, 10])
+    expect(listed.payload.data.datasets.some((option) => option.code === 7)).toBe(false)
+    // 含人工維護（`10`，沒有解析器）與其他可能尚未同步過的資料集——不是只列「查得到紀錄的那些」。
+    expect(listed.payload.data.datasets.find((option) => option.code === 10)?.name).toBe(
+      '健保補充保險費（費率與計費門檻）',
+    )
+    expect(listed.payload.data.datasets.find((option) => option.code === LABOR_INSURANCE_SALARY)?.name).toBe(
+      '勞工保險投保薪資分級表',
+    )
 
     // §1.4：`search` 與 `sort` 必須回聲，否則前端的 race condition 防護當場失效。
     expect(listed.payload.data.search).toEqual({ datasetCode: LABOR_INSURANCE_SALARY })

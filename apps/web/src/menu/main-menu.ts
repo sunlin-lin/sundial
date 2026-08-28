@@ -10,12 +10,30 @@
  * 或不搬（目錄從此與選單矛盾，而且矛盾只會愈積愈多）。
  *
  * 項目指向的是**路由名稱**而不是路徑，理由同 router.ts：交換字串，不建立 import 方向。
+ *
+ * ## 過濾為什麼是這裡的一支純函式
+ *
+ * §4.3：使用者永遠不會有的權限 → **隱藏**，選單裡看不到那一項。但這個檔案不能自己去讀
+ * 「目前是誰」——那需要 `stores/`，而選單資料只是資料。因此 {@link visibleMenuGroups} 把
+ * 判斷函式收成參數：它是純函式，可以逐格測（§8.1），而「目前使用者有哪些權限碼」由 store 持有。
+ *
+ * 渲染側（`layouts/AppShell.vue`）同樣不碰 store：它收一個 `can` prop 再呼叫這一支。
+ * 那個邊界是 `AppShell` 檔頭寫死的（它不呼叫 API、不碰 store），而過濾選單沒有理由打破它。
  */
 import type { MessageKey } from '../shared/i18n/messages.ts'
+import type { PermissionCode } from '../shared/permission/permission-code.ts'
 
 export type MenuItem = {
   readonly labelKey: MessageKey
   readonly routeName: string
+  /**
+   * 看得到這一項所需的權限碼。
+   *
+   * **必須與該頁 `.route.ts` 的 `meta.permission` 是同一個值**：兩邊不一致的後果不對稱——
+   * 選單這裡填錯會讓有權限的人看不到入口（功能等於不存在），路由那裡填錯才會擋錯人。
+   * 沒有這個欄位＝登入了就看得到（例如首頁）。
+   */
+  readonly permissionCode?: PermissionCode
 }
 
 export type MenuGroup = {
@@ -31,16 +49,41 @@ export const MAIN_MENU: readonly MenuGroup[] = [
   /**
    * 系統設定。分組依資料字典 `docs/schema/05` 的分層（計畫 03 §6）：
    *「系統設定：角色、權限、帳號；法規設定：政府資料與公司投保設定」，兩者並列。
-   * 法規目前只有這一頁，還撐不起一個獨立分組，先掛在系統設定底下。
+   * 法規目前只有這兩頁，還撐不起一個獨立分組，先掛在系統設定底下。
    *
-   * ⚠️ 這一項**目前對每個登入者都看得到**。計畫 §6 要求沒有 `regulatory.sync.list` 的人看不到它，
-   * 但前端拿不到登入者的權限碼（沒有任何端點回得出來，見 `pages/regulatory/sync/*.route.ts`），
-   * 因此這裡刻意**不加一個沒有人讀得懂的 `permissionCode` 欄位**——一個沒有消費者的欄位
-   * 會讓人以為權限已經接上了，而它一行都沒被執行（通用規範 §7.1）。
-   * 無權限的人點進去會看到後端回的「無權限」，不會被導去登入頁（§3.6）。
+   * 兩項各自帶著自己的權限碼（計畫 §6）：沒有 `regulatory.datasets.overview` 的人看不到總覽，
+   * 沒有 `regulatory.sync.list` 的人看不到同步歷程，兩件事互不影響。
+   * 這些值與各自 `.route.ts` 的 `meta.permission` 相同——選單負責藏入口，守衛負責擋直接貼網址。
    */
   {
     labelKey: 'menu.system-settings',
-    items: [{ labelKey: 'menu.regulatory-sync', routeName: 'regulatory-sync' }],
+    items: [
+      {
+        labelKey: 'menu.regulatory-datasets',
+        routeName: 'regulatory-datasets',
+        permissionCode: 'regulatory.datasets.overview',
+      },
+      {
+        labelKey: 'menu.regulatory-sync',
+        routeName: 'regulatory-sync',
+        permissionCode: 'regulatory.sync.list',
+      },
+    ],
   },
 ]
+
+/**
+ * 這個使用者看得到的選單。
+ *
+ * @param can 有沒有某個權限碼。由呼叫端注入（實際來源是 `stores/auth.ts` 的 `can`）。
+ *
+ * **整組項目都被藏掉的分組，連分組標題一起不顯示。** 少了這一步，畫面上會出現一個標題底下
+ * 一項都沒有的空分組——那看起來像載入失敗，而它其實是正常結果。
+ */
+export const visibleMenuGroups = (
+  can: (code: PermissionCode) => boolean,
+): readonly MenuGroup[] =>
+  MAIN_MENU.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => item.permissionCode === undefined || can(item.permissionCode)),
+  })).filter((group) => group.items.length > 0)

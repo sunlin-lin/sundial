@@ -12,6 +12,7 @@ exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | �
 /permissions/main/tree | permissions.main.tree | authenticated | cmd,locale,rqTS
 /regulatory/datasets/get | regulatory.datasets.get | authenticated | cmd,id,locale,rqTS
 /regulatory/datasets/list | regulatory.datasets.list | authenticated | cmd,currentPage,datasetCode,locale,perPage,rqTS
+/regulatory/datasets/overview | regulatory.datasets.overview | authenticated | asOfDate,cmd,locale,rqTS
 /regulatory/datasets/resolve | regulatory.datasets.resolve | authenticated | asOfDate,cmd,datasetCode,locale,rqTS
 /regulatory/sync/list | regulatory.sync.list | authenticated | cmd,currentPage,datasetCode,locale,perPage,rqTS
 /roles/main/activate | roles.main.activate | authenticated | cmd,id,locale,rqTS
@@ -21,6 +22,7 @@ exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | �
 /roles/main/get | roles.main.get | authenticated | cmd,id,locale,rqTS
 /roles/main/list | roles.main.list | authenticated | cmd,currentPage,locale,perPage,rqTS
 /roles/main/update | roles.main.update | authenticated | cmd,id,locale,name,permissionIds,rqTS
+/sessions/main/context | sessions.main.context | authenticated | cmd,locale,rqTS
 /sessions/main/login | sessions.main.login | public | cmd,companyCode,locale,password,rqTS,username
 /sessions/main/logout | sessions.main.logout | authenticated | cmd,locale,rqTS
 /sessions/main/logout-all | sessions.main.logout-all | authenticated | cmd,locale,rqTS

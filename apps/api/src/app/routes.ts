@@ -96,7 +96,7 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
     .use(permissionsMainRoutes({ database }))
     .use(companyUsersRolesRoutes({ database, clock }))
     .use(employeesMainRoutes({ db: database, cipher, clock }))
-    // 法規資料集：**刻意不注入 clock**（實作計畫 §4.2）。這三支端點的時間維度只有呼叫端送來的
+    // 法規資料集：**刻意不注入 clock**（實作計畫 §4.2）。這四支端點的時間維度只有呼叫端送來的
     // `asOfDate`，拿得到 clock 就寫得出「沒帶就用今天」，而那會讓補算去年 12 月的薪資
     // 抓到今年的費率，算出一個完全合理的數字。也沒有公司範圍——法規三表是平台全域資料。
     .use(regulatoryDatasetsRoutes({ db: database }))

@@ -503,3 +503,18 @@ export type RunningSyncLog = {
   readonly id: number
   readonly heartbeatAt: string
 }
+
+/**
+ * 一個資料集**目前為止最近一次**同步的狀態，不分成功或失敗（`regulatory/datasets` 的
+ * `overview` 動作用，實作計畫 03 §3、任務一）。
+ *
+ * 與 {@link SyncLogSummary} 的差別：這裡只留總覽一行摘要要顯示的四欄，不帶 `errorMessage`／
+ * `recordsReceived`／`governmentResourceId` 這類細節——那些要看，前端本來就有
+ * `/regulatory/sync/list` 可以打，總覽只需要「最近一次是什麼時候、結果如何」。
+ */
+export type DatasetLatestSyncStatus = {
+  readonly datasetCode: RegulatoryDatasetCode
+  readonly startedAt: string
+  readonly finishedAt: string | null
+  readonly statusCode: RegulatorySyncStatusValue
+}

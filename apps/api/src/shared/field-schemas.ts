@@ -8,6 +8,7 @@
  * 端點一律引用本檔，禁止就地重寫 `t.String({ maxLength: ... })`。
  */
 import { t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import type { TSchema } from '@sinclair/typebox'
 import { SUPPORTED_LOCALES } from './i18n/messages.ts'
 
@@ -117,11 +118,28 @@ export const sortRequest = <const TFields extends readonly string[]>(allowedFiel
 /**
  * 分頁資訊。**刻意不提供總頁數**（§1.4）：兩個數字並存時只要有一邊算錯，
  * 就會出現「共 137 筆、14 頁」但只有 13 頁可點的狀況，而前端沒有依據判斷該信哪一個。
+ *
+ * **三欄一律用 TypeBox 原生的 `Type.Integer`，不是 Elysia 的 `t.Integer`。**
+ * 這兩個在這個專案裡長得一樣、行為卻不同：Elysia 把 `t.Integer`／`t.Number`／`t.Boolean`
+ * 這幾個型別重新定義成**可強制轉型**的版本（`anyOf [string, integer]`），是為了讓
+ * `?page=1` 這種 query string 上永遠是字串的值也能通過驗證並轉成數字。這三個欄位是
+ * **回應**方向的值——由後端自己算出來（`totalCount` 是 `COUNT(*)`，`currentPage`／`perPage`
+ * 是回聲呼叫端送來的分頁條件，見 `shared/list-view.ts`），不是使用者送進來要被容錯的輸入，
+ * 因此不需要、也不該可強制轉型。留著 `t.Integer` 的後果是 OpenAPI 上這三欄變成
+ * `string | integer`，前端 `gen:api` 產生的型別跟著是 `string | number`，
+ * 而前端規範禁止對 API 欄位使用 `Number(`（`check:number-cast`）——於是畫面上長出一支
+ * 逐位累加、專門用來繞過這條禁令的怪函式。改用 `Type.Integer` 之後 OpenAPI 是乾淨的
+ * `integer`，那支函式連存在的理由都沒有了。
+ *
+ * **不影響 request 方向**：`PageRequest`（上面）的 `perPage`／`currentPage` 是使用者送進來的
+ * 頁碼，維持 `t.Integer` 可強制轉型是合理的——那兩個欄位本來就該對「看起來像數字的字串」寬容。
+ * 兩個方向本來就不必用同一種型別：一個要驗證「使用者送來的東西合不合理」，
+ * 一個要宣告「我們自己送出去的東西長什麼樣」，寬容的方向只有前者需要。
  */
 export const Pagination = t.Object({
-  currentPage: t.Integer({ minimum: 1 }),
-  perPage: t.Integer({ minimum: 1 }),
-  totalCount: t.Integer({ minimum: 0 }),
+  currentPage: Type.Integer({ minimum: 1 }),
+  perPage: Type.Integer({ minimum: 1 }),
+  totalCount: Type.Integer({ minimum: 0 }),
 })
 
 /**

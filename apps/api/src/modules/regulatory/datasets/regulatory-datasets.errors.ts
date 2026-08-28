@@ -84,7 +84,7 @@ export type RegulatoryDatasetErrorDeclaration = {
 /**
  * 每支端點會吐出哪些業務錯誤。
  *
- * **三支端點全部是空清單，而空清單必須明寫**（§1.8.3）：省略時「這支沒有業務錯誤」與
+ * **四支端點全部是空清單，而空清單必須明寫**（§1.8.3）：省略時「這支沒有業務錯誤」與
  * 「有人忘了宣告」在契約上長得一模一樣，前端只能一律當作「可能有沒寫出來的錯誤」而退回保守處理。
  *
  * `resolve` 為什麼也是空的：{@link regulatoryNoEffectiveVersion} 只走 service 那一側
@@ -99,6 +99,12 @@ export const REGULATORY_DATASET_ENDPOINT_ERRORS = {
   get: [],
   /** 查詢類：查無適用版本回 `data: null`（計畫 §4.4，見上）。 */
   resolve: [],
+  /**
+   * 總覽固定回九列（任務一），沒有「查無資料」這件事可以發生，也沒有其他業務規則要檢查——
+   * 單一資料集在該基準日沒有適用版本，反映在那一列的 `effectiveVersion: null` 上，
+   * 不是整支端點的錯誤。
+   */
+  overview: [],
 } as const satisfies Record<string, readonly RegulatoryDatasetErrorDeclaration[]>
 
 /**

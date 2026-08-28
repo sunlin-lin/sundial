@@ -29,6 +29,8 @@
     "db:down": "docker compose -f docker-compose.dev.yml down",
     "db:generate": "bun run --filter @sundial/api db:generate",
     "db:migrate": "bun run --filter @sundial/api db:migrate",
+    "db:dump-regulatory": "bash apps/api/scripts/dump-regulatory-fixture.sh",
+    "db:restore-regulatory": "bash apps/api/scripts/restore-regulatory-fixture.sh",
     "db:migrate:test": "bun run --filter @sundial/api db:migrate:test",
     "seed:dev": "bun run --filter @sundial/api seed:dev",
     "//ci": "`gen:api` 排在 `typecheck:web` 之前，而且刻意排在**不需要 DB service 的位置**（§1.7 明文要求它在沒有 DB service 的 job 中執行）：這一輪跑得過，就等於證明了「只要有原始碼就產得出契約」。反過來若它被挪到需要 DB 的 job 裡，那個要求會在沒有任何人察覺的情況下失效——指令照樣是綠的，只是不再證明任何事。",

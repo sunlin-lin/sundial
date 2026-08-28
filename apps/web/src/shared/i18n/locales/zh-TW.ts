@@ -47,7 +47,19 @@ export const ZH_TW = {
   'menu.overview': '總覽',
   'menu.dashboard': '首頁',
   'menu.system-settings': '系統設定',
+  'menu.regulatory-datasets': '法規資料集',
   'menu.regulatory-sync': '法規資料同步歷程',
+
+  /**
+   * 四種同步狀態，值取自後端的 `RegulatorySyncStatus`（1/2/3/4）。
+   *
+   * key 的前綴是 `regulatory.` 而不是某一頁的前綴：兩個頁面共用同一組呈現
+   *（`shared/regulatory/sync-status.ts`），掛在其中一頁的命名空間下會讓另一頁看起來像在借用。
+   */
+  'regulatory.sync-status.running': '執行中',
+  'regulatory.sync-status.succeeded': '更新成功',
+  'regulatory.sync-status.failed': '失敗',
+  'regulatory.sync-status.no-change': '無異動',
 
   'regulatory-sync.heading': '法規資料同步歷程',
   'regulatory-sync.description':
@@ -60,12 +72,6 @@ export const ZH_TW = {
   'regulatory-sync.column.records-received': '收到筆數',
   'regulatory-sync.column.error-message': '失敗原因',
 
-  /** 四種狀態，值取自後端的 `RegulatorySyncStatus`（1/2/3/4）。 */
-  'regulatory-sync.status.running': '執行中',
-  'regulatory-sync.status.succeeded': '更新成功',
-  'regulatory-sync.status.failed': '失敗',
-  'regulatory-sync.status.no-change': '無異動',
-
   /**
    * 空結果。**這一頁的篩選條件不能清除**（後端的 `datasetCode` 是必填，一次只查一個資料集），
    * 所以 §7.2 的「提示可清除篩選」在這裡的對應動作是「換一個資料集」——旁邊那個下拉就是。
@@ -74,22 +80,141 @@ export const ZH_TW = {
   'regulatory-sync.empty': '這個資料集還沒有同步紀錄。可以在上方換一個資料集看看。',
   'regulatory-sync.retry': '重新載入',
 
+  // ⚠️ 這裡以前有九筆 `regulatory-sync.dataset.<代碼>`（資料集名稱）。**已經整批刪掉**：
+  // 那是「代碼 ↔ 名稱」的第三份副本，而且不在 `bun run check:dataset-code` 的守備範圍內
+  // ——對調兩個名稱不會有任何地方變紅，使用者會看到一個標著「勞保」的健保同步歷程。
+  // 名稱現在一律來自 `regulatory.datasets.overview` 回應的 `name`。
+  // 新的資料集名稱**不得**再寫回這個檔案。
+
+  'regulatory-datasets.heading': '法規資料集',
+  'regulatory-datasets.description':
+    '每一份政府法規資料目前是哪一版、最後同步是什麼時候。政府法規全國一份，這一頁不分公司，所有公司看到的是同一份資料。',
+  'regulatory-datasets.retry': '重新載入',
+  'regulatory-datasets.empty': '目前沒有任何法規資料集。',
+
   /**
-   * 資料集名稱。**必須與後端 `REGULATORY_DATASETS` 的 `name` 逐字相同**——那一份與計畫 §3.1
-   * 的表格由 `bun run check:dataset-code` 互相比對，但**這一份不在它的守備範圍內**
-   * （理由與代價完整寫在 `pages/regulatory/sync/regulatory-sync.dataset.view.ts` 檔頭）。
-   * `7` 是永久空號，不是漏打。
+   * 基準日。**這一頁最重要的一個控制項**（計畫 §4.2）：補算去年 12 月的薪資時，
+   * 要核對的是「當時的費率」，而不是今天適用的那一版。提示文字要說出這件事，
+   * 否則使用者只會把它當成一個可以忽略的預設值。
    */
-  'regulatory-sync.dataset.1': '勞工保險投保薪資分級表',
-  'regulatory-sync.dataset.2': '全民健康保險投保金額分級表',
-  'regulatory-sync.dataset.3': '勞工退休金月提繳工資分級表',
-  'regulatory-sync.dataset.4': '勞就保保險費分擔金額表',
-  'regulatory-sync.dataset.5': '健保費負擔金額表（有一定雇主之受僱者）',
-  'regulatory-sync.dataset.6': '職業災害保險行業別費率',
-  'regulatory-sync.dataset.8': '最低工資（月薪與時薪）',
-  'regulatory-sync.dataset.9': '薪資所得扣繳稅額表',
-  'regulatory-sync.dataset.10': '健保補充保險費（費率與計費門檻）',
+  'regulatory-datasets.filter.as-of-date': '法規適用基準日',
+  'regulatory-datasets.filter.as-of-date-hint': '要核對過去某個期間的法規時，把日期改成那一天。',
+
+  'regulatory-datasets.column.dataset': '資料集',
+  'regulatory-datasets.column.maintenance': '維護方式',
+  'regulatory-datasets.column.effective-version': '適用版本',
+  'regulatory-datasets.column.effective-from': '生效日',
+  'regulatory-datasets.column.effective-to': '失效日',
+  'regulatory-datasets.column.record-count': '筆數',
+  'regulatory-datasets.column.last-sync': '最後同步',
+  'regulatory-datasets.column.version-code': '版本代碼',
+  'regulatory-datasets.column.synced-at': '同步時間',
+  'regulatory-datasets.column.effective-now': '基準日適用',
+  'regulatory-datasets.column.actions': '操作',
+
+  /** 值取自後端的 `maintenance`（`'sync'` / `'manual'`），不是 `'auto'`。 */
+  'regulatory-datasets.maintenance.sync': '自動同步',
+  'regulatory-datasets.maintenance.manual': '人工維護',
+
+  /** 這一天沒有任何一版適用。**是一個結果，不是缺資料**，所以有自己的一句話而不是「—」。 */
+  'regulatory-datasets.no-effective-version': '無適用版本',
+
+  /**
+   * 「最後同步」的兩種非時間狀態。**兩者不得顯示成同一個東西**（計畫 §4.1）：
+   * 「不適用」是規格（人工維護的資料集永遠不會有同步紀錄），「從未同步」是還沒發生過。
+   * 空白會被讀成「同步壞了」，所以兩者都必須是明確的文字。
+   */
+  'regulatory-datasets.last-sync.not-applicable': '不適用',
+  'regulatory-datasets.last-sync.never-synced': '從未同步',
+
+  'regulatory-datasets.action.versions': '版本清單',
+  'regulatory-datasets.action.versions-shown': '收合',
+  'regulatory-datasets.action.content': '查看內容',
+  'regulatory-datasets.effective-at-as-of-date': '本基準日適用',
+
+  'regulatory-datasets.versions-heading': '版本清單',
+  'regulatory-datasets.versions-empty': '這個資料集還沒有任何版本。',
+  'regulatory-datasets.content-heading': '版本內容',
+  'regulatory-datasets.content-as-of': '法規適用基準日：',
+  'regulatory-datasets.content-version': '適用版本：',
+  'regulatory-datasets.content-no-version': '這一天沒有任何一版適用。可以把上方的基準日往後調。',
+
+  /**
+   * 版本內容的欄位標題（計畫 §5.3 的欄位定義表）。
+   *
+   * **名稱盡量沿用政府那一份的欄位名**（`月薪資總額`、`月投保薪資`、`行業別費率`…）：
+   * 這一頁的用途就是拿來對公告，改寫欄位名會讓對帳的人多一次心算。
+   * 對照關係逐一寫在後端的 `regulatory-record-shape.ts`。
+   */
+  'regulatory-datasets.field.insured-category': '身分別',
+  'regulatory-datasets.field.grade': '等級',
+  'regulatory-datasets.field.monthly-salary-range': '月薪資總額',
+  'regulatory-datasets.field.range-from': '下限',
+  'regulatory-datasets.field.range-to': '上限',
+  'regulatory-datasets.field.monthly-insured-salary': '月投保薪資',
+  'regulatory-datasets.field.group-range': '組別級距',
+  'regulatory-datasets.field.monthly-insured-amount': '月投保金額',
+  'regulatory-datasets.field.actual-salary-range': '實際薪資月額',
+  'regulatory-datasets.field.actual-wage-range': '實際工資',
+  'regulatory-datasets.field.monthly-contribution-wage': '月提繳工資',
+  'regulatory-datasets.field.remark': '備註',
+  'regulatory-datasets.field.insured-salary': '投保薪資',
+  'regulatory-datasets.field.labor-insurance-rate': '勞保普通費率',
+  'regulatory-datasets.field.employment-insurance-rate': '就保費率',
+  'regulatory-datasets.field.employee-share': '勞工負擔',
+  'regulatory-datasets.field.employer-share': '單位負擔',
+  'regulatory-datasets.field.insured-share': '本人負擔',
+  'regulatory-datasets.field.insured-with-1': '本人＋1 眷口',
+  'regulatory-datasets.field.insured-with-2': '本人＋2 眷口',
+  'regulatory-datasets.field.insured-with-3': '本人＋3 眷口',
+  'regulatory-datasets.field.government-subsidy': '政府補助',
+  'regulatory-datasets.field.major-category': '大分類',
+  'regulatory-datasets.field.rate-code': '費率編號',
+  'regulatory-datasets.field.industry-name': '行業類別',
+  'regulatory-datasets.field.industry-rate': '行業別費率',
+  'regulatory-datasets.field.commuting-rate': '上下班費率',
+  'regulatory-datasets.field.occupational-accident-rate': '災保費率',
+  'regulatory-datasets.field.item': '項目',
+  'regulatory-datasets.field.amount': '金額',
+  'regulatory-datasets.field.rate': '費率',
+  'regulatory-datasets.field.announced-on': '發布日',
+  'regulatory-datasets.field.announcement-text': '公告原文',
+
+  /**
+   * 扣繳稅額表的 12 個扶養人數欄。上限 11 人是政府那張表自己的上限，不是我們訂的
+   * （後端 `WITHHOLDING_TAX_DEPENDENT_COUNTS`）。
+   */
+  'regulatory-datasets.field.tax-0': '0 人',
+  'regulatory-datasets.field.tax-1': '1 人',
+  'regulatory-datasets.field.tax-2': '2 人',
+  'regulatory-datasets.field.tax-3': '3 人',
+  'regulatory-datasets.field.tax-4': '4 人',
+  'regulatory-datasets.field.tax-5': '5 人',
+  'regulatory-datasets.field.tax-6': '6 人',
+  'regulatory-datasets.field.tax-7': '7 人',
+  'regulatory-datasets.field.tax-8': '8 人',
+  'regulatory-datasets.field.tax-9': '9 人',
+  'regulatory-datasets.field.tax-10': '10 人',
+  'regulatory-datasets.field.tax-11': '11 人',
+
+  /** `dataset_code=8` 的 `item`：一則公告拆成月薪與時薪兩筆。 */
+  'regulatory-datasets.minimum-wage.monthly': '每月最低工資',
+  'regulatory-datasets.minimum-wage.hourly': '每小時最低工資',
+
+  /** `dataset_code=10` 的 `item`：費率與兩個計費門檻，同一次公告的三筆。 */
+  'regulatory-datasets.supplementary.rate': '補充保險費率',
+  'regulatory-datasets.supplementary.charge-lower-bound': '單次給付計費下限',
+  'regulatory-datasets.supplementary.single-payment-upper-limit': '單次給付計費上限',
 
   /** 前端自己要說的話，見檔頭的「唯一的例外」。 */
   'error.system': '系統發生錯誤，請稍後再試。',
+
+  /**
+   * 沒有權限進入某一頁（§4.3）。
+   *
+   * 這一句同樣是前端自己要說的：路由守衛是在**送出任何請求之前**就擋下來的，
+   * 手上沒有後端訊息可顯示。內容刻意不說是缺哪一個權限碼——那與後端 `901` 一律不揭露細節
+   * 是同一個決定（後端規範 §3.1.1）。
+   */
+  'error.no-permission': '你沒有權限使用這個功能。',
 } as const

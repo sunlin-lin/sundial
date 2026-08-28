@@ -6,11 +6,10 @@
  * 這一頁刻意不先擺上假的統計卡片：畫不出真實數字的區塊會被當成「還沒載入」，
  * 而它永遠不會載入完。
  */
-import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppShell from '../../../layouts/AppShell.vue'
-import { logout } from '../../../shared/api/sessions.ts'
+import { useSignOut } from '../../../shared/api/use-sign-out.ts'
 import type { TranslateMessage } from '../../../shared/i18n/messages.ts'
 import { useAuthStore } from '../../../stores/auth.ts'
 
@@ -21,27 +20,20 @@ const router = useRouter()
 const { t } = useI18n()
 const $t: TranslateMessage = t
 
-const isSigningOut = ref(false)
-
 /**
  * 登出。
  *
- * 不論後端怎麼回都會回到登入頁並清空 store：使用者按了登出就是要離開，
+ * 呼叫端點與 loading 狀態在 `shared/api/use-sign-out.ts`（三頁共用，§1.5）；
+ * 留在這裡的只有「清 store、回登入頁」——那兩步碰得到 store 與 router，共用區進不去（§0.11），
+ * 而「登出成功後去哪裡」本來就是頁面的決定。
+ *
+ * 不論後端怎麼回都會走到這個回呼：使用者按了登出就是要離開，
  * 把他因為一個錯誤留在已登入狀態，是他最不預期的結果。
- * （後端側作廢的是這次登入的整條輪替鏈，與前端清不清無關。）
  */
-const onSignOutRequested = (): void => {
-  if (isSigningOut.value) return
-  isSigningOut.value = true
-
-  logout()
-    .catch(() => undefined)
-    .finally(() => {
-      auth.reset()
-      isSigningOut.value = false
-      void router.replace({ name: 'sessions-login' })
-    })
-}
+const { isSigningOut, requestSignOut } = useSignOut(() => {
+  auth.reset()
+  void router.replace({ name: 'sessions-login' })
+})
 </script>
 
 <template>
@@ -49,7 +41,8 @@ const onSignOutRequested = (): void => {
     :user-name="auth.displayName"
     :company-name="auth.companyName"
     :is-signing-out="isSigningOut"
-    @sign-out-requested="onSignOutRequested"
+    :can="auth.can"
+    @sign-out-requested="requestSignOut"
   >
     <h1 class="text-xl font-semibold text-ink">{{ $t('dashboard.heading') }}</h1>
 

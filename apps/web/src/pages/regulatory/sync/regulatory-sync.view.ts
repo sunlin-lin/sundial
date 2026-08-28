@@ -1,5 +1,5 @@
 /**
- * 同步歷程「一列怎麼組」與狀態怎麼顯示（§1.3 的第 (1)(2) 類、§0.5 的 `.view.ts`）。
+ * 同步歷程「一列怎麼組」與資料集下拉的選項（§1.3 的第 (1)(2) 類、§0.5 的 `.view.ts`）。
  *
  * 這裡的每一支都是不依賴 Vue 的純函式：`.vue` 在本專案不做元件測試（§8.1），
  * 邏輯留在模板或 `computed` 就等於零測試覆蓋，而「狀態顯示成哪一種顏色」「空值長什麼樣」
@@ -10,52 +10,45 @@
  * 在模板裡對 `row` 做任何事都拿不到型別保護——組列的工作放在這裡，那段沒有型別的區域
  * 就縮到「讀一個已經算好的字串」而已。
  *
- * 兄弟檔（§0.7 的主題拆分）：資料集名稱在 `.dataset.view.ts`，回應的處置在 `.response.view.ts`。
+ * ## 資料集名稱的來源換了三次
+ *
+ * 這一頁最早有一份手寫的「代碼 → 語系 key」對照（`.dataset.view.ts`），那是「代碼 ↔ 名稱」的
+ * 第三份副本，而且**不在 `bun run check:dataset-code` 的守備範圍內**——對調兩個名稱不會有任何
+ * 地方變紅，使用者會看到一個標著「勞保」的健保同步歷程。刪掉那份之後改打
+ * `regulatory.datasets.overview` 取名稱，代價是這一頁因此也依賴一個與本頁業務無關的權限碼；
+ * 改成對九個代碼各探測一次 `sync/list` 又換來九支請求換九個常數字串的代價，在開發機看不出來，
+ * 上線後會被注意到。
+ *
+ * **現在名稱與正式查詢一次到位**：`regulatory.sync.list` 的回應除了當次查詢那個資料集的
+ * `datasetName`，另外還帶**固定九筆**的 `datasets`（`{ code, name }[]`，依代碼排序，含人工維護
+ * 與尚未同步過的資料集）。下拉的選項因此**直接來自正式查詢的回應**，不必另外打任何請求，
+ * 也不必在前端重建任何「代碼 → 名稱」副本。連帶結果：選項要等**第一次查詢**回來才有——這不是
+ * 退步，預設資料集（`DEFAULT_DATASET_CODE`）本來就會在進頁面時立刻查一次，選項與第一批列表
+ * 資料因此同時就緒，沒有「選項先出現、內容還在轉」或反過來的中間態（見 `.page.vue` 檔頭）。
+ *
+ * 兄弟檔（§0.7 的主題拆分）：查詢的組裝在 `.payload.ts`。狀態的呈現與回應的處置已經移進共用區
+ *（`shared/regulatory/sync-status.ts`、`shared/api/list-echo.ts`、`shared/api/load-failure.ts`），
+ * 理由都是 §1.5 的同一條：第二個頁面出現了。
  */
 import { EMPTY_DISPLAY } from '../../../shared/format/empty-display.ts'
 import { formatAmount } from '../../../shared/format/decimal.ts'
 import { formatDateTime } from '../../../shared/format/business-date.ts'
-import type { MessageKey, TranslateMessage } from '../../../shared/i18n/messages.ts'
+import {
+  syncStatusPresentation,
+  type SyncStatusPresentation,
+} from '../../../shared/regulatory/sync-status.ts'
+import type { TranslateMessage } from '../../../shared/i18n/messages.ts'
 import type { RegulatorySyncListData } from '../../../api/generated/api-client.ts'
-import { datasetLabelKey } from './regulatory-sync.dataset.view.ts'
 
 /** 同步歷程的一列（API 形狀）。由產生型別推導，不在前端另寫一份（§3.2）。 */
 export type SyncLogRow = RegulatorySyncListData['data'][number]
 
 /**
- * 狀態的呈現。
- *
- * §9.1：**不得只用顏色表達狀態**，所以永遠有 `labelKey`；色彩則走具名 token 而不是各頁自選
- * 相近顏色（§5.2）——`tone` 是 Element Plus 的語意色名，`tokens.css` 已經把 `--el-color-*`
- * 接到 `--color-state-*`，兩套顏色因此是同一套。
- *
- * `effect` 是 ElTag 的填色方式：**「失敗」用實心底色，其餘用淡色**——計畫要求失敗要一眼看得
- * 出來，而一張二十列的表格裡，四種同樣淡的色塊需要逐一讀字才分得出哪一列出事了。
+ * 資料集下拉的一個選項。**直接是產生型別的 `datasets` 元素**，不是本檔另外宣告的形狀（§3.2）：
+ * 後端把 `code`／`name` 其中一個欄位改名，這裡當場編譯錯誤，而不是等到畫面上出現 `undefined`。
+ * 呼叫端（`.page.vue`）因此不需要任何轉換函式，`page.datasets` 可以直接指派給下拉的狀態。
  */
-export type StatusPresentation = {
-  readonly labelKey: MessageKey
-  readonly tone: 'success' | 'danger' | 'warning' | 'info'
-  readonly effect: 'dark' | 'light'
-}
-
-/**
- * 四種狀態的呈現，key 即 `status_code`（後端 `RegulatorySyncStatus`）。
- *
- * 四個值不可合併（後端 schema 檔頭）：`無異動`（跑了但政府沒改）與 `更新成功`（跑了而且寫入
- * 新版本）對「為什麼沒有新版本」的答案完全不同；`執行中` 是唯一還沒有結論的狀態，而且它同時是
- * 心跳逾時可能把它判死的候選，所以用 warning 而不是 info——讀的人應該注意到它。
- *
- * `satisfies Record<...>` 讓後端新增第五種狀態時這裡直接編譯錯誤，而不是渲染出一個空白標籤。
- */
-const STATUS_PRESENTATIONS = {
-  1: { labelKey: 'regulatory-sync.status.running', tone: 'warning', effect: 'light' },
-  2: { labelKey: 'regulatory-sync.status.succeeded', tone: 'success', effect: 'light' },
-  3: { labelKey: 'regulatory-sync.status.failed', tone: 'danger', effect: 'dark' },
-  4: { labelKey: 'regulatory-sync.status.no-change', tone: 'info', effect: 'light' },
-} as const satisfies Record<SyncLogRow['statusCode'], StatusPresentation>
-
-export const statusPresentation = (code: SyncLogRow['statusCode']): StatusPresentation =>
-  STATUS_PRESENTATIONS[code]
+export type DatasetOption = RegulatorySyncListData['datasets'][number]
 
 /**
  * 失敗原因這一格要顯示什麼。
@@ -96,8 +89,8 @@ export type SyncLogDisplayRow = {
   readonly startedAt: string
   readonly finishedAt: string
   readonly statusLabel: string
-  readonly statusTone: StatusPresentation['tone']
-  readonly statusEffect: StatusPresentation['effect']
+  readonly statusTone: SyncStatusPresentation['tone']
+  readonly statusEffect: SyncStatusPresentation['effect']
   readonly recordsReceived: string
   readonly failureReason: string
 }
@@ -108,6 +101,11 @@ export type SyncLogDisplayRow = {
  * `translate` 由呼叫端傳進來而不是在這裡 import i18n 實例：本檔要能被純函式測試直接呼叫，
  * 而掛一個 vue-i18n 實例進來，測試就得先把整套 app context 立起來（§8.1 要避免的正是這個）。
  *
+ * `datasetName` 是**單一字串，不是查表函式**：這一頁一次只查一個資料集（計畫 §4.3），
+ * 一整包回應裡的所有列必然屬於同一個資料集，因此呼叫端直接傳 `page.datasetName`
+ *（回應本身帶的名稱，見本檔檔頭「資料集名稱的來源換了三次」）即可，不需要靠代碼逐列查表——
+ * 查表只有在「一批列可能屬於不同資料集」時才有意義。
+ *
  * 時間一律走 `shared/format/`（§9.2）：API 傳來的是台北牆鐘字串，丟進 `new Date()` 會被當成
  * **瀏覽器所在時區**再換算一次——使用者把筆電時區設成東京，整批時間就多一小時，
  * 而畫面上不會有任何錯誤提示。未結束的同步 `finishedAt` 是 `null`，格式化層會給出「沒有值」。
@@ -115,14 +113,15 @@ export type SyncLogDisplayRow = {
 export const toDisplayRows = (
   rows: readonly SyncLogRow[],
   translate: TranslateMessage,
+  datasetName: string,
   // 回傳可變陣列（元素本身仍是 readonly）：Element Plus 的表格 `data` 收的是可變陣列，
   // `readonly T[]` 傳不進去，而在頁面那一側複製一份只是把同一件事搬到看不出理由的地方。
 ): SyncLogDisplayRow[] =>
   rows.map((row) => {
-    const status = statusPresentation(row.statusCode)
+    const status = syncStatusPresentation(row.statusCode)
     return {
       id: typeof row.id === 'string' ? row.id : String(row.id),
-      dataset: translate(datasetLabelKey(row.datasetCode)),
+      dataset: datasetName,
       startedAt: formatDateTime(row.startedAt),
       finishedAt: formatDateTime(row.finishedAt),
       statusLabel: translate(status.labelKey),

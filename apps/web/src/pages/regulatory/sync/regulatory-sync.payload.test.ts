@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { SYNC_LIST_PER_PAGE, toSyncListQuery } from './regulatory-sync.payload.ts'
+import { DEFAULT_DATASET_CODE, SYNC_LIST_PER_PAGE, toSyncListQuery } from './regulatory-sync.payload.ts'
 
 describe('同步歷程的查詢組裝', () => {
   test('帶上資料集、頁碼與每頁筆數', () => {
@@ -31,5 +31,9 @@ describe('同步歷程的查詢組裝', () => {
       'perPage',
       'sort',
     ])
+  })
+
+  test('預設選的資料集是合法代碼之一，一進頁面就查得出東西', () => {
+    expect(toSyncListQuery(DEFAULT_DATASET_CODE, 1).datasetCode).toBe(DEFAULT_DATASET_CODE)
   })
 })

@@ -27,7 +27,12 @@
  * `CompanyScopedTable`，而它們刻意不在那個聯集裡。
  */
 import type { QueryRunner } from '../../../db/client.ts'
-import type { RunningSyncLog, SyncLogListQuery, SyncLogPage } from './domain/regulatory-sync-model.ts'
+import type {
+  DatasetLatestSyncStatus,
+  RunningSyncLog,
+  SyncLogListQuery,
+  SyncLogPage,
+} from './domain/regulatory-sync-model.ts'
 import {
   completeSyncLog as completeSyncLogImpl,
   type CompleteSyncLogInput,
@@ -57,6 +62,7 @@ import {
   type InsertDatasetVersionInput,
 } from './impl/regulatory-sync.insert-version.repository.ts'
 import { listSyncLogPage as listSyncLogPageImpl } from './impl/regulatory-sync.list-logs.repository.ts'
+import { listLatestSyncStatuses as listLatestSyncStatusesImpl } from './impl/regulatory-sync.list-latest-status.repository.ts'
 import { listDatasetVersionCodes as listDatasetVersionCodesImpl } from './impl/regulatory-sync.list-version-codes.repository.ts'
 import { listRunningSyncLogs as listRunningSyncLogsImpl } from './impl/regulatory-sync.list-running-logs.repository.ts'
 import { touchSyncLogHeartbeat as touchSyncLogHeartbeatImpl } from './impl/regulatory-sync.touch-heartbeat.repository.ts'
@@ -79,6 +85,8 @@ export type {
   InsertRegulatoryRecordInput,
   LatestDatasetVersion,
 }
+
+export type { DatasetLatestSyncStatus }
 
 export const createSyncLog = (runner: QueryRunner, input: CreateSyncLogInput): Promise<number> =>
   createSyncLogImpl(runner, input)
@@ -119,3 +127,9 @@ export const insertRegulatoryRecords = (
 
 export const listSyncLogPage = (runner: QueryRunner, query: SyncLogListQuery): Promise<SyncLogPage> =>
   listSyncLogPageImpl(runner, query)
+
+/** 多個資料集各自最近一次的同步狀態，不分成功或失敗（總覽用，任務一）。 */
+export const listLatestSyncStatuses = (
+  runner: QueryRunner,
+  datasetCodes: readonly number[],
+): Promise<readonly DatasetLatestSyncStatus[]> => listLatestSyncStatusesImpl(runner, datasetCodes)

@@ -23,10 +23,16 @@ import {
   withdrawRefreshTicket,
 } from '../../../http/session-lifetime.ts'
 import type { VerifiedIdentity } from '../../../shared/access-control.ts'
-import type { EnvelopeBody } from '../../../shared/envelope.ts'
+import { ok, type EnvelopeBody } from '../../../shared/envelope.ts'
 import type { SessionsMainContext } from './domain/session-context.ts'
-import type { IssuedLifetime, IssuedTokens, LoginOutcome, RefreshOutcome } from './domain/session-model.ts'
-import { login, logout, logoutAllDevices, refreshSession } from './sessions-main.service.ts'
+import type {
+  IssuedLifetime,
+  IssuedTokens,
+  LoginOutcome,
+  RefreshOutcome,
+  SessionContextOutcome,
+} from './domain/session-model.ts'
+import { getSessionContext, login, logout, logoutAllDevices, refreshSession } from './sessions-main.service.ts'
 
 /** 由組裝點注入的相依。公司範圍不在裡面——本模組正是產生公司範圍的那一步（§1.9.0）。 */
 export type SessionsMainDependencies = SessionsMainContext
@@ -106,10 +112,32 @@ const toRefreshData = (outcome: RefreshOutcome) => ({ accessToken: outcome.token
  */
 const toRevocationData = (): { ok: true } => ({ ok: true })
 
+/**
+ * 業務結果 → `context` 端點的 `data`。
+ *
+ * **`permissionCodes` 排序後才輸出**：`Set` 的走訪順序等於插入順序，而插入順序取決於
+ * `company-users` 那一側的查詢計畫，不是一個穩定的契約。排序讓輸出可預期，也讓前端與測試
+ * 不必自己再排一次序。
+ */
+const toSessionContextData = (outcome: SessionContextOutcome) => ({
+  user: {
+    id: outcome.identity.userId,
+    companyUserId: outcome.identity.companyUserId,
+    displayName: outcome.profile.displayName,
+  },
+  company: {
+    id: outcome.identity.companyId,
+    companyCode: outcome.profile.companyCode,
+    name: outcome.profile.companyName,
+  },
+  permissionCodes: [...outcome.permissionCodes].toSorted(),
+})
+
 /** 各端點 `data` 的型別。由映射函式反推，因此**改了映射就會改型別**，不會兩邊漂移。 */
 export type LoginData = ReturnType<typeof toLoginData>
 export type RefreshData = ReturnType<typeof toRefreshData>
 export type RevocationData = ReturnType<typeof toRevocationData>
+export type SessionContextData = ReturnType<typeof toSessionContextData>
 
 type LoginBody = {
   readonly companyCode: string
@@ -224,4 +252,21 @@ export const handleLogoutAll = async (
   const outcome = resolveServiceResult(result, toRevocationData)
   context.set.status = outcome.status
   return outcome.body
+}
+
+/**
+ * `POST /sessions/main/context`（已登入群組）。
+ *
+ * **不經過 `resolveServiceResult`**：`getSessionContext` 不回 `ServiceResult`（見它的檔頭），
+ * 走到這裡代表 access token 已經驗過了，沒有失敗分支要映射，因此直接 `ok(...)` 包成功結果，
+ * 不設定 `context.set.status`——理由與 `company-users/roles` 的 `listRoleAssignmentsHandler`
+ * 相同：不設定時預設就是 200，而這支端點只有 200 這一種結果。
+ */
+export const handleSessionContext = async (
+  dependencies: SessionsMainDependencies,
+  context: EndpointContext<CredentialOnlyBody>,
+): Promise<EndpointResult<SessionContextData>> => {
+  const identity = requireIdentity(context.requestContext.session)
+  const outcome = await getSessionContext(dependencies, identity)
+  return ok(toSessionContextData(outcome))
 }

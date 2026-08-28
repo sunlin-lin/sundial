@@ -1,0 +1,70 @@
+/**
+ * 權限碼的型別化聯集（前端規範 §4.1：**權限碼是型別化聯集而非字串**）。
+ *
+ * ## 為什麼要有這一份，而不是直接用 `string`
+ *
+ * 權限碼在執行期只是字串，打錯一個字母（`regulatory.datasets.overivew`）的後果是
+ * **那個判斷永遠回 false**：選單少一項、路由永遠擋下，而且完全不會報錯——
+ * 對讀程式的人來說，它與「這個人真的沒有權限」長得一模一樣。收成聯集之後，同一個錯字是編譯錯誤。
+ *
+ * ## 這一份怎麼維護：手寫清單 ＋ 由產生型別推導的機械檢查
+ *
+ * 後端**沒有**任何一支端點回得出「全部合法權限碼」當作 OpenAPI schema
+ *（`sessions/main/context` 回的 `permissionCodes` 在型別上就是 `string[]`），
+ * 所以這份清單只能由前端維護。但它不是全手寫：
+ *
+ * - 權限碼與端點的 `cmd` **是同一個字串**——兩者都由端點路徑機械推導（`/a/b/c` → `a.b.c`，
+ *   後端規範 §1.3 的 `cmd`、§5.2.2 的權限碼，兩條規則各自寫著「由路徑推導、沒有例外分支」）。
+ *   因此下面的 `satisfies readonly ApiCommand[]` 把「這個字串是不是一支真實端點的名字」交給
+ *   產生型別去判斷：**拼錯字、或後端把端點改名／刪掉，這一行當場編譯不過。**
+ * - 剩下**唯一**要靠人核對的是「這支端點的權限碼有沒有被 seed 出來」。這一份的五個值已逐字比對過
+ *   `apps/api/drizzle/0014`／`0016`／`0017` 三支 seed migration。
+ *
+ * ⚠️ **反過來不成立：不是每一支端點都有權限碼。** 公開群組的端點（登入、refresh）沒有權限碼，
+ * 而 `ApiCommand` 涵蓋它們。所以這個 `satisfies` 擋的是「不存在的端點」，不是「不存在的權限碼」；
+ * 後者由上面那句人工核對負責，規範 §8.2 第 (3) 條的掃描測試（程式碼用到的權限碼必須存在於後端
+ * 權限目錄）是它真正的自動化把關，那支掃描不在本檔的守備範圍。
+ *
+ * ## 只列「這一輪真的有人判斷」的權限碼
+ *
+ * 後端已 seed 的權限碼遠不只五個。先把它們全部抄進來看起來比較完整，實際上會得到一份
+ * **沒有人讀、也沒有辦法知道它對不對**的清單（§1.5 禁止孤兒程式碼）。要判斷第六個權限碼時
+ * 再加第六行，那一行的正確性當下就會被使用它的程式碼驗證。
+ */
+import type { paths } from '../../api/generated/api-types.ts'
+
+/** `a/b/c` → `a.b.c`。遞迴到最後一段時 `TSegments` 已經沒有 `/`，直接回它自己。 */
+type DottedPath<TSegments extends string> = TSegments extends `${infer Head}/${infer Rest}`
+  ? `${Head}.${DottedPath<Rest>}`
+  : TSegments
+
+/** `/a/b/c` → `a.b.c`。開頭沒有 `/` 的字串不是端點路徑，回 `never`（用它會編譯錯誤）。 */
+type EndpointCommand<TPath extends string> = TPath extends `/${infer Rest}`
+  ? DottedPath<Rest>
+  : never
+
+/**
+ * 後端每一支端點的指令名，由 `bun run gen:api` 的產生型別推導。
+ *
+ * 由 `paths` 推導而不是另外列一份：另外列的那一份會在後端加端點時安靜地過期，
+ * 而過期的清單與正確的清單在 CI 上長得一模一樣。
+ */
+type ApiCommand = EndpointCommand<keyof paths & string>
+
+/**
+ * 本前端會判斷的權限碼（計畫 03 §6）。
+ *
+ * 刻意不 export：它的用途只有推導出 {@link PermissionCode}，而一份「可以被別人 map 出來的
+ * 權限碼清單」會立刻長出「把全部權限碼列出來給人勾選」這種消費者——那是後端權限目錄端點的事
+ *（`permissions.main.list`），不是前端硬編清單的事。
+ */
+const PERMISSION_CODES = [
+  'regulatory.datasets.overview',
+  'regulatory.datasets.list',
+  'regulatory.datasets.get',
+  'regulatory.datasets.resolve',
+  'regulatory.sync.list',
+] as const satisfies readonly ApiCommand[]
+
+/** 權限碼。全站判斷權限一律用這個型別，不用 `string`。 */
+export type PermissionCode = (typeof PERMISSION_CODES)[number]

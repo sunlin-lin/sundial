@@ -99,6 +99,17 @@ const SyncLogSummarySchema = t.Object({
 const SyncLogSearchSchema = t.Object({ datasetCode: DatasetCodeSchema })
 
 /**
+ * 「選擇資料集」選項的一筆：代碼 ＋ 名稱。
+ *
+ * 對應 handler 的 `toDatasetOptionsData`——固定九筆、固定順序（照代碼由小到大），
+ * `7`（永久空號）不出現。
+ */
+const DatasetOptionSchema = t.Object({
+  code: DatasetCodeSchema,
+  name: t.String({ minLength: 1, maxLength: 100 }),
+})
+
+/**
  * 每支端點都可能出現的非業務回應。
  *
  * §2 要求 `response` 涵蓋該端點可能回的每一種狀態碼。這三種與業務邏輯無關，由 middleware 與
@@ -129,13 +140,33 @@ export const regulatorySyncRoutes = (dependencies: RegulatorySyncDependencies) =
         sort: t.Optional(sortRequest(SYNC_LOG_SORT_FIELDS)),
       }),
       response: {
-        200: envelope(paginationResponse(SyncLogSearchSchema, SyncLogSummarySchema)),
+        // `datasetName`／`datasets` 疊在 `paginationResponse` 之外一層（`t.Composite`），不是塞進
+        // `SyncLogSummarySchema` 逐列重複：本端點一次只看一個資料集（`datasetCode` 必填），
+        // 這兩者對每一列都相同，放進非列表部分就不必逐列重送（見 handler 的 `toDatasetName`／
+        // `toDatasetOptionsData`）。兩者的唯一來源都是 `REGULATORY_DATASETS`，由 `check:dataset-code`
+        // 守著——這裡不是第二份對照，只是把已經算好的值收進 schema。
+        //
+        // `datasetName`（當次查詢的那一個）與 `datasets`（全部九個，供查詢前的「選擇資料集」
+        // 選項使用）用途不同，兩者都保留：拿掉任一個，前端就得用另一個湊出它，而湊法各自不同
+        // （`datasetName` 要收窄成一筆，`datasets` 要在查詢之前就有值），沒有一個能取代另一個。
+        200: envelope(
+          t.Composite([
+            paginationResponse(SyncLogSearchSchema, SyncLogSummarySchema),
+            t.Object({
+              datasetName: t.String({ minLength: 1, maxLength: 100 }),
+              datasets: t.Array(DatasetOptionSchema),
+            }),
+          ]),
+        ),
         ...CommonFailureResponses,
       },
       detail: {
         summary: '查詢某個法規資料集的同步歷程',
         description:
           `${describeRegulatorySyncErrors(REGULATORY_SYNC_ENDPOINT_ERRORS.list)}` +
-          ' 尚未同步過的資料集回空清單。errorMessage 為失敗原因，僅在 statusCode=3 時有值。',
+          ' 尚未同步過的資料集回空清單。errorMessage 為失敗原因，僅在 statusCode=3 時有值。' +
+          ' datasetName 是本次查詢那個資料集的名稱；datasets 是全部九個資料集的代碼與名稱' +
+          '（固定順序、含人工維護與尚未同步過的），供查詢之前顯示選項，不必為了湊選項另外打' +
+          '九次本端點或另開一支端點。',
       },
     })

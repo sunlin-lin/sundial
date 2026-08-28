@@ -32,6 +32,9 @@ import {
   findEffectiveDatasetVersion as findEffectiveDatasetVersionImpl,
 } from './impl/regulatory-datasets.find-effective-version.repository.ts'
 import {
+  listEffectiveVersionsAsOf as listEffectiveVersionsAsOfImpl,
+} from './impl/regulatory-datasets.list-effective-versions.repository.ts'
+import {
   listDatasetVersionPage as listDatasetVersionPageImpl,
 } from './impl/regulatory-datasets.list-versions.repository.ts'
 import {
@@ -60,6 +63,16 @@ export const findEffectiveDatasetVersion = (
   datasetCode: RegulatoryDatasetCode,
   asOfDate: string,
 ): Promise<DatasetVersionDetail | null> => findEffectiveDatasetVersionImpl(runner, datasetCode, asOfDate)
+
+/**
+ * 全部資料集在某一基準日各自適用的版本（`overview` 動作用，任務一）。
+ * 批次版本，見實作檔檔頭——不是對 {@link findEffectiveDatasetVersion} 的迴圈呼叫。
+ */
+export const listEffectiveVersionsAsOf = (
+  runner: QueryRunner,
+  datasetCodes: readonly number[],
+  asOfDate: string,
+): Promise<readonly DatasetVersionDetail[]> => listEffectiveVersionsAsOfImpl(runner, datasetCodes, asOfDate)
 
 /**
  * 泛型原樣轉發（`TCode` 的意義見 `impl/regulatory-datasets.list-records.repository.ts`）：

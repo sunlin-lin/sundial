@@ -32,6 +32,7 @@ import { REGULATORY_DATASET_CODES } from './domain/regulatory-dataset-code.ts'
 import { DATASET_VERSION_SORT_FIELDS } from './domain/regulatory-dataset-model.ts'
 import { RegulatoryRecordDataSchema, type RegulatoryRecordData } from './domain/regulatory-record-shape.ts'
 import {
+  handleDatasetOverview,
   handleDatasetVersionGet,
   handleDatasetVersionList,
   handleDatasetVersionResolve,
@@ -160,6 +161,61 @@ const ResolvedDatasetSchema = t.Object({
 const DatasetVersionSearchSchema = t.Object({ datasetCode: DatasetCodeSchema })
 
 /**
+ * 同步狀態代碼，聯集字面值（§2）。
+ *
+ * 值必須與 `db/schema/regulatory-sync-logs.ts` 的 `RegulatorySyncStatus` 相同
+ * （1 執行中／2 成功／3 失敗／4 無異動）。**與 `sync/regulatory-sync.routes.ts` 各自宣告一份**，
+ * 不共用一個常數：路由層不相依資料庫 schema 是本模組既有的慣例（比照 {@link DatasetCodeSchema}
+ * 與 {@link RawFormatCodeSchema} 的處置），兩邊各自宣告，值不一致時各自的型別檢查會分別失敗。
+ */
+const SyncStatusCodeSchema = t.Union([t.Literal(1), t.Literal(2), t.Literal(3), t.Literal(4)])
+
+/** 總覽一列裡「適用版本」。只有總覽要顯示的三欄，不是 {@link DatasetVersionSummarySchema} 的別名。 */
+const DatasetOverviewVersionSchema = t.Object({
+  versionCode: t.String({ minLength: 1, maxLength: 30 }),
+  effectiveFrom: IsoDate,
+  recordCount: Nullable(t.Integer({ minimum: 0 })),
+})
+
+/**
+ * 總覽一列裡「最近一次同步」，判別聯集（任務一）。
+ *
+ * **`kind` 是這一格的核心，取代用 `null` 表達兩種不同的意思**（任務一原文的提示）：
+ * 人工維護的資料集（`10`）永遠是 `not-applicable`——那是規格，不是同步壞了；
+ * 自動同步但排程還沒跑過的資料集是 `never-synced`；其餘才帶著實際的時間與狀態碼。
+ * 前端只要看 `kind` 就知道要顯示哪一種文案（「不適用」或「尚未同步」或實際時間），不必用猜的。
+ */
+const DatasetOverviewLastSyncSchema = t.Union([
+  t.Object({ kind: t.Literal('not-applicable') }),
+  t.Object({ kind: t.Literal('never-synced') }),
+  t.Object({
+    kind: t.Literal('synced'),
+    /** 業務時間，台北牆鐘、不帶時區標記（§6.1）。 */
+    startedAt: TaipeiDateTime,
+    /** `statusCode=1 執行中` 時為 `null`。 */
+    finishedAt: Nullable(TaipeiDateTime),
+    statusCode: SyncStatusCodeSchema,
+  }),
+])
+
+/**
+ * 總覽一列。
+ *
+ * **`name` 與 `maintenance` 由後端回傳，前端不必自己維護第二份「代碼 → 名稱」對照**
+ * （任務一）：那份對照原本只存在於文件與 `REGULATORY_DATASETS` 常數兩處，
+ * `check:dataset-code` 只比對這兩處；一旦前端語系檔也抄一份，就是第三份，
+ * 對調兩個名稱不會有任何一處變紅。端點直接回名稱，第三份就沒有存在的必要。
+ */
+const DatasetOverviewRowSchema = t.Object({
+  datasetCode: DatasetCodeSchema,
+  name: t.String({ minLength: 1, maxLength: 100 }),
+  maintenance: t.Union([t.Literal('sync'), t.Literal('manual')]),
+  /** 該基準日沒有任何一版涵蓋時為 `null`（§3.1.3）；九列固定都在，這一欄為 `null` 不代表整列消失。 */
+  effectiveVersion: Nullable(DatasetOverviewVersionSchema),
+  lastSync: DatasetOverviewLastSyncSchema,
+})
+
+/**
  * 每支端點都可能出現的非業務回應。
  *
  * §2 要求 `response` 涵蓋該端點可能回的每一種狀態碼。這三種與業務邏輯無關，由 middleware 與
@@ -238,5 +294,28 @@ export const regulatoryDatasetsRoutes = (dependencies: RegulatoryDatasetsDepende
         description:
           `${describeRegulatoryDatasetErrors(REGULATORY_DATASET_ENDPOINT_ERRORS.resolve)}` +
           ' asOfDate 必填且不預設今天；該基準日無適用版本時回 data: null。金額與費率一律為 decimal 字串。',
+      },
+    })
+    .post('/regulatory/datasets/overview', (context) => handleDatasetOverview(dependencies, context), {
+      body: t.Object({
+        ...BaseRequest,
+        cmd: t.Literal('regulatory.datasets.overview'),
+        // **必填，且沒有 `default`**（計畫 §4.2、任務一）：理由與 `resolve` 的 `asOfDate` 逐字相同
+        // ——不預設今天，否則補算去年 12 月的薪資會抓到今年的費率，算出一個完全合理的數字。
+        asOfDate: IsoDate,
+      }),
+      response: {
+        // 九列固定回傳（見 domain 的 `DatasetOverviewRow` 說明），因此不是 `Nullable`，
+        // 也不是分頁的 `paginationResponse`——這不是一個會變長、需要翻頁的清單，是固定筆數的總覽。
+        200: envelope(t.Array(DatasetOverviewRowSchema)),
+        ...CommonFailureResponses,
+      },
+      detail: {
+        summary: '九個法規資料集在某一基準日的總覽（不回 records）',
+        description:
+          `${describeRegulatoryDatasetErrors(REGULATORY_DATASET_ENDPOINT_ERRORS.overview)}` +
+          ' asOfDate 必填且不預設今天；九個資料集固定各一列，即使某一列在該基準日沒有適用版本' +
+          '（effectiveVersion: null）。人工維護的資料集（10）的 lastSync.kind 恆為 not-applicable，' +
+          '自動同步但尚未有任何紀錄的資料集為 never-synced；內容請改打 resolve 或 list。',
       },
     })

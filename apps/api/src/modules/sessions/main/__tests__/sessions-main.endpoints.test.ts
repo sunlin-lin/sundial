@@ -98,6 +98,11 @@ type LoginShape = {
 
 type RefreshShape = { readonly accessToken: string }
 type RevocationShape = { readonly ok: boolean }
+type SessionContextShape = {
+  readonly user: { readonly id: string; readonly companyUserId: string; readonly displayName: string }
+  readonly company: { readonly id: string; readonly companyCode: string; readonly name: string }
+  readonly permissionCodes: readonly string[]
+}
 
 let database: Database
 
@@ -762,11 +767,18 @@ describe('sessions/main endpoints：登出（integration）', () => {
     // `901` 依 §1.3 一律不帶 errors：前端對它的處置只有一種（顯示無權限），細節只進 log。
     expect(response.payload.errors).toEqual([])
 
-    // 另一支已登入群組的端點同樣被擋（§7.1 要求每個端點都有一條無權限案例）。
+    // 另兩支已登入群組的端點同樣被擋（§7.1 要求每個端點都有一條無權限案例）：
+    // `context` 與 `logout`／`logout-all` 是同一條規則的落點——權限碼由路徑機械推導，
+    // 沒有「這支特殊」的例外分支（§5.2.2）。
     const logoutAll = await call<null>('/sessions/main/logout-all', { accessToken: session.accessToken })
     expect(logoutAll.status).toBe(403)
     expect(logoutAll.payload.code).toBe('901')
     expect(logoutAll.payload.expiresIn).toBe(sessionConfig.accessTokenTtlSeconds)
+
+    const context = await call<null>('/sessions/main/context', { accessToken: session.accessToken })
+    expect(context.status).toBe(403)
+    expect(context.payload.code).toBe('901')
+    expect(context.payload.expiresIn).toBe(sessionConfig.accessTokenTtlSeconds)
 
     // 身分仍然有效：refresh 照樣可以換票（被拒的只是那一個動作）。
     const stillAlive = await call<RefreshShape>('/sessions/main/refresh', {
@@ -779,5 +791,53 @@ describe('sessions/main endpoints：登出（integration）', () => {
     const response = await call<null>('/sessions/main/logout', { accessToken: 'forged.token' })
     expect(response.status).toBe(401)
     expect(response.payload.code).toBe('900')
+  })
+})
+
+/**
+ * `POST /sessions/main/context`（任務三）：重新整理會掉線、前端拿不到權限碼，這兩個症狀的解法。
+ */
+describe('sessions/main/context（integration，任務三）', () => {
+  test('回身分與這個成員實際擁有的權限碼，且與登入回應的 user／company 一致', async () => {
+    const grantedCodes = ['sessions.main.context', 'sessions.main.logout']
+    const account = await registerAccount(grantedCodes)
+    const session = await loginAs(account)
+
+    const response = await call<SessionContextShape>('/sessions/main/context', { accessToken: session.accessToken })
+
+    expect(response.status).toBe(200)
+    expect(response.payload.code).toBe('200')
+    expect(response.payload.errors).toEqual([])
+    // `context` 通過的是已登入群組的憑證驗證器，因此照常續期（不是發證，§1.3）。
+    expect(response.payload.expiresIn).toBe(sessionConfig.accessTokenTtlSeconds)
+
+    const data = response.payload.data
+    expect(data.user).toEqual({ id: account.userId, companyUserId: account.companyUserId, displayName: account.displayName })
+    expect(data.company).toEqual({ id: account.companyId, companyCode: account.companyCode, name: account.companyName })
+
+    // **這個成員實際擁有的權限碼**，不是全部權限碼清單（任務三）：只有這兩碼被授予，
+    // 且輸出已排序（見 handler 的 `toSessionContextData`）。
+    expect(data.permissionCodes).toEqual([...grantedCodes].toSorted())
+  })
+
+  test('只授予 context 本身：permissionCodes 恰好一筆，不多不少', async () => {
+    // `context` 本身也需要權限碼（§5.2.2），因此不能測「完全沒有權限碼」的情境——
+    // 那會在進 handler 之前就被擋成 403（見上面「沒有 sessions.main.logout 權限碼」那一條）。
+    // 這裡驗證的是另一件事：只授予這一碼時，`permissionCodes` 恰好回這一筆，
+    // 不會多出、也不會漏掉——不是靠巧合對上，而是真的查了這個成員實際擁有的集合。
+    const account = await registerAccount(['sessions.main.context'])
+    const session = await loginAs(account)
+
+    const response = await call<SessionContextShape>('/sessions/main/context', { accessToken: session.accessToken })
+
+    expect(response.status).toBe(200)
+    expect(response.payload.data.permissionCodes).toEqual(['sessions.main.context'])
+  })
+
+  test('未帶 token 一律回 401／900，且 expiresIn 為 null', async () => {
+    const response = await call<null>('/sessions/main/context')
+    expect(response.status).toBe(401)
+    expect(response.payload.code).toBe('900')
+    expect(response.payload.expiresIn).toBeNull()
   })
 })

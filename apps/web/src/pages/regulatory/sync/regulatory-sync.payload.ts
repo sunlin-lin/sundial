@@ -1,5 +1,5 @@
 /**
- * 畫面上的查詢條件 → 送給 `regulatory.sync.list` 的業務欄位（§1.3 的第 (4) 類、§0.5 的 `.payload.ts`）。
+ * 畫面上的查詢條件 → 送給後端的業務欄位（§1.3 的第 (4) 類、§0.5 的 `.payload.ts`）。
  *
  * 型別全部來自 `api/generated/`，本檔沒有任何描述 API 形狀的宣告（§3.2）：
  * 後端把 `datasetCode` 的合法值改掉、或把 `sort.field` 的可選欄位改掉，這裡當場編譯錯誤。
@@ -39,7 +39,17 @@ export const SYNC_LIST_PER_PAGE = 20
 export const SYNC_LIST_SORT = { field: 'startedAt', order: 'desc' } as const
 
 /**
- * 組出一次查詢。
+ * 預設選的資料集：勞保投保薪資分級表。它是薪資結算最常被回頭核對的一份。
+ *
+ * 這個常數原本在 `.dataset.view.ts`（那一份手寫的「代碼 → 名稱」對照）裡，
+ * 那個檔案已經整個刪掉——名稱現在直接來自 `regulatory.sync.list` 自己的回應
+ *（`datasets`，見 `.view.ts` 檔頭）。「預設選哪一個」不是名稱的一部分，
+ * 它是查詢條件的預設值，因此留在這裡。
+ */
+export const DEFAULT_DATASET_CODE: SyncDatasetCode = 1
+
+/**
+ * 組出一次同步歷程查詢。
  *
  * **沒有公司欄位，日後也不得加**（計畫 §2.1）：`regulatory_sync_logs` 沒有 `company_id`，
  * 政府法規是全國一份。加了公司篩選之後那個條件會一路傳到後端，逼出一個「法規資料要不要分公司」
@@ -48,7 +58,10 @@ export const SYNC_LIST_SORT = { field: 'startedAt', order: 'desc' } as const
  * @param datasetCode 後端**必填**：這支端點一次只查一個資料集，因此畫面上必須有選擇器。
  * @param currentPage 1 起算（§7.1）。篩選條件變更時由呼叫端歸零回第 1 頁。
  */
-export const toSyncListQuery = (datasetCode: SyncDatasetCode, currentPage: number): SyncListQuery => ({
+export const toSyncListQuery = (
+  datasetCode: SyncDatasetCode,
+  currentPage: number,
+): SyncListQuery => ({
   datasetCode,
   currentPage,
   perPage: SYNC_LIST_PER_PAGE,

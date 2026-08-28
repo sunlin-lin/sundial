@@ -17,8 +17,8 @@
  * 因此下面的 context 裡**沒有 `companyId`**——不是漏了，是這個模組根本沒有那個維度。
  */
 import type { Database } from '../../../../db/client.ts'
-import type { RegulatoryRawFormatValue } from '../../../../db/schema/index.ts'
-import { REGULATORY_DATASETS, type RegulatoryDatasetCode } from './regulatory-dataset-code.ts'
+import type { RegulatoryRawFormatValue, RegulatorySyncStatusValue } from '../../../../db/schema/index.ts'
+import { REGULATORY_DATASETS, type RegulatoryDatasetCode, type RegulatoryDatasetMaintenance } from './regulatory-dataset-code.ts'
 import type { RegulatoryRecordData } from './regulatory-record-shape.ts'
 
 /**
@@ -252,4 +252,71 @@ export type EffectiveRegulatoryDataset<TCode extends RegulatoryDatasetCode = Reg
   readonly asOfDate: string
   readonly version: DatasetVersionDetail
   readonly records: readonly RegulatoryRecordView<TCode>[]
+}
+
+/**
+ * `overview` 的輸入（實作計畫 03 §3、任務一）。
+ *
+ * **基準日必填，理由與 {@link ResolveEffectiveDatasetInput.asOfDate} 逐字相同**：
+ * 不預設今天——補算去年 12 月的薪資會抓到今年的費率，算出一個完全合理的數字。
+ */
+export type DatasetOverviewInput = {
+  readonly asOfDate: string
+}
+
+/**
+ * 總覽一列裡「該基準日適用的版本」，只留總覽要顯示的三欄。
+ *
+ * **不是 {@link DatasetVersionSummary} 的別名**：總覽不回版本 id、失效日、同步完成時間這些欄位
+ * ——那些要看，前端本來就有版本清單／內容可以打（計畫 03 §3「不回 records」的同一條理由，
+ * 只是這裡連 metadata 也一併收窄）。
+ *
+ * `null`（見 {@link DatasetOverviewRow.effectiveVersion}）代表**該基準日沒有任何一版涵蓋**
+ * ——這是 §3.1.3 查詢類「查無資料」的同一種語意，這個欄位只有這一種 `null` 的意思，
+ * 不會與下面 `lastSync` 那個需要判別聯集的情況混在一起。
+ */
+export type DatasetOverviewVersion = {
+  readonly versionCode: string
+  readonly effectiveFrom: string
+  readonly recordCount: number | null
+}
+
+/**
+ * 總覽一列裡「最近一次同步」的狀態。
+ *
+ * **判別聯集，不是一個可以是 `null` 的物件**——這正是任務一要求的表達方式。人工維護的資料集
+ * （`dataset_code=10`）**永遠**沒有同步紀錄，那是規格不是故障；而自動同步的資料集在剛上線、
+ * 排程還沒跑過第一次之前，同樣沒有紀錄。這兩種「沒有紀錄」若都回 `null`，前端只能看著一個
+ * 空值猜「這是『不適用』還是『還沒跑過』」——猜錯的後果是把一個健康的新資料集當成同步壞了
+ * 顯示告警，或反過來把一個真的忘了排程的資料集當成「本來就不用同步」而放著不管。
+ *
+ * 三個 `kind` 把這個判斷收回後端，且**判斷來源與 `null` 無關**：`not-applicable` 只由
+ * {@link RegulatoryDatasetMaintenance} 決定（`maintenance === 'manual'`），不是猜的；
+ * `synced` 只在真的查到紀錄時出現；介於中間、「自動同步但查無紀錄」的情況只剩
+ * `never-synced` 一種可能，三者互斥又完備，前端不必再組合出第四種解讀。
+ */
+export type DatasetOverviewLastSync =
+  | { readonly kind: 'not-applicable' }
+  | { readonly kind: 'never-synced' }
+  | {
+      readonly kind: 'synced'
+      readonly startedAt: string
+      readonly finishedAt: string | null
+      readonly statusCode: RegulatorySyncStatusValue
+    }
+
+/**
+ * 總覽一列。
+ *
+ * **九個資料集固定各一列**，即使某一列在這個基準日沒有適用版本（`effectiveVersion: null`）
+ * ——任務一明文：少一列會讓前端以為那個資料集不存在。`name` 與 `maintenance` 直接來自
+ * {@link REGULATORY_DATASETS}，讓「代碼 → 名稱」不必在前端語系檔再維護第三份副本
+ * （文件、後端常數之後的第三份——那一份 `check:dataset-code` 掃描器比對不到，見計畫任務一）。
+ */
+export type DatasetOverviewRow = {
+  readonly datasetCode: RegulatoryDatasetCode
+  readonly name: string
+  readonly maintenance: RegulatoryDatasetMaintenance
+  readonly effectiveVersion: DatasetOverviewVersion | null
+  readonly lastSync: DatasetOverviewLastSync
 }

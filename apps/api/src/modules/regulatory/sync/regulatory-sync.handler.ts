@@ -16,6 +16,7 @@ import { resolveServiceResult } from '../../../http/error-boundary.ts'
 import type { RequestSession } from '../../../http/request-context.ts'
 import type { EnvelopeBody } from '../../../shared/envelope.ts'
 import { toListView } from '../../../shared/list-view.ts'
+import { REGULATORY_DATASET_CODES, REGULATORY_DATASETS } from '../datasets/domain/regulatory-dataset-code.ts'
 import type { RegulatoryDatasetCode } from '../datasets/regulatory-datasets.service.ts'
 import {
   resolveSyncLogSort,
@@ -102,15 +103,60 @@ type ListBody = {
 /** 搜尋條件的回聲（§1.4）。`datasetCode` 是必填，因此這一包永遠有值。 */
 const toSearchEcho = (body: ListBody) => ({ datasetCode: body.datasetCode })
 
-const toSyncLogListData = (query: SyncLogListQuery, body: ListBody, page: SyncLogPage) =>
+/**
+ * 資料集名稱：**唯一來源是 `REGULATORY_DATASETS`**，不得另外維護一份對照。
+ *
+ * 這支端點原本沒有名稱，前端只能自己在語系檔存一份「代碼 → 名稱」——那是文件、
+ * `REGULATORY_DATASETS` 之後的**第三份副本**，而 `check:dataset-code`（計畫 §3.1.2）
+ * 只比對前兩份，第三份對調兩個名稱不會有任何地方變紅。回傳名稱之後第三份就沒有存在的理由。
+ *
+ * **放在 `data` 的非列表部分（與 `search`／`sort`／`pagination`／`data` 同層），不是逐列重複**：
+ * 本端點一次只看一個資料集（`datasetCode` 必填，§4.2），每一列的名稱必然相同——重複九十七次
+ * 只是多送位元組，且讓「這個名稱到底是哪一列決定的」變成一個沒有意義的問題。
+ */
+const toDatasetName = (query: SyncLogListQuery): string => REGULATORY_DATASETS[query.datasetCode].name
+
+/**
+ * 全部九個資料集的代碼與名稱，供前端在**查詢之前**顯示「選擇資料集」的選項。
+ *
+ * 同步歷程頁一次只看一個資料集（`datasetCode` 必填），但那一排選項本身要在查詢之前就顯示
+ * 出來——若只回當次查詢那一個的名稱（{@link toDatasetName}），前端只剩兩條路：自己在語系檔
+ * 存一份「代碼 → 名稱」（第三份副本，`check:dataset-code` 守不到，見 {@link toDatasetName} 的
+ * 說明），或對九個代碼各打一次本端點只為了湊出這排選項（一支請求換一個常數字串，九支換九個）。
+ * 兩條路都不對，因此改成這支端點一併回傳。
+ *
+ * **與 `datasetName` 用途不同，兩者都留著**：`datasetName` 回答「你正在看哪一個」（當次查詢的
+ * 那一個），`datasets` 回答「有哪些可以選」（全部九個，且要在查詢之前就顯示）——把 `datasets`
+ * 當成 `datasetName` 的清單版來想，會忽略「查詢之前」這個時間點上的差異。
+ *
+ * **九個代碼、固定順序，不受查詢結果影響**：不分「有沒有解析器」（`10` 是人工維護，一樣要在
+ * 清單裡，見 `datasets/domain/regulatory-dataset-code.ts` 的 `REGULATORY_DATASET_MAINTENANCE`）、
+ * 不分「有沒有同步過」（若只列查得到紀錄的資料集，一個全新環境會少幾個選項，而那正是計畫任務一
+ * 已經處理過的同一種錯——少一項會讓人以為那個資料集不存在）。順序照 `REGULATORY_DATASET_CODES`
+ * （即代碼由小到大，`7` 是永久空號，不出現在清單裡），不會因為 `sort`／`search` 而改變。
+ *
+ * 唯一來源仍是 `REGULATORY_DATASETS`，這裡不是第二份對照，只是換一種形狀把同一份常數列出來。
+ */
+/**
+ * 回傳型別**刻意不加 `readonly`**（與 `shared/list-view.ts` 的 `PaginationView` 同一個理由）：
+ * Elysia 會拿路由 `response` schema 推出來的靜態型別去比對 handler 的回傳值，那個型別是可變的
+ * ——加了 `readonly` 會讓這支端點的型別檢查失敗，唯一的修法是 `as`（§2.2 禁止）。
+ */
+const toDatasetOptionsData = (): { code: RegulatoryDatasetCode; name: string }[] =>
+  REGULATORY_DATASET_CODES.map((code) => ({ code, name: REGULATORY_DATASETS[code].name }))
+
+const toSyncLogListData = (query: SyncLogListQuery, body: ListBody, page: SyncLogPage) => ({
+  datasetName: toDatasetName(query),
+  datasets: toDatasetOptionsData(),
   // `search` 與 `sort` 由**共用的** list 組裝函式帶回（§1.8.1），不讓端點自己填：
   // 這兩段是最常被忘記填的東西，而漏填是靜默的——前端的 race condition 防護當場失效。
-  toListView(
+  ...toListView(
     toSearchEcho(body),
     query.sort,
     { currentPage: query.currentPage, perPage: query.perPage, totalCount: page.totalCount },
     page.items.map(toSyncLogSummaryData),
-  )
+  ),
+})
 
 /** 端點 `data` 的型別。由映射函式反推，因此**改了映射就會改型別**，不會兩邊漂移。 */
 export type SyncLogListData = ReturnType<typeof toSyncLogListData>

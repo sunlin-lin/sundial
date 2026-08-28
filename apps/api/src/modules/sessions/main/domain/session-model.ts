@@ -116,3 +116,22 @@ export type ConsumedRefreshTicket = {
   readonly identity: VerifiedIdentity
   readonly ticketId: string
 }
+
+/**
+ * 身分脈絡查詢的成功結果（`POST /sessions/main/context`，已登入群組）。
+ *
+ * **這支端點同時解決兩個症狀**：重新整理會掉線（`refresh` 只回 `accessToken`，沒有任何端點
+ * 回得出「我是誰」）；前端拿不到權限碼（登入回應只有 `user`／`company`，24 支端點裡沒有
+ * 「我有哪些權限」，前端無法做權限把關，只能完全依賴後端回 `901`）。
+ *
+ * `identity`／`profile` 沿用登入端點已經在算的同一份資料（同一支 `findSessionProfile`），
+ * `permissionCodes` 的來源與身分驗證 middleware 逐字相同（`company-users` 的
+ * `listPermissionCodes`，見 `impl/sessions-main.context.service.ts`）——**不得複製第二份查詢邏輯**，
+ * 否則兩份實作日後分岔，「前端以為有權限、後端卻回 901」這種狀況就無從避免。
+ */
+export type SessionContextOutcome = {
+  readonly identity: VerifiedIdentity
+  readonly profile: SessionProfile
+  /** 這個成員在這家公司**實際擁有**的權限碼，不是全部權限碼清單。 */
+  readonly permissionCodes: ReadonlySet<string>
+}

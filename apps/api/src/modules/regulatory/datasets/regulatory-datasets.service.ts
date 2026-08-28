@@ -35,6 +35,8 @@
 import type { ServiceResult } from '../../../shared/service-result.ts'
 import type { RegulatoryDatasetCode } from './domain/regulatory-dataset-code.ts'
 import type {
+  DatasetOverviewInput,
+  DatasetOverviewRow,
   DatasetVersionDetail,
   DatasetVersionListQuery,
   DatasetVersionPage,
@@ -45,10 +47,15 @@ import type {
 } from './domain/regulatory-dataset-model.ts'
 import { getDatasetVersion as getDatasetVersionImpl } from './impl/regulatory-datasets.get.service.ts'
 import { listDatasetVersions as listDatasetVersionsImpl } from './impl/regulatory-datasets.list.service.ts'
+import { getDatasetOverview as getDatasetOverviewImpl } from './impl/regulatory-datasets.overview.service.ts'
 import { resolveEffectiveDataset as resolveEffectiveDatasetImpl } from './impl/regulatory-datasets.resolve.service.ts'
 
 export type { RegulatoryDatasetsContext }
 export type {
+  DatasetOverviewInput,
+  DatasetOverviewLastSync,
+  DatasetOverviewRow,
+  DatasetOverviewVersion,
   DatasetVersionDetail,
   DatasetVersionListQuery,
   DatasetVersionPage,
@@ -91,3 +98,12 @@ export const resolveEffectiveDataset = <TCode extends RegulatoryDatasetCode>(
   context: RegulatoryDatasetsContext,
   input: ResolveEffectiveDatasetInput<TCode>,
 ): Promise<ServiceResult<EffectiveRegulatoryDataset<TCode>>> => resolveEffectiveDatasetImpl(context, input)
+
+/**
+ * 九個資料集在某一基準日的總覽：現在是哪一版、維護方式、最近一次同步（任務一）。
+ * **不回 records**——內容走 {@link resolveEffectiveDataset}。
+ */
+export const getDatasetOverview = (
+  context: RegulatoryDatasetsContext,
+  input: DatasetOverviewInput,
+): Promise<ServiceResult<readonly DatasetOverviewRow[]>> => getDatasetOverviewImpl(context, input)

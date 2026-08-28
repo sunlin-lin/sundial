@@ -23,6 +23,9 @@ import type { ServiceResult } from '../../../shared/service-result.ts'
 import type { RegulatoryDatasetCode } from './domain/regulatory-dataset-code.ts'
 import {
   resolveDatasetVersionSort,
+  type DatasetOverviewLastSync,
+  type DatasetOverviewRow,
+  type DatasetOverviewVersion,
   type DatasetVersionDetail,
   type DatasetVersionListQuery,
   type DatasetVersionPage,
@@ -33,7 +36,12 @@ import {
   type RegulatoryRecordView,
 } from './domain/regulatory-dataset-model.ts'
 import { RegulatoryDatasetErrorCode } from './regulatory-datasets.errors.ts'
-import { getDatasetVersion, listDatasetVersions, resolveEffectiveDataset } from './regulatory-datasets.service.ts'
+import {
+  getDatasetOverview,
+  getDatasetVersion,
+  listDatasetVersions,
+  resolveEffectiveDataset,
+} from './regulatory-datasets.service.ts'
 
 /**
  * 由組裝點注入的相依。
@@ -64,7 +72,7 @@ type EndpointResult<TData> = EnvelopeBody<TData> | EnvelopeBody<null>
  * 確認這次請求真的經過了憑證驗證器。
  *
  * **本模組不需要身分裡的任何一個欄位**（沒有 `companyId`，見上），因此這個檢查看起來多餘。
- * 它擋的是另一件事：這三支端點依計畫 §4.2 必須掛在**已登入群組**，而「掛錯群組」
+ * 它擋的是另一件事：這四支端點依計畫 §4.2 必須掛在**已登入群組**，而「掛錯群組」
  * 在程式碼上就是組裝點的一行差異、沒有任何測試會變紅——症狀是法規端點對未登入者開放。
  * `session === null` 代表沒有任何憑證驗證器跑過（§1.9.2），那是**程式組裝錯誤**，
  * 因此走例外路徑（§3.1.2）：回一個業務錯誤會讓這個漏洞看起來像一次普通的操作失敗。
@@ -132,6 +140,53 @@ const toResolvedDatasetData = (resolved: EffectiveRegulatoryDataset) => ({
   records: resolved.records.map(toRegulatoryRecordData),
 })
 
+/**
+ * 總覽一列裡「適用版本」→ 本端點的形狀。
+ *
+ * 逐欄挑選而不是把 service 的物件直接指派給 `data`（§2、§1.8.0 的⑥）：`DatasetOverviewVersion`
+ * 目前剛好只有這三欄，但明確映射讓「哪些欄位對外」是這裡的一個決定，不是型別形狀的意外。
+ */
+const toDatasetOverviewVersionData = (version: DatasetOverviewVersion) => ({
+  versionCode: version.versionCode,
+  effectiveFrom: version.effectiveFrom,
+  recordCount: version.recordCount,
+})
+
+/**
+ * 總覽一列裡「最近一次同步」→ 本端點的形狀。
+ *
+ * 用 `switch` 逐一展開而不是整包 `...lastSync`：`DatasetOverviewLastSync` 是判別聯集，
+ * 窮舉展開讓「新增第四種 `kind`」在這裡當場編譯不過，而不是安靜地被 `...` 直接透傳過去
+ * ——透傳的話，域模型加一個欄位就自動出現在 API 上，正是 §2 那條規則要防的事。
+ */
+const toDatasetOverviewLastSyncData = (lastSync: DatasetOverviewLastSync) => {
+  switch (lastSync.kind) {
+    case 'not-applicable':
+      return { kind: 'not-applicable' as const }
+    case 'never-synced':
+      return { kind: 'never-synced' as const }
+    case 'synced':
+      return {
+        kind: 'synced' as const,
+        startedAt: lastSync.startedAt,
+        finishedAt: lastSync.finishedAt,
+        statusCode: lastSync.statusCode,
+      }
+  }
+}
+
+const toDatasetOverviewRowData = (row: DatasetOverviewRow) => ({
+  datasetCode: row.datasetCode,
+  name: row.name,
+  maintenance: row.maintenance,
+  effectiveVersion: row.effectiveVersion === null ? null : toDatasetOverviewVersionData(row.effectiveVersion),
+  lastSync: toDatasetOverviewLastSyncData(row.lastSync),
+})
+
+const toDatasetOverviewData = (rows: readonly DatasetOverviewRow[]) => rows.map(toDatasetOverviewRowData)
+
+export type DatasetOverviewData = ReturnType<typeof toDatasetOverviewData>
+
 type ListBody = {
   readonly datasetCode: RegulatoryDatasetCode
   readonly perPage: number
@@ -140,6 +195,9 @@ type ListBody = {
 }
 
 type TargetBody = { readonly id: number }
+
+/** `overview` 的 body：只有基準日（§1.4 之外的形狀——這支不是分頁列表，見 routes 的說明）。 */
+type OverviewBody = { readonly asOfDate: string }
 
 type ResolveBody = {
   readonly datasetCode: RegulatoryDatasetCode
@@ -237,6 +295,20 @@ export const handleDatasetVersionResolve = async (
     asOfDate: context.body.asOfDate,
   })
   const outcome = toResolveOutcome(result)
+  context.set.status = outcome.status
+  return outcome.body
+}
+
+export const handleDatasetOverview = async (
+  dependencies: RegulatoryDatasetsDependencies,
+  context: EndpointContext<OverviewBody>,
+): Promise<EndpointResult<DatasetOverviewData>> => {
+  requireAuthenticatedRequest(context.requestContext.session)
+  const result = await getDatasetOverview(dependencies, {
+    // 原樣傳下去，不補預設值，理由與 `resolve` 相同（計畫 §4.2、任務一）。
+    asOfDate: context.body.asOfDate,
+  })
+  const outcome = resolveServiceResult(result, toDatasetOverviewData)
   context.set.status = outcome.status
   return outcome.body
 }
