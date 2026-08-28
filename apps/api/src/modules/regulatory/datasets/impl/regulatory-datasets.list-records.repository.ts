@@ -41,12 +41,18 @@ import { parseRegulatoryRecordData } from '../domain/regulatory-record-shape.ts'
  *
  * 四個 decimal 欄位（`range_from`／`range_to`／`amount`／`rate`）讀出來是**字串**
  * （連線池設了 `decimalNumbers: false`），本層原樣往上傳，**不做任何 `Number(...)`**（§4.7）。
+ *
+ * ## 泛型從這一層開始，不是從 service 開始
+ *
+ * `data` 的型別在這一行被 {@link parseRegulatoryRecordData} 決定（它本來就是泛型的），
+ * 因此收斂的起點就在這裡。若只在 service 那一層加泛型、這裡仍回聯集，service 就得靠一次
+ * `as` 把聯集轉成單一形狀——而那個 `as` 沒有經過任何檢查，正是 §2.2 禁止的那一種。
  */
-export const listDatasetVersionRecords = async (
+export const listDatasetVersionRecords = async <TCode extends RegulatoryDatasetCode>(
   runner: QueryRunner,
-  datasetCode: RegulatoryDatasetCode,
+  datasetCode: TCode,
   datasetVersionId: number,
-): Promise<readonly RegulatoryRecordView[]> => {
+): Promise<readonly RegulatoryRecordView<TCode>[]> => {
   const rows = await runner
     .select({
       id: regulatoryRecords.id,

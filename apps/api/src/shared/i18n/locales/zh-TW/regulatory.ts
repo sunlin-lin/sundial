@@ -2,10 +2,12 @@
  * 語系檔：zh-TW × `modules/regulatory/`（§1.3、§1.8.2）。
  *
  * 形狀與 key 的推導規則見同目錄的 `sessions.ts` 檔頭：次目錄 → 類別 → 訊息名，
- * 對應 `modules/regulatory/datasets/`，因此這一批 key 都長成 `regulatory.datasets.errors.*`。
+ * 對應 `modules/regulatory/` 底下的兩個次目錄，因此 key 分成
+ * `regulatory.datasets.errors.*`（查詢）與 `regulatory.sync.errors.*`（同步）兩批。
  *
- * ⚠️ **本檔只有「字」，規格在 `modules/regulatory/datasets/regulatory-datasets.errors.ts`。**
- * 改字之前請先讀那一頁——尤其是「這一則錯誤有兩個形狀不同的呼叫者」那一段。
+ * ⚠️ **本檔只有「字」，規格在各次目錄的 `*.errors.ts`。**
+ * 改字之前請先讀那一頁——尤其是 datasets 那則「有兩個形狀不同的呼叫者」，
+ * 以及 sync 那兩則「不會出現在任何 HTTP 回應裡」。
  */
 
 export const REGULATORY = {
@@ -23,6 +25,27 @@ export const REGULATORY = {
        * 而多一份宣告就多一個「句子與宣告對不上」的失效點。
        */
       'no-effective-version': '該法規適用基準日沒有可用的版本資料',
+    },
+  },
+  sync: {
+    errors: {
+      /**
+       * 同一個資料集已經有活著的同步在執行中。
+       *
+       * ⚠️ 訊息**不提「請稍後再試」以外的處置**：這一則的呼叫端是排程器，不是使用者。
+       * 它唯一該做的事就是這一輪跳過、下一輪再來——而「要不要強制中斷前一個程序」
+       * 是一個沒有人該從錯誤訊息裡讀到答案的決定（強制中斷會讓兩個程序同時寫同一個版本）。
+       */
+      'already-running': '這個法規資料集已有同步作業執行中，請稍後再試',
+      /**
+       * 這一次同步失敗。
+       *
+       * ⚠️ 句子裡刻意**不含失敗原因**：原因往往很長（政府回了一頁 HTML、某一列的日期壞了），
+       * 而它已經完整寫在 `regulatory_sync_logs.error_message`，`errors[].data` 裡也有一份摘要。
+       * 把它塞進這一句會需要一份插值宣告（`MESSAGE_PARAM_SPECS`），
+       * 而多一份宣告就多一個「句子與宣告對不上」的失效點。
+       */
+      'sync-failed': '法規資料同步失敗，請查看同步歷程的失敗原因',
     },
   },
 } as const

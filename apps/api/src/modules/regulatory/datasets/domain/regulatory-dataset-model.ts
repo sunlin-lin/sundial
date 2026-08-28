@@ -191,8 +191,17 @@ export type DatasetVersionTargetInput = {
   readonly id: number
 }
 
-export type ResolveEffectiveDatasetInput = {
-  readonly datasetCode: RegulatoryDatasetCode
+/**
+ * `resolve` 的輸入。
+ *
+ * **`TCode` 就是這一串泛型的起點**：呼叫端寫 `{ datasetCode: 1, ... }` 時 `TCode` 被推導成 `1`，
+ * 於是 {@link EffectiveRegulatoryDataset} 與 {@link RegulatoryRecordView} 的 `data`
+ * 一路收斂到那一個資料集的形狀。呼叫端傳的是一個 `RegulatoryDatasetCode` 型別的變數
+ * （HTTP handler 就是這樣，代碼要到執行期才知道）時，`TCode` 推導成整個聯集
+ * ——那也是對的，理由見 `regulatory-datasets.service.ts` 檔頭那段「兩側為什麼不對稱」。
+ */
+export type ResolveEffectiveDatasetInput<TCode extends RegulatoryDatasetCode = RegulatoryDatasetCode> = {
+  readonly datasetCode: TCode
   /**
    * 法規適用基準日 `YYYY-MM-DD`。**必填，不預設今天**（計畫 §4.2）。
    *
@@ -207,8 +216,11 @@ export type ResolveEffectiveDatasetInput = {
  * **四個數值欄位都是 decimal 字串，禁止 `Number(...)` 後再計算**（§4.7、計畫 §6.1）：
  * 級距比對是「這個投保薪資落在 `rangeFrom` 與 `rangeTo` 之間嗎」，邊界值正好等於級距上限時，
  * 浮點誤差會讓它掉到下一級——保費差幾百塊，而薪資單上完全看不出異常。
+ *
+ * `TCode` 只影響 {@link data} 一個欄位；其餘欄位是 `regulatory_records` 的固定欄位，
+ * 每個資料集都一樣。預設參數是整個聯集，因此不指定時的意思是「任一資料集的一筆」。
  */
-export type RegulatoryRecordView = {
+export type RegulatoryRecordView<TCode extends RegulatoryDatasetCode = RegulatoryDatasetCode> = {
   readonly id: number
   /** 同一版本內穩定且唯一的資料鍵（例如級數、行業別代碼）。 */
   readonly recordKey: string
@@ -218,15 +230,26 @@ export type RegulatoryRecordView = {
   readonly rangeTo: string | null
   readonly amount: string | null
   readonly rate: string | null
-  /** 已依 `dataset_code` 驗證過形狀的完整內容（計畫 §6）。 */
-  readonly data: RegulatoryRecordData
+  /**
+   * 已依 `dataset_code` 驗證過形狀的完整內容（計畫 §6）。
+   *
+   * `TCode` 是單一代碼時，這裡就是**那一個資料集**的形狀，呼叫端不必再收窄；
+   * 而形狀尚未定義的那幾個代碼（`Type.Never()`）在這裡自然就是 `never`
+   * ——「這個資料集取不到任何值」不需要特例，它就是空型別本身的意思。
+   */
+  readonly data: RegulatoryRecordData<TCode>
   readonly sortOrder: number | null
 }
 
-/** `resolve` 的產物：基準日 ＋ 適用版本 ＋ 該版本的全部 records。 */
-export type EffectiveRegulatoryDataset = {
-  readonly datasetCode: RegulatoryDatasetCode
+/**
+ * `resolve` 的產物：基準日 ＋ 適用版本 ＋ 該版本的全部 records。
+ *
+ * `datasetCode` 也跟著收斂成 `TCode`（而不是留成整個聯集）：呼叫端拿它去分派時，
+ * 「我要的是 `1`、拿回來的卻宣告成任一代碼」會逼出一次多餘的比對，而那次比對永遠成立。
+ */
+export type EffectiveRegulatoryDataset<TCode extends RegulatoryDatasetCode = RegulatoryDatasetCode> = {
+  readonly datasetCode: TCode
   readonly asOfDate: string
   readonly version: DatasetVersionDetail
-  readonly records: readonly RegulatoryRecordView[]
+  readonly records: readonly RegulatoryRecordView<TCode>[]
 }

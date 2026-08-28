@@ -15,6 +15,7 @@
  * 那一個人的薪資單直接消失，而批次跑完看起來是成功的。
  */
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
+import type { RegulatoryDatasetCode } from '../domain/regulatory-dataset-code.ts'
 import type {
   EffectiveRegulatoryDataset,
   RegulatoryDatasetsContext,
@@ -36,11 +37,15 @@ import { findEffectiveDatasetVersion, listDatasetVersionRecords } from '../regul
  *
  * 沒有交易：兩次都是唯讀查詢，而版本與 records 都是 append-only 的（不會有人在這兩行之間
  * 改掉它們）。§4.4 要求同一交易的是「一個業務操作寫入多張表」，這裡一個字都沒寫。
+ *
+ * `TCode` 只是把 repository 那一層已經做完的收斂原樣帶到呼叫端，本層沒有多做任何事
+ * ——它一個 `as` 都沒有，因此「收斂」與「檢查」不會分家（形狀是 `parseRegulatoryRecordData`
+ * 真的驗過的那一個）。為什麼 HTTP 那一側不跟著收斂，見 `regulatory-datasets.service.ts` 檔頭。
  */
-export const resolveEffectiveDataset = async (
+export const resolveEffectiveDataset = async <TCode extends RegulatoryDatasetCode>(
   context: RegulatoryDatasetsContext,
-  input: ResolveEffectiveDatasetInput,
-): Promise<ServiceResult<EffectiveRegulatoryDataset>> => {
+  input: ResolveEffectiveDatasetInput<TCode>,
+): Promise<ServiceResult<EffectiveRegulatoryDataset<TCode>>> => {
   const version = await findEffectiveDatasetVersion(context.db, input.datasetCode, input.asOfDate)
   if (version === null) {
     // 錯誤集合只會有這一筆：本動作只有一條業務規則要檢查（「這一天有沒有版本」），

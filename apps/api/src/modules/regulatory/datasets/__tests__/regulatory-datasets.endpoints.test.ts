@@ -709,8 +709,13 @@ describe('resolveEffectiveDataset service（Payroll 的呼叫路徑）', () => {
 
     expect(result.value.version.versionCode).toBe('2021-01')
     const rate = result.value.records.find((record) => record.recordKey === 'rate')
-    // 型別上就取得到 `rate`（形狀已在 repository 收斂，計畫 §6），不需要任何 `as`。
+    // **這幾行同時是一則型別斷言**：`resolveEffectiveDataset` 以 `datasetCode` 為泛型參數，
+    // 這裡寫死了 `10`，因此 `data` 的型別就是 `dataset_code=10` 那一個形狀，不是十個形狀的聯集
+    // ——`'item' in data` 這種收窄不需要，`as` 更不需要。哪天泛型被改回去（或某一層把它收成
+    // `RegulatoryDatasetCode`），下面這兩行會**編譯不過**，而不是靜靜地變回聯集。
     expect(rate?.data.item).toBe('rate')
-    if (rate?.data.item === 'rate') expect(rate.data.rate).toBe('0.0211')
+    if (rate?.data.item === 'rate') {
+      expect(rate.data.rate).toBe('0.0211')
+    }
   })
 })

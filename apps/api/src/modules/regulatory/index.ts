@@ -10,6 +10,13 @@
  * 這不是不一致——前端該顯示空狀態，Payroll 則必須停下來：300 人的批次結算裡若有一人查無版本
  * 而呼叫端「log 並 continue」，那個人的薪資單會直接從當期結果中消失，而批次跑完看起來是成功的。
  *
+ * **經這裡呼叫時 `records[].data` 是收斂的，不必自己收窄**：`resolveEffectiveDataset` 以
+ * `datasetCode` 為泛型參數，因此 `resolveEffectiveDataset(ctx, { datasetCode: 1, asOfDate })`
+ * 拿回來的 `data` 就是勞保分級表那一個形狀，`data.monthlyInsuredSalary` 直接取得到。
+ * **同一支端點 `/regulatory/datasets/resolve` 的 response schema 仍然是全部形狀的聯集，
+ * 而那不是漏改**：端點的 `datasetCode` 要到執行期才知道，OpenAPI 契約本來就得涵蓋每一種可能。
+ * 完整的理由（以及「為什麼不該讓兩邊一致」）寫在 `datasets/regulatory-datasets.service.ts` 檔頭。
+ *
  * **跨模組的錯誤碼必須由呼叫端轉譯成自己的碼**（計畫 §4.4）：Payroll 的端點依 §1.8.3 要宣告
  * 自己會吐哪些錯誤碼，那份清單只能是 `payrolls.*`。轉譯時請把 `datasetCode` 與 `asOfDate`
  * 放進自己那筆錯誤的 `data`（本模組已經把兩者放在 `errors[].data` 裡），否則
@@ -26,3 +33,8 @@
  */
 export * from './datasets/regulatory-datasets.service.ts'
 export * from './datasets/regulatory-datasets.errors.ts'
+// `sync` 次目錄同樣只出 service 與 errors。它的 `runSync` **沒有端點**（計畫 D3），
+// 呼叫者是伺服器端的程序——而「所有呼叫必須經過入口」在跨大目錄時就是這個檔案（§0.3）。
+// 少了這兩行，那個動作在型別上沒有任何合法的呼叫路徑。
+export * from './sync/regulatory-sync.service.ts'
+export * from './sync/regulatory-sync.errors.ts'

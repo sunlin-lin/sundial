@@ -9,7 +9,11 @@
  * 它一旦連帶把 Elysia 拉進薪資結算模組，§3.1.1 那條「service／domain 不得 import http 層」
  * 就被一行看似無害的 import 繞過了。
  *
- * 本檔**不建立群組、不宣告驗證方式**（§1.9）：三支端點全部落在已登入群組（計畫 §4.2），
+ * 本檔**不建立群組、不宣告驗證方式**（§1.9）：四支端點全部落在已登入群組（計畫 §4.2），
  * 而那個決定寫在組裝點 `app/routes.ts`，不寫在這裡也不寫在端點上。
+ *
+ * 兩個次目錄各出一支：`datasets` 三支查詢端點，`sync` 一支同步歷程。
+ * **`sync` 的 `runSync` 不在這裡**——它沒有端點（計畫 D3），走的是 `index.ts` 那個出口的路徑。
  */
 export * from './datasets/regulatory-datasets.routes.ts'
+export * from './sync/regulatory-sync.routes.ts'

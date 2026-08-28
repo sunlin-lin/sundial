@@ -76,6 +76,82 @@ const SUPPLEMENTARY_PREMIUM_SHAPE = Type.Union([
 ])
 
 /**
+ * `dataset_code = 1` 勞工保險投保薪資分級表的 `data`（計畫 §7.0 已實地查證的來源）。
+ *
+ * 政府那一份（data.gov.tw `6258` 的 JSON 資源）每一列長這樣：
+ *
+ * ```json
+ * {"適用起日":"1150101","序號":"1","身分別":"一般勞工","投保薪資等級":"1",
+ *  "月薪資總額":"29500元以下","月投保薪資":"29500"}
+ * ```
+ *
+ * 對照關係（解析器在 `sync/domain/regulatory-labor-insurance-salary.ts`）：
+ *
+ * | 政府欄位 | 去哪裡 |
+ * |---|---|
+ * | `適用起日` | **版本的 `effective_from`**，不進 `data`（見下） |
+ * | `序號` | `regulatory_records.sort_order`（政府的原始列序） |
+ * | `身分別` | {@link insuredCategoryCode} ＋ `insuredCategoryName` ＋ `records.name` |
+ * | `投保薪資等級` | {@link grade} ＋ `records.code` |
+ * | `月薪資總額` | {@link monthlySalaryRangeText} ＋ `range_from`／`range_to` |
+ * | `月投保薪資` | {@link monthlyInsuredSalary} ＋ `records.amount` |
+ *
+ * ## `身分別` 收斂成四個字面值，不是 `Type.String()`
+ *
+ * 理由與 `dataset_code=10` 的 `item` 逐字同構（§2）：Payroll 是**依身分別挑分級表**的
+ * （一般勞工與部分工時勞工的第 1 級差了將近三倍），寫成 `Type.String()` 之後，
+ * 政府哪天把「部分工時勞工」改成別的字，解析會**通過驗證**，然後 Payroll 那一側查不到這一類，
+ * 於是那些人的投保薪資悄悄落到另一組級距上——一個完全合理、不會報錯的金額。
+ * 收成字面值之後，同一件事會在同步階段就變成 `status=3 失敗` ＋ 一筆 `error_message`。
+ *
+ * **代價要寫清楚：政府新增一種身分別時，這個資料集會同步失敗。** 那是要的——
+ * 新增一類投保身分是法規變更，Payroll 必須知道它存在，而不是靜靜地少算一群人。
+ *
+ * ## 沒有 `effectiveFrom`，即使政府把它放在每一列裡
+ *
+ * 生效日是**版本的屬性**（`regulatory_dataset_versions.effective_from`），不是每一筆的屬性。
+ * 抄一份進 `data` 會產生第二份真相：兩者不一致時沒有任何地方會報錯，而 `resolve` 只看版本那一份。
+ * 解析器改為**要求整批資料的 `適用起日` 完全一致**，不一致即失敗（推不出唯一的生效日，§7.2）。
+ *
+ * ## 級距上下限允許 `null`，且不補一個「合理的」邊界值
+ *
+ * 最低一級是「29500元以下」、最高一級是「43901元以上」，兩者各缺一邊。
+ * `null` 的意思是「這一邊沒有界線」，**刻意不填 `0` 或某個很大的數**：填了之後，
+ * 一支寫錯的級距查詢（`range_from <= x AND range_to >= x`）會回一個看起來正常的級距；
+ * 留 `null` 則是查不到——而查不到會有人來看，算錯不會。
+ */
+const LABOR_INSURANCE_SALARY_GRADE_SHAPE = Type.Object({
+  /** 投保身分別代碼。四個值即政府那一份的四種 `身分別`，理由見上。 */
+  insuredCategoryCode: Type.Union([
+    /** 一般勞工。 */
+    Type.Literal('general'),
+    /** 庇護性身心障礙者。 */
+    Type.Literal('shelteredDisabled'),
+    /** 部分工時勞工。 */
+    Type.Literal('partTime'),
+    /** 職訓機構受訓者。 */
+    Type.Literal('vocationalTrainee'),
+  ]),
+  /** 政府原文的身分別（`一般勞工`…）。保留原文供對帳：代碼是我們取的，原文才是公告上的字。 */
+  insuredCategoryName: Type.String({ minLength: 1 }),
+  /**
+   * 投保薪資等級（級數）。**是字串不是數字**：它是代碼不是量，不參與任何運算。
+   *
+   * 級數在每一種身分別內各自從 1 起算，因此它單獨不唯一——`record_key` 是
+   * 「身分別代碼 ＋ 級數」的組合，見 `sync/domain/` 的解析器。
+   */
+  grade: Type.String({ pattern: '^\\d+$' }),
+  /** 政府原文的月薪資總額區間（`29501元至30300元`）。拆解結果對不上時要能回頭看原文。 */
+  monthlySalaryRangeText: Type.String({ minLength: 1 }),
+  /** 月薪資總額下限（含）。最低一級是「N 元以下」，沒有下限，因此為 `null`。 */
+  monthlySalaryFrom: Type.Union([DecimalString, Type.Null()]),
+  /** 月薪資總額上限（含）。最高一級是「N 元以上」，沒有上限，因此為 `null`。 */
+  monthlySalaryTo: Type.Union([DecimalString, Type.Null()]),
+  /** 月投保薪資：這一級實際用來計算保費的金額。decimal 字串，禁止 `Number(...)`（§4.7）。 */
+  monthlyInsuredSalary: DecimalString,
+})
+
+/**
  * 「這個資料集的 `data` 形狀還沒有定義」。
  *
  * **這是一個明確的宣告，不是留空**，而且它**驗什麼都不會過**。理由與計畫 §7.2
@@ -104,7 +180,9 @@ const SHAPE_NOT_YET_DEFINED = Type.Never({
  * 刻意不寫 `as const`：`as const` 會把 TypeBox 的內部結構一起變成唯讀，`Static<>` 就算不出型別了。
  */
 export const REGULATORY_RECORD_SHAPES = {
-  1: SHAPE_NOT_YET_DEFINED,
+  // `1` 是唯一一個已經有解析器的自動同步資料集（`sync` 次目錄）。其餘八項維持 `Type.Never()`
+  // ——它們的形狀要跟著各自的解析器一起定，先寫一個「看起來合理」的寬鬆形狀會**通過**驗證。
+  1: LABOR_INSURANCE_SALARY_GRADE_SHAPE,
   2: SHAPE_NOT_YET_DEFINED,
   3: SHAPE_NOT_YET_DEFINED,
   4: SHAPE_NOT_YET_DEFINED,

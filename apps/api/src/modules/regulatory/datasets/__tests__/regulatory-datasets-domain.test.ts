@@ -50,11 +50,19 @@ describe('parseRegulatoryRecordData：dataset_code=10 的三筆（migration 0015
   })
 
   test('形狀尚未定義的資料集：什麼都驗不過，而不是靜靜放行（計畫 §6、§7.2 的同一種取捨）', () => {
+    // 用 `2`（健保投保金額分級表）：它的形狀要跟著解析器一起定（Stage 3），現在是 `Type.Never()`。
+    // **不要拿 `1` 來測這件事**——`1` 已經有形狀了（`sync` 次目錄的解析器落地時一起定的），
+    // 拿它來測會變成在測「這個物件不符合勞保分級表的形狀」，而那是另一條規則。
+    //
     // 先寫一個「看起來合理」的寬鬆形狀，代價是它會**通過**驗證，
     // 於是欄位名對不上的資料會安靜地流進 Payroll。
-    const parsed = parseRegulatoryRecordData(1, { grade: 1, salary: '27470' })
+    const parsed = parseRegulatoryRecordData(2, { grade: 1, salary: '27470' })
     expect(parsed.ok).toBe(false)
     if (parsed.ok) return
-    expect(parsed.reason).toContain('dataset_code=1')
+    expect(parsed.reason).toContain('dataset_code=2')
+
+    // 「什麼都驗不過」是字面意思：連一個**在別的資料集上完全合法**的 `data` 也不通過。
+    // 這一行才是 `Type.Never()` 與「一個看起來合理的寬鬆形狀」真正的差別所在。
+    expect(parseRegulatoryRecordData(2, { item: 'rate', rate: '0.0211' }).ok).toBe(false)
   })
 })

@@ -17,6 +17,8 @@
     "check:i18n": "bun run apps/api/scripts/check-message-params.ts",
     "check:audit-policy": "bun run apps/api/scripts/check-audit-policy.ts",
     "check:dataset-code": "bun run apps/api/scripts/check-dataset-code.ts",
+    "//check:live-sources": "刻意不在 `ci` 裡：它會真的打政府端點，而 CI 環境未必有外網——串進去之後第一次紅燈的原因會與那次 PR 無關，處置幾乎必然是「先關掉」，然後永遠關著。該由有外網的環境跑：一支排程（與同步排程錯開）或一個標明「需要外網」的專屬 job。它沒有寬容模式（連不上就失敗）。真正的防線是排程同步本身（政府改格式時同步會 status=3 並留下 error_message），這支只是讓人在排程跑之前先知道；停掉它失去的是提前量，不是偵測能力。理由完整寫在 apps/api/scripts/check-live-sources.ts 檔頭。",
+    "check:live-sources": "bun run apps/api/scripts/check-live-sources.ts",
     "db:up": "docker compose -f docker-compose.dev.yml up -d --wait",
     "db:down": "docker compose -f docker-compose.dev.yml down",
     "db:generate": "bun run --filter @sundial/api db:generate",

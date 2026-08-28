@@ -61,8 +61,13 @@ export const findEffectiveDatasetVersion = (
   asOfDate: string,
 ): Promise<DatasetVersionDetail | null> => findEffectiveDatasetVersionImpl(runner, datasetCode, asOfDate)
 
-export const listDatasetVersionRecords = (
+/**
+ * 泛型原樣轉發（`TCode` 的意義見 `impl/regulatory-datasets.list-records.repository.ts`）：
+ * 入口檔在這裡若把它收成 `RegulatoryDatasetCode`，實作那一層的收斂就在轉發的這一行被丟掉了。
+ */
+export const listDatasetVersionRecords = <TCode extends RegulatoryDatasetCode>(
   runner: QueryRunner,
-  datasetCode: RegulatoryDatasetCode,
+  datasetCode: TCode,
   datasetVersionId: number,
-): Promise<readonly RegulatoryRecordView[]> => listDatasetVersionRecordsImpl(runner, datasetCode, datasetVersionId)
+): Promise<readonly RegulatoryRecordView<TCode>[]> =>
+  listDatasetVersionRecordsImpl(runner, datasetCode, datasetVersionId)

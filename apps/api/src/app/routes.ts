@@ -29,7 +29,7 @@ import { refreshGuard } from '../http/refresh-guard.ts'
 import { companyUsersRolesRoutes } from '../modules/company-users/routes.ts'
 import { employeesMainRoutes } from '../modules/employees/routes.ts'
 import { permissionsMainRoutes } from '../modules/permissions/routes.ts'
-import { regulatoryDatasetsRoutes } from '../modules/regulatory/routes.ts'
+import { regulatoryDatasetsRoutes, regulatorySyncRoutes } from '../modules/regulatory/routes.ts'
 import { rolesMainRoutes } from '../modules/roles/routes.ts'
 import {
   sessionsMainAuthenticatedRoutes,
@@ -100,6 +100,10 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
     // `asOfDate`，拿得到 clock 就寫得出「沒帶就用今天」，而那會讓補算去年 12 月的薪資
     // 抓到今年的費率，算出一個完全合理的數字。也沒有公司範圍——法規三表是平台全域資料。
     .use(regulatoryDatasetsRoutes({ db: database }))
+    // 同步歷程：**同樣只注入 `db`**。`sync` 次目錄的另一個動作（`runSync`）需要網路與計時器，
+    // 而它們刻意不在這裡——一支 HTTP 查詢不該有能力去打政府端點並寫入版本。人工觸發同步的端點
+    // 依計畫 D3 不開放（一家公司的管理者按一個鈕，平台上每一家公司的 Payroll 都跟著換版本）。
+    .use(regulatorySyncRoutes({ db: database }))
 }
 
 /**
