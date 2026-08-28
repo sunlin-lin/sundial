@@ -20,15 +20,15 @@
 
 ### 右側角色資料
 
-| UI 欄位／操作 | Schema 對應 | 規則 |
-|---|---|---|
-| 角色名稱 | `roles.name` | 必填 |
-| 角色代碼 | `roles.code` | 公司內唯一；建立後原則上不任意修改 |
-| 說明 | `roles.description` | 選填 |
-| 啟用狀態 | `roles.status` | 停用後不可再授予 |
-| 權限樹 | `permissions`、`role_permissions` | 大權限與小權限階層顯示 |
-| 儲存變更 | `roles`、`role_permissions` | 角色與權限應在同一交易完成 |
-| 刪除角色 | `roles.deleted_at` | 採 Soft Delete，不直接刪除歷史 |
+| UI 欄位／操作 | Schema 對應                       | 規則                               |
+| ------------- | --------------------------------- | ---------------------------------- |
+| 角色名稱      | `roles.name`                      | 必填                               |
+| 角色代碼      | `roles.code`                      | 公司內唯一；建立後原則上不任意修改 |
+| 說明          | `roles.description`               | 選填                               |
+| 啟用狀態      | `roles.status`                    | 停用後不可再授予                   |
+| 權限樹        | `permissions`、`role_permissions` | 大權限與小權限階層顯示             |
+| 儲存變更      | `roles`、`role_permissions`       | 角色與權限應在同一交易完成         |
+| 刪除角色      | `roles.deleted_at`                | 採 Soft Delete，不直接刪除歷史     |
 
 ## 權限樹
 
@@ -83,10 +83,10 @@
 
 ### `permissions` 建議補充
 
-| 欄位 | 型態 | 用途 | 狀態 |
-|---|---|---|---|
+| 欄位            | 型態      | 用途                             | 狀態                 |
+| --------------- | --------- | -------------------------------- | -------------------- |
 | `is_assignable` | `boolean` | 區分純分類大權限與可實際授權權限 | UI 規劃待納入 Schema |
-| `sort_order` | `integer` | 控制大權限及小權限顯示順序 | UI 規劃待納入 Schema |
+| `sort_order`    | `integer` | 控制大權限及小權限顯示順序       | UI 規劃待納入 Schema |
 
 ### 帳號／公司成員與角色關聯
 
@@ -116,5 +116,3 @@ company_user_roles 尚未定案
 - 不顯示預設／自訂：不影響後端保留 `roles.is_system`。
 - 刪除角色：與 `roles.deleted_at` 相容，採 Soft Delete。
 - 刪除前判斷角色是否被使用：目前缺少帳號／公司成員角色關聯，須在帳號模型階段補足。
-
-

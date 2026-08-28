@@ -12,21 +12,21 @@
 
 **設計理由：** 班別主檔保存可重用的班別定義，員工班表只引用班別，避免每天重複輸入相同工時規則。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `uuid` | 必填 | 主鍵，資料唯一識別碼 |
-| `company_id` | `uuid` | 必填 | 所屬公司外鍵 |
-| `code` | `varchar` | 必填 | 業務代碼 |
-| `name` | `varchar` | 必填 | 顯示名稱 |
-| `work_type_code` | `integer` | 必填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
-| `is_overnight` | `boolean` | 必填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
-| `is_flexible` | `boolean` | 必填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
-| `required_work_minutes` | `integer` | 必填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
-| `description` | `text` | 必填 | 用途或異動說明 |
-| `is_active` | `boolean` | 必填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
-| `created_at` | `datetime` | 必填 | 建立時間 |
-| `updated_at` | `datetime` | 必填 | 最後修改時間 |
-| `deleted_at` | `datetime` | 選填 | Soft Delete 時間 |
+| 欄位名稱                | 資料型態   | 必填性 | 欄位註釋                                     |
+| ----------------------- | ---------- | ------ | -------------------------------------------- |
+| `id`                    | `uuid`     | 必填   | 主鍵，資料唯一識別碼                         |
+| `company_id`            | `uuid`     | 必填   | 所屬公司外鍵                                 |
+| `code`                  | `varchar`  | 必填   | 業務代碼                                     |
+| `name`                  | `varchar`  | 必填   | 顯示名稱                                     |
+| `work_type_code`        | `integer`  | 必填   | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| `is_overnight`          | `boolean`  | 必填   | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| `is_flexible`           | `boolean`  | 必填   | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| `required_work_minutes` | `integer`  | 必填   | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| `description`           | `text`     | 必填   | 用途或異動說明                               |
+| `is_active`             | `boolean`  | 必填   | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| `created_at`            | `datetime` | 必填   | 建立時間                                     |
+| `updated_at`            | `datetime` | 必填   | 最後修改時間                                 |
+| `deleted_at`            | `datetime` | 選填   | Soft Delete 時間                             |
 
 ### `shift_work_periods`
 
@@ -34,15 +34,15 @@
 
 **設計理由：** 工作時段拆成子表，可表達跨日或一天多段工作，不必將開始、結束時間限制成班別主檔上的單一一組。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `型態待恢復` | 待核對 | 主鍵，資料唯一識別碼 |
-| `shift_definition_id` | `uuid` | 必填 | FK → `shift_definitions.id` |
-| `sequence_no` | `integer` | 必填 | 同一班別工作時段順序 |
-| `start_time` | `time` | 必填 | 工作時段開始時間 |
-| `end_time` | `time` | 必填 | 工作時段結束時間 |
-| `end_day_offset` | `integer` | 必填 | 結束日偏移；跨日班用 1 |
-| `work_minutes` | `integer` | 必填 | 此工作時段應工作分鐘數 |
+| 欄位名稱              | 資料型態  | 必填性 | 欄位註釋                    |
+| --------------------- | --------- | ------ | --------------------------- |
+| `id`                  | `uuid`    | 必填   | 主鍵，資料唯一識別碼        |
+| `shift_definition_id` | `uuid`    | 必填   | FK → `shift_definitions.id` |
+| `sequence_no`         | `integer` | 必填   | 同一班別工作時段順序        |
+| `start_time`          | `time`    | 必填   | 工作時段開始時間            |
+| `end_time`            | `time`    | 必填   | 工作時段結束時間            |
+| `end_day_offset`      | `integer` | 必填   | 結束日偏移；跨日班用 1      |
+| `work_minutes`        | `integer` | 必填   | 此工作時段應工作分鐘數      |
 
 ### `shift_breaks`
 
@@ -50,15 +50,21 @@
 
 **設計理由：** 休息時段與工作時段分開，可計算應工作時數及不計薪休息，也能支援一個班別有多段休息。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `型態待恢復` | 待核對 | 主鍵，資料唯一識別碼 |
-| `shift_definition_id` | `uuid` | 必填 | FK → `shift_definitions.id` |
-| `sequence_no` | `integer` | 必填 | 同一班別休息時段順序 |
-| `start_time` | `time` | 必填 | 休息開始時間 |
-| `end_time` | `time` | 必填 | 休息結束時間 |
-| `break_minutes` | `integer` | 必填 | 休息分鐘數 |
-| `is_paid` | `boolean` | 必填 | 是否為有薪休息 |
+| 欄位名稱              | 資料型態  | 必填性 | 欄位註釋                       |
+| --------------------- | --------- | ------ | ------------------------------ |
+| `id`                  | `uuid`    | 必填   | 主鍵，資料唯一識別碼           |
+| `shift_definition_id` | `uuid`    | 必填   | FK → `shift_definitions.id`    |
+| `sequence_no`         | `integer` | 必填   | 同一班別休息時段順序           |
+| `start_time`          | `time`    | 必填   | 休息開始時間                   |
+| `end_time`            | `time`    | 必填   | 休息結束時間                   |
+| `break_minutes`       | `integer` | 必填   | 休息分鐘數                     |
+| `is_paid`             | `boolean` | 必填   | 是否為有薪休息                 |
+| `start_day_offset`    | `integer` | 必填   | 休息開始日偏移；相對班次工作日 |
+| `end_day_offset`      | `integer` | 必填   | 休息結束日偏移                 |
+
+**兩個日偏移欄位是實作時的增補**（見 [實作計畫：班別設定](../plans/04-shift-definitions.md) §4.2）：22:00–06:00 的夜班休息 02:00–03:00，只有 `start_time` 的話分不出那個 `02:00` 是班次開始前二十小時還是開始後四小時。跨日班與多段休息都在既有範圍內，因此這不是「用不到」而是欄位不足。
+
+**兩張子表的 `id` 原標「型態待恢復」，已定為 `uuid`**：全站業務資料表一律 uuid（唯二例外是法規三表的 `bigint`，理由是平台全域、只增不改、列數極大）。
 
 ## 已確認的班別設定與排班模式範圍
 
@@ -79,65 +85,98 @@
 
 上述功能不能直接塞入 `shift_definitions`。尚未逐項確認的表名與欄位一律標記待設計，不從UI描述反推正式Schema。
 
-### `schedule_rules` / `schedule_rule_details`
+#### 定案：六項一律延後到排班上線之後再設計
 
-**註釋：** 固定週班或任意長度循環規則及每個週期日內容。規則需含公司、名稱、類型、週期長度與啟用狀態；明細需含週期序號、班別、日期性質及是否安排工作。做二休二以四日週期表達，不綁星期。
+**理由不是「沒空」。** 換班、代班、待命備勤、彈性工時這四項的共同性質是「**在既有班表上做修改**」的流程——而現在連班表都還沒有。沒有實際排班經驗就設計審核流程，會設計出形狀不對的東西：誰要審、審什麼、能不能撤銷、撤銷後班表怎麼還原，這些問題的答案取決於實際怎麼排班。
 
-**設計理由：** 排班規則與規則明細採主從結構：主表保存適用範圍與版本，明細保存循環內每天的安排，避免固定只支援單週或固定天數。
+**這六項與其他缺口的差別**：其他缺口不補就做不出已定案的畫面；這六項是**新功能**，延後不擋任何東西。
 
+**班組（第二項）比想像中小。** `employee_schedule_assignments.cycle_anchor_date` 已經表達了「同一套規則、不同起點」——A 班 anchor 為 1/1、B 班為 1/3，做二休二就自然錯開。因此班組**只需要一張分組主檔 ＋ 成員有效期間，排班的展開機制一行都不用改**。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `uuid` | 必填 | PK，員工排班規則指派 ID |
-| `employment_id` | `uuid` | 必填 | FK → `employee_employments.id` |
-| `schedule_rule_id` | `uuid` | 必填 | FK → `schedule_rules.id` |
-| `cycle_anchor_date` | `date` | 必填 | 週期第 1 日的定位基準日；使做二休二等任意週期可正確展開 |
-| `effective_from` | `date` | 必填 | 指派生效日 |
-| `effective_to` | `date` | 選填 | 指派失效日 |
-| `status_code` | `integer` | 必填 | 指派狀態代碼 |
-| `created_at` | `datetime` | 必填 | 建立時間 |
-| `updated_at` | `datetime` | 必填 | 修改時間 |
+但它**確實需要主檔**，不能只靠 anchor：若每個人各有自己的 anchor，班組整體要調整起點時得逐人修改，而「這個人屬於哪一組」會變成「看他的 anchor 等於誰」這種推導出來的答案，那不可靠。
 
-**關聯與約束：** 任職、排班規則必須屬於同一公司；同一任職的有效指派期間不得互相衝突。指派只負責「某期間套用哪套規則」，發布時才展開成 `employee_schedules`，規則變更不得覆蓋已發布歷史。
+**換班（第三項）的範圍要看清楚**：`schedule_changes` 只承接「已發布班表異動」的**歷史**，不是換班申請流程本身——申請、雙方確認、主管審核、雙班表原子異動這四件事沒有任何表。
+
+> **⚠ 以下三節的欄位表格原本錯置，已於本次定案歸位。**
+>
+> 原本 `schedule_rules / schedule_rule_details` 標題底下的逐欄表格，內容其實是**指派關係**（`employment_id`／`schedule_rule_id`／`cycle_anchor_date`）；而 `employee_schedule_assignments` 標題底下的欄位是 `attendance_settings` 的完整複本。也就是說**規則主表與明細表的正式欄位從來沒有被寫下來**。
+>
+> 本次定案：欄位歸位，並補上原本缺的兩張表。這是**歸位而不是重新設計**——指派表的欄位本來就在，只是放錯標題。
+
+### `schedule_rules`
+
+**註釋：** 固定週班或任意長度循環的排班規則。
+
+**設計理由：** 規則與明細採主從結構，主表保存適用範圍與週期長度，明細保存循環內每一天的安排；**週期長度不綁七天**，做二休二以四日週期表達。
+
+| 欄位名稱            | 資料型態   | 必填性 | 欄位註釋                               |
+| ------------------- | ---------- | ------ | -------------------------------------- |
+| `id`                | `uuid`     | 必填   | 主鍵                                   |
+| `company_id`        | `uuid`     | 必填   | 所屬公司外鍵                           |
+| `code`              | `string`   | 必填   | 業務代碼                               |
+| `name`              | `string`   | 必填   | 顯示名稱                               |
+| `rule_type_code`    | `integer`  | 必填   | 規則類型代碼                           |
+| `cycle_length_days` | `integer`  | 必填   | 週期長度（天）；做二休二為 4，週班為 7 |
+| `status`            | `string`   | 必填   | 啟用狀態，不使用 DB ENUM               |
+| `created_at`        | `datetime` | 必填   | 建立時間                               |
+| `updated_at`        | `datetime` | 必填   | 修改時間                               |
+| `deleted_at`        | `datetime` | 選填   | Soft Delete 時間                       |
+
+約束：`UNIQUE(company_id, code, deleted_seq)`；`cycle_length_days` 必須大於 0。
+
+### `schedule_rule_details`
+
+**註釋：** 循環規則內每一個週期日的安排。
+
+| 欄位名稱              | 資料型態  | 必填性 | 欄位註釋                                           |
+| --------------------- | --------- | ------ | -------------------------------------------------- |
+| `id`                  | `uuid`    | 必填   | 主鍵                                               |
+| `schedule_rule_id`    | `uuid`    | 必填   | FK → `schedule_rules.id`                           |
+| `cycle_day_no`        | `integer` | 必填   | 週期內第幾天，1 起算，不得超過 `cycle_length_days` |
+| `shift_definition_id` | `uuid`    | 選填   | FK → `shift_definitions.id`；休假日為 NULL         |
+| `day_type_code`       | `integer` | 必填   | 日期性質代碼                                       |
+| `is_working`          | `boolean` | 必填   | 該日是否安排工作                                   |
+
+約束：`UNIQUE(schedule_rule_id, cycle_day_no)`；明細筆數應等於 `cycle_length_days`。
+
 ### `employee_schedule_assignments`
 
-**註釋：** 員工在有效期間套用哪一套排班規則，包含週期定位基準日。正式名稱在原對話中未單獨再確認，概念與欄位責任已確認。
+**註釋：** 員工在有效期間套用哪一套排班規則，包含週期定位基準日。
 
-**設計理由：** 員工與排班規則用指派表連接，才能保留誰在何期間適用哪套規則，也避免變更規則時直接覆寫員工資料。
+**設計理由：** 員工與排班規則用指派表連接，才能保留誰在何期間適用哪套規則，也避免變更規則時直接覆寫員工資料。`cycle_anchor_date` 是任意長度週期能正確展開的支點——做二休二的 A、B 兩組就是同一套規則、相差兩天的起點。
 
+| 欄位名稱            | 資料型態   | 必填性 | 欄位註釋                                                |
+| ------------------- | ---------- | ------ | ------------------------------------------------------- |
+| `id`                | `uuid`     | 必填   | PK，員工排班規則指派 ID                                 |
+| `employment_id`     | `uuid`     | 必填   | FK → `employee_employments.id`                          |
+| `schedule_rule_id`  | `uuid`     | 必填   | FK → `schedule_rules.id`                                |
+| `cycle_anchor_date` | `date`     | 必填   | 週期第 1 日的定位基準日；使做二休二等任意週期可正確展開 |
+| `effective_from`    | `date`     | 必填   | 指派生效日                                              |
+| `effective_to`      | `date`     | 選填   | 指派失效日                                              |
+| `status_code`       | `integer`  | 必填   | 指派狀態代碼                                            |
+| `created_at`        | `datetime` | 必填   | 建立時間                                                |
+| `updated_at`        | `datetime` | 必填   | 修改時間                                                |
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `uuid` | 必填 | PK，公司出勤設定 ID |
-| `company_id` | `uuid` | 必填 | FK → `companies.id` |
-| `require_clock_in_before_clock_out` | `boolean` | 必填 | 是否要求有有效上班卡後才能打下班卡；本次需求為 true |
-| `allow_employee_cancellation` | `boolean` | 必填 | 是否允許員工自行撤銷誤打紀錄；撤銷不得 DELETE |
-| `allow_correction_request` | `boolean` | 必填 | 是否允許申請補登 |
-| `correction_requires_approval` | `boolean` | 必填 | 補登是否需審核；核准後才建立正式打卡 |
-| `gps_enabled` | `boolean` | 必填 | 是否接受 GPS 資訊；不等同 GPS 必填 |
-| `gps_required` | `boolean` | 必填 | GPS 是否強制；本次定案為 false |
-| `created_at` | `datetime` | 必填 | 建立時間 |
-| `updated_at` | `datetime` | 必填 | 修改時間 |
+**關聯與約束：** 任職、排班規則必須屬於同一公司；同一任職的有效指派期間不得互相衝突。指派只負責「某期間套用哪套規則」，發布時才展開成 `employee_schedules`，規則變更不得覆蓋已發布歷史。
 
-**關聯與約束：** `company_id → companies.id`；公司同時間一筆有效設定。設定只管理打卡流程，不保存遲到、早退結果；GPS 關閉或缺失都不得直接判定出勤異常。
 ### `schedule_periods`
 
 **資料表註釋：** `schedule_periods` 的已確認資料責任；詳細規則依本節說明。
 
 **設計理由：** 排班期間先界定一批班表的日期範圍與處理狀態，方便批次產生、鎖定與追蹤，而不是讓每日日程各自失去批次脈絡。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `uuid` | 必填 | 主鍵，資料唯一識別碼 |
-| `company_id` | `uuid` | 必填 | 所屬公司外鍵 |
-| `name` | `string` | 必填 | 顯示名稱 |
-| `start_date` | `date` | 必填 | 開始日期 |
-| `end_date` | `date` | 必填 | 結束日期 |
-| `status_code` | `integer` | 必填 | 流程或資料狀態代碼 |
-| `published_at` | `datetime` | 選填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
-| `published_by` | `uuid` | 選填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
-| `created_at` | `datetime` | 必填 | 建立時間 |
-| `updated_at` | `datetime` | 必填 | 最後修改時間 |
+| 欄位名稱       | 資料型態   | 必填性 | 欄位註釋                                     |
+| -------------- | ---------- | ------ | -------------------------------------------- |
+| `id`           | `uuid`     | 必填   | 主鍵，資料唯一識別碼                         |
+| `company_id`   | `uuid`     | 必填   | 所屬公司外鍵                                 |
+| `name`         | `string`   | 必填   | 顯示名稱                                     |
+| `start_date`   | `date`     | 必填   | 開始日期                                     |
+| `end_date`     | `date`     | 必填   | 結束日期                                     |
+| `status_code`  | `integer`  | 必填   | 流程或資料狀態代碼                           |
+| `published_at` | `datetime` | 選填   | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| `published_by` | `uuid`     | 選填   | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| `created_at`   | `datetime` | 必填   | 建立時間                                     |
+| `updated_at`   | `datetime` | 必填   | 最後修改時間                                 |
 
 ### `employee_schedules`
 
@@ -145,17 +184,17 @@
 
 **設計理由：** 每日班表保存實際排定結果，而不在查詢時永遠由規則即時計算；因此規則改版不會覆蓋歷史，零工也能直接建立單日班表。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `型態待恢復` | 待核對 | 主鍵，資料唯一識別碼 |
-| `schedule_period_id` | `uuid` | 選填 | FK → `schedule_periods.id`；直接建立日排班時可為 NULL |
-| `company_id` | `型態待恢復` | 待核對 | 所屬公司外鍵 |
-| `employee_id` | `型態待恢復` | 待核對 | 員工外鍵 |
-| `employment_id` | `型態待恢復` | 待核對 | 任職紀錄外鍵 |
-| `schedule_date` | `date` | 必填 | 排班日期 |
-| `shift_definition_id` | `uuid` | 選填 | FK → `shift_definitions.id`；非工作日可為 NULL |
-| `schedule_day_type_code` | `integer` | 必填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
-| `scheduled_work_flag` | `boolean` | 必填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| 欄位名稱                 | 資料型態     | 必填性 | 欄位註釋                                              |
+| ------------------------ | ------------ | ------ | ----------------------------------------------------- |
+| `id`                     | `型態待恢復` | 待核對 | 主鍵，資料唯一識別碼                                  |
+| `schedule_period_id`     | `uuid`       | 選填   | FK → `schedule_periods.id`；直接建立日排班時可為 NULL |
+| `company_id`             | `型態待恢復` | 待核對 | 所屬公司外鍵                                          |
+| `employee_id`            | `型態待恢復` | 待核對 | 員工外鍵                                              |
+| `employment_id`          | `型態待恢復` | 待核對 | 任職紀錄外鍵                                          |
+| `schedule_date`          | `date`       | 必填   | 排班日期                                              |
+| `shift_definition_id`    | `uuid`       | 選填   | FK → `shift_definitions.id`；非工作日可為 NULL        |
+| `schedule_day_type_code` | `integer`    | 必填   | 欄位已確認；代碼值或額外約束未在定案節點明定          |
+| `scheduled_work_flag`    | `boolean`    | 必填   | 欄位已確認；代碼值或額外約束未在定案節點明定          |
 
 規則：歷史班表不得被新規則覆蓋；零工可直接建立；國定假日不等於每個員工休假；加班資格由該日班表性質與是否排定工作共同判定；不建立 `employee_holiday_calendars`。
 
@@ -165,13 +204,13 @@
 
 **設計理由：** 班表異動另留紀錄，讓原排班、變更內容、原因與流程可稽核，而不是只看得到修改後結果。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `uuid` | 必填 | 主鍵，資料唯一識別碼 |
-| `employee_schedule_id` | `uuid` | 必填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
-| `employee_id` | `uuid` | 必填 | 員工外鍵 |
-| `original_shift_id` | `uuid` | 選填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
-| `new_shift_id` | `uuid` | 選填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| 欄位名稱               | 資料型態 | 必填性 | 欄位註釋                                     |
+| ---------------------- | -------- | ------ | -------------------------------------------- |
+| `id`                   | `uuid`   | 必填   | 主鍵，資料唯一識別碼                         |
+| `employee_schedule_id` | `uuid`   | 必填   | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| `employee_id`          | `uuid`   | 必填   | 員工外鍵                                     |
+| `original_shift_id`    | `uuid`   | 選填   | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| `new_shift_id`         | `uuid`   | 選填   | 欄位已確認；代碼值或額外約束未在定案節點明定 |
 
 ## 已確認的「全體出勤」UI
 
@@ -180,7 +219,7 @@
 - 列表一位員工一天一列，顯示員工編號、姓名、部門、日期、上下班時間、上下班地點、工時、遲到、早退、狀態及來源。
 - 上班地點與下班地點顯示 GPS 反查後的大約地址；主列表不直接顯示經緯度。
 - 工時與判定結果讀取 `attendance_results`；時間、來源及位置讀取正式打卡事件。
-- 打卡 GPS 的實際保存欄位留待打卡功能討論，本輪不得補猜。
+- 打卡 GPS 的實際保存欄位**已於後續定案**，見下方 `attendance_records` 的「打卡欄位定案」節（座標與反查地址一律加密）。
 - 詳細規劃見 [09-ui-all-attendance.md](../ui/09-ui-all-attendance.md)。
 
 ## 已確認的 Dashboard 打卡與撤銷
@@ -192,7 +231,7 @@
 - 已有下班卡時，需先撤銷下班卡，才能撤銷其前面的上班卡。
 - 已鎖定日期不得由員工直接撤銷，應改走更正流程。
 - 撤銷後重新計算出勤結果；全體出勤主列表顯示有效打卡，明細保留撤銷歷史。
-- 撤銷相關正式欄位與 GPS 保存欄位尚待逐欄確認，不在本輪補猜。
+- 撤銷相關正式欄位與 GPS 保存欄位**已於後續定案**，見下方 `attendance_records` 的「打卡欄位定案」節（`revoked_at`／`revoked_by`／`revoke_reason`／`revoked_seq`）。
 - 詳細規劃見 [10-ui-dashboard-attendance.md](../ui/10-ui-dashboard-attendance.md)。
 
 ## 已確認的「我的資料／出勤紀錄」UI
@@ -215,19 +254,49 @@
 
 **設計理由：** 原始打卡紀錄獨立保存實際事件，避免排班或判定規則改變時失去原始證據，並可支援同日多次進出。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `uuid` | 必填 | 主鍵，資料唯一識別碼 |
-| `employee_id` | `uuid` | 必填 | 員工外鍵 |
-| `employment_id` | `uuid` | 必填 | 任職紀錄外鍵 |
-| `employee_schedule_id` | `uuid` | 選填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
-| `work_date` | `date` | 必填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
-| `attendance_type_code` | `integer` | 必填 | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| 欄位名稱               | 資料型態  | 必填性 | 欄位註釋                                     |
+| ---------------------- | --------- | ------ | -------------------------------------------- |
+| `id`                   | `uuid`    | 必填   | 主鍵，資料唯一識別碼                         |
+| `employee_id`          | `uuid`    | 必填   | 員工外鍵                                     |
+| `employment_id`        | `uuid`    | 必填   | 任職紀錄外鍵                                 |
+| `employee_schedule_id` | `uuid`    | 選填   | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| `work_date`            | `date`    | 必填   | 欄位已確認；代碼值或額外約束未在定案節點明定 |
+| `attendance_type_code` | `integer` | 必填   | 欄位已確認；代碼值或額外約束未在定案節點明定 |
 
 | `source_type_code` | `integer` | 必填 | 打卡來源類型，例如現場打卡或人工補登 |
 | `source_id` | `uuid` | 選填 | 人工補登時 FK → `attendance_correction_requests.id` |
 
 規則：有效上班卡後才能打下班卡；兩種卡均可撤銷；撤銷不 DELETE；GPS 選填。
+
+#### 打卡欄位定案（原標「留待打卡功能討論，本輪不得補猜」，此節即該次討論的結果）
+
+| 欄位名稱              | 資料型態    | 必填性 | 欄位註釋                                                                     |
+| --------------------- | ----------- | ------ | ---------------------------------------------------------------------------- |
+| `company_id`          | `uuid`      | 必填   | 所屬公司外鍵；全域規則要求 Tenant 資料可追溯至公司，撤銷者的複合外鍵也需要它 |
+| `clocked_at`          | `datetime`  | 必填   | 打卡時刻（台北牆鐘）                                                         |
+| `latitude_encrypted`  | `varbinary` | 選填   | 緯度密文                                                                     |
+| `longitude_encrypted` | `varbinary` | 選填   | 經度密文                                                                     |
+| `accuracy_meters`     | `integer`   | 選填   | 定位精準度；非個資，不加密                                                   |
+| `address_encrypted`   | `varbinary` | 選填   | 反查地址密文                                                                 |
+| `address_resolved_at` | `datetime`  | 選填   | 反查完成時刻；`NULL` 表示尚未反查或反查失敗                                  |
+| `revoked_at`          | `datetime`  | 選填   | 撤銷時刻                                                                     |
+| `revoked_by`          | `uuid`      | 選填   | 撤銷者公司成員；複合外鍵 `(company_id, revoked_by)`                          |
+| `revoke_reason`       | `text`      | 選填   | 撤銷原因；撤銷時必填                                                         |
+| `revoked_seq`         | `bigint`    | 必填   | 撤銷流水號，有效紀錄恆為 `0`；見下方唯一鍵                                   |
+
+**座標與反查地址一律加密**，比照 `employees` 的 `*_encrypted` 欄位（AES-256-GCM）。理由：同一套系統對員工住址加密卻對打卡座標不加密沒有道理，而**每天兩次的打卡座標累積起來是移動軌跡，比單一住址更敏感**。可行性已確認——UI 定案只要求「顯示反查後的大約地址，主列表不直接顯示經緯度」，沒有任何地理圍欄需求，因此座標不需要被查詢，加密不影響功能。**前端顯示時由後端解密後回傳**（比照員工個資的既有作法）。
+
+`accuracy_meters` 不加密：它是一個公尺數，單獨存在沒有識別性。
+
+**`work_date` 由配對決定，不是「打卡當日」。** 下班卡的 `work_date` 取自**它要配對的那張有效上班卡**；找不到可配對的上班卡時才退回打卡當日，而那種情況本身就應被判定為異常。
+
+反過來寫（以打卡當日為準）會讓跨日班永遠配不起來：22:00 的上班卡是 `D`，05:50 的下班卡是 `D+1`，兩張卡分屬不同工作日、永遠湊不成一組，而症狀是「明明打了下班卡卻被判缺卡」。零工、臨時叫班、未排班日都會踩到。
+
+**`revoked_seq` 的作用**：約束是「同一員工、同一工作日、同一類型只能有一張**有效**卡」，但 MariaDB 的唯一索引中 NULL 互不相等，`UNIQUE(employee_id, work_date, attendance_type_code)` 會把已撤銷的一起算進去，於是撤銷之後補不了卡。唯一鍵因此是 `(employee_id, work_date, attendance_type_code, revoked_seq)`，有效紀錄恆為 `0`，撤銷時填入遞增值。作法與 `employees.deleted_seq` 相同。
+
+**「有效狀態」不另設欄位**：`revoked_at IS NULL` 就是有效。多一個 `is_active` 會產生「`revoked_at` 有值但 `is_active` 仍為 true」這種組合，而它**不會報錯**，只會讓一筆已撤銷的打卡繼續參與工時計算。
+
+**反查必須是非同步的，打卡不得因反查失敗而失敗。** 打卡當下只寫入座標，`address_encrypted` 與 `address_resolved_at` 由背景補上。員工在收訊不良的地方按下打卡，不該因為外部服務沒回應就打不成。反查結果要存下來而不是讀取時才算：事後查核要看的是「**當時系統認定的地點**」，而反查服務更新之後歷史地址會跟著變。
 
 ### `attendance_correction_requests`
 
@@ -235,16 +304,16 @@
 
 **設計理由：** 補卡申請與原始打卡分離，讓人工更正必須經過申請與審核，且不直接竄改原始紀錄。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `型態待恢復` | 待核對 | 主鍵，資料唯一識別碼 |
-| `employee_id` | `型態待恢復` | 待核對 | 員工外鍵 |
-| `employment_id` | `型態待恢復` | 待核對 | 任職紀錄外鍵 |
-| `employee_schedule_id` | `uuid` | 必填 | FK → `employee_schedules.id` |
-| `attendance_type_code` | `integer` | 必填 | 申請補登的上班／下班事件類型 |
-| `requested_clocked_at` | `datetime` | 必填 | 申請補登的實際打卡時間；較晚版本曾寫作 `requested_at`，語意以此欄為準 |
-| `reason` | `型態待恢復` | 待核對 | 原因 |
-| `status_code` | `型態待恢復` | 待核對 | 流程或資料狀態代碼 |
+| 欄位名稱               | 資料型態     | 必填性 | 欄位註釋                                                              |
+| ---------------------- | ------------ | ------ | --------------------------------------------------------------------- |
+| `id`                   | `型態待恢復` | 待核對 | 主鍵，資料唯一識別碼                                                  |
+| `employee_id`          | `型態待恢復` | 待核對 | 員工外鍵                                                              |
+| `employment_id`        | `型態待恢復` | 待核對 | 任職紀錄外鍵                                                          |
+| `employee_schedule_id` | `uuid`       | 必填   | FK → `employee_schedules.id`                                          |
+| `attendance_type_code` | `integer`    | 必填   | 申請補登的上班／下班事件類型                                          |
+| `requested_clocked_at` | `datetime`   | 必填   | 申請補登的實際打卡時間；較晚版本曾寫作 `requested_at`，語意以此欄為準 |
+| `reason`               | `型態待恢復` | 待核對 | 原因                                                                  |
+| `status_code`          | `型態待恢復` | 待核對 | 流程或資料狀態代碼                                                    |
 
 **審核欄位更新：** 原 `reviewed_by`、`reviewed_at`、`review_comment` 單次欄位已由 `attendance_correction_reviews` 歷程表取代。
 
@@ -264,15 +333,15 @@
 
 **註釋：** 補打卡申請的不可變審核與撤銷歷程。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `uuid` | 必填 | PK |
-| `attendance_correction_request_id` | `uuid` | 必填 | FK → `attendance_correction_requests.id` |
-| `action_code` | `integer` | 必填 | 核准、退回、撤銷核准或撤銷退回 |
-| `action_by` | `uuid` | 必填 | 操作者 |
-| `action_at` | `datetime` | 必填 | 操作時間 |
-| `reason` | `text` | 條件必填 | 退回及撤銷審核結果時必填 |
-| `created_at` | `datetime` | 必填 | 建立時間 |
+| 欄位名稱                           | 資料型態   | 必填性   | 欄位註釋                                 |
+| ---------------------------------- | ---------- | -------- | ---------------------------------------- |
+| `id`                               | `uuid`     | 必填     | PK                                       |
+| `attendance_correction_request_id` | `uuid`     | 必填     | FK → `attendance_correction_requests.id` |
+| `action_code`                      | `integer`  | 必填     | 核准、退回、撤銷核准或撤銷退回           |
+| `action_by`                        | `uuid`     | 必填     | 操作者                                   |
+| `action_at`                        | `datetime` | 必填     | 操作時間                                 |
+| `reason`                           | `text`     | 條件必填 | 退回及撤銷審核結果時必填                 |
+| `created_at`                       | `datetime` | 必填     | 建立時間                                 |
 
 歷程只能新增，不可修改或刪除。薪資尚未開始核算時，已核准及已退回結果均可撤銷並回到待審核；薪資開始核算後只可查看。詳細流程見 [17-ui-attendance-correction-approval.md](../ui/17-ui-attendance-correction-approval.md)。
 
@@ -282,46 +351,42 @@
 
 **設計理由：** 出勤容許值與判定參數集中於公司設定，讓遲到、早退等規則能按公司調整，並避免硬寫在程式或每筆結果。
 
-
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `uuid` | 必填 | PK，公司出勤設定 ID |
-| `company_id` | `uuid` | 必填 | FK → `companies.id` |
-| `require_clock_in_before_clock_out` | `boolean` | 必填 | 是否要求有效上班卡後才能打下班卡；本次需求為 true |
-| `allow_employee_cancellation` | `boolean` | 必填 | 是否允許員工自行撤銷誤打紀錄；撤銷不得 DELETE |
-| `allow_correction_request` | `boolean` | 必填 | 是否允許申請補登 |
-| `correction_requires_approval` | `boolean` | 必填 | 補登是否需審核；通過後才建立正式打卡 |
-| `gps_enabled` | `boolean` | 必填 | 是否接受 GPS 資訊 |
-| `gps_required` | `boolean` | 必填 | GPS 是否強制；本次定案為 false |
-| `created_at` | `datetime` | 必填 | 建立時間 |
-| `updated_at` | `datetime` | 必填 | 修改時間 |
+| 欄位名稱                            | 資料型態   | 必填性 | 欄位註釋                                          |
+| ----------------------------------- | ---------- | ------ | ------------------------------------------------- |
+| `id`                                | `uuid`     | 必填   | PK，公司出勤設定 ID                               |
+| `company_id`                        | `uuid`     | 必填   | FK → `companies.id`                               |
+| `require_clock_in_before_clock_out` | `boolean`  | 必填   | 是否要求有效上班卡後才能打下班卡；本次需求為 true |
+| `allow_employee_cancellation`       | `boolean`  | 必填   | 是否允許員工自行撤銷誤打紀錄；撤銷不得 DELETE     |
+| `allow_correction_request`          | `boolean`  | 必填   | 是否允許申請補登                                  |
+| `correction_requires_approval`      | `boolean`  | 必填   | 補登是否需審核；通過後才建立正式打卡              |
+| `gps_enabled`                       | `boolean`  | 必填   | 是否接受 GPS 資訊                                 |
+| `gps_required`                      | `boolean`  | 必填   | GPS 是否強制；本次定案為 false                    |
+| `created_at`                        | `datetime` | 必填   | 建立時間                                          |
+| `updated_at`                        | `datetime` | 必填   | 修改時間                                          |
 
 **關聯與約束：** `company_id → companies.id`；GPS 開啟不等於強制，缺少 GPS 不得直接判定異常。設定只管理打卡流程，不保存每日判定結果。
+
 ### `attendance_results`
 
 **註釋：** 依班表、有效打卡、請假與異動計算的遲到、早退、缺卡等判定結果；不得反向改寫原始打卡或班表。
 
 **設計理由：** 出勤結果保存計算後的判定快照，將原始打卡與規則運算結果分離，便於重算、稽核及供薪資／加班流程引用。
 
-
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `uuid` | 必填 | PK，出勤結果 ID |
-| `employee_schedule_id` | `uuid` | 必填 | FK → `employee_schedules.id`；本次判定所依班表 |
-| `employee_id` | `uuid` | 必填 | FK → `employees.id` |
-| `work_date` | `date` | 必填 | 班次工作日期，不以跨日打卡的日曆日期取代 |
-| `scheduled_minutes` | `integer` | 必填 | 應工作分鐘數 |
-| `worked_minutes` | `integer` | 必填 | 實際工作分鐘數 |
-| `late_minutes` | `integer` | 必填 | 遲到分鐘數 |
-| `early_leave_minutes` | `integer` | 必填 | 早退分鐘數 |
-| `absence_minutes` | `integer` | 必填 | 缺勤分鐘數 |
-| `leave_minutes` | `integer` | 必填 | 核准請假分鐘數 |
-| `overtime_minutes` | `integer` | 必填 | 認列加班分鐘數 |
-| `result_status_code` | `integer` | 必填 | 出勤判定狀態代碼 |
-| `calculated_at` | `datetime` | 必填 | 計算時間 |
-| `updated_at` | `datetime` | 必填 | 最後重算時間 |
+| 欄位名稱               | 資料型態   | 必填性 | 欄位註釋                                       |
+| ---------------------- | ---------- | ------ | ---------------------------------------------- |
+| `id`                   | `uuid`     | 必填   | PK，出勤結果 ID                                |
+| `employee_schedule_id` | `uuid`     | 必填   | FK → `employee_schedules.id`；本次判定所依班表 |
+| `employee_id`          | `uuid`     | 必填   | FK → `employees.id`                            |
+| `work_date`            | `date`     | 必填   | 班次工作日期，不以跨日打卡的日曆日期取代       |
+| `scheduled_minutes`    | `integer`  | 必填   | 應工作分鐘數                                   |
+| `worked_minutes`       | `integer`  | 必填   | 實際工作分鐘數                                 |
+| `late_minutes`         | `integer`  | 必填   | 遲到分鐘數                                     |
+| `early_leave_minutes`  | `integer`  | 必填   | 早退分鐘數                                     |
+| `absence_minutes`      | `integer`  | 必填   | 缺勤分鐘數                                     |
+| `leave_minutes`        | `integer`  | 必填   | 核准請假分鐘數                                 |
+| `overtime_minutes`     | `integer`  | 必填   | 認列加班分鐘數                                 |
+| `result_status_code`   | `integer`  | 必填   | 出勤判定狀態代碼                               |
+| `calculated_at`        | `datetime` | 必填   | 計算時間                                       |
+| `updated_at`           | `datetime` | 必填   | 最後重算時間                                   |
 
 **關聯與約束：** 原始班表、打卡、請假是事實來源，本表只保存計算結果，不得反向改寫來源。班表或有效事件變更時可重算，但已被薪資結算鎖定的歷史不得無痕覆蓋。
-
-
-

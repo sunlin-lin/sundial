@@ -8,10 +8,10 @@
 
 資料字典把稽核表留成「已確認功能、表名與逐欄 Schema 尚未定案」，於是前三個模組各自留了一筆欠帳：
 
-| 模組 | 該記卻沒記的事 |
-|---|---|
-| 角色 | 誰在什麼時候把某個角色指派給某人／撤銷 |
-| 員工 | 誰把員工編號從 `E001` 改成 `E002` |
+| 模組 | 該記卻沒記的事                             |
+| ---- | ------------------------------------------ |
+| 角色 | 誰在什麼時候把某個角色指派給某人／撤銷     |
+| 員工 | 誰把員工編號從 `E001` 改成 `E002`          |
 | 登入 | refresh token 被重複使用（可能是憑證外洩） |
 
 **這些欠帳的共同性質是「補不回來」**：稽核紀錄只能在事情發生的當下寫，事後補的表裡不會有已經發生過的異動。每多做一個模組，就多一段永遠空白的歷史。
@@ -36,18 +36,18 @@
 
 ## 3. `audit_logs`
 
-| 欄位 | 型態 | 必填 | 說明 |
-|---|---|---|---|
-| `id` | `uuid` | 必填 | 主鍵 |
-| `company_id` | `uuid` | 必填 | 所屬公司（全域規則：Tenant 資料必須可追溯至 Company） |
-| `actor_type_code` | `integer` | 必填 | 1 公司成員、2 系統（排程／驗證器）。整數而非字串，見下 |
-| `actor_company_user_id` | `uuid` | 條件必填 | `actor_type_code=1` 時必填；**複合外鍵**，見 §3.1 |
-| `action` | `varchar(150)` | 必填 | 動作碼，由模組路徑推導，見 §4.1 |
-| `subject_table` | `varchar(64)` | 必填 | 資料主體所在的表，例如 `employees` |
-| `subject_id` | `varchar(64)` | 必填 | 資料主體主鍵的**字串形式**，見 §3.2 |
-| `changes` | `json` | 必填 | 逐欄差異，見 §4.2 |
-| `effective_date` | `date` | 選填 | 帶生效日的異動才有（部門異動、扣繳方式、投保設定） |
-| `created_at` | `datetime` | 必填 | 建立時間，**即字典所稱的「操作時間」**，見 §3.3 |
+| 欄位                    | 型態           | 必填     | 說明                                                   |
+| ----------------------- | -------------- | -------- | ------------------------------------------------------ |
+| `id`                    | `uuid`         | 必填     | 主鍵                                                   |
+| `company_id`            | `uuid`         | 必填     | 所屬公司（全域規則：Tenant 資料必須可追溯至 Company）  |
+| `actor_type_code`       | `integer`      | 必填     | 1 公司成員、2 系統（排程／驗證器）。整數而非字串，見下 |
+| `actor_company_user_id` | `uuid`         | 條件必填 | `actor_type_code=1` 時必填；**複合外鍵**，見 §3.1      |
+| `action`                | `varchar(150)` | 必填     | 動作碼，由模組路徑推導，見 §4.1                        |
+| `subject_table`         | `varchar(64)`  | 必填     | 資料主體所在的表，例如 `employees`                     |
+| `subject_id`            | `varchar(64)`  | 必填     | 資料主體主鍵的**字串形式**，見 §3.2                    |
+| `changes`               | `json`         | 必填     | 逐欄差異，見 §4.2                                      |
+| `effective_date`        | `date`         | 選填     | 帶生效日的異動才有（部門異動、扣繳方式、投保設定）     |
+| `created_at`            | `datetime`     | 必填     | 建立時間，**即字典所稱的「操作時間」**，見 §3.3        |
 
 ### 3.0 代碼欄位的型態慣例：`_code` 用整數，狀態用字串
 
@@ -109,11 +109,11 @@ FOREIGN KEY (company_id, actor_company_user_id)
 
 ### 3.5 索引
 
-| 索引 | 對應的查詢 |
-|---|---|
+| 索引                                                  | 對應的查詢                         |
+| ----------------------------------------------------- | ---------------------------------- |
 | `(company_id, subject_table, subject_id, created_at)` | 「這筆資料被誰改過」——最主要的用途 |
-| `(company_id, created_at)` | 「這家公司最近有哪些異動」 |
-| `(company_id, actor_company_user_id, created_at)` | 「這個人做過什麼」 |
+| `(company_id, created_at)`                            | 「這家公司最近有哪些異動」         |
+| `(company_id, actor_company_user_id, created_at)`     | 「這個人做過什麼」                 |
 
 三支索引都以 `company_id` 開頭：所有查詢都必須帶公司範圍，索引前綴一致才不會有某支查詢退化成全表掃描。
 
@@ -144,9 +144,7 @@ sessions.main.refresh-token-reuse    偵測到憑證重用（無端點，由驗�
 ### 4.2 逐欄差異，不存「前後兩包」
 
 ```json
-[
-  { "field": "employeeCode", "before": "E001", "after": "E002" }
-]
+[{ "field": "employeeCode", "before": "E001", "after": "E002" }]
 ```
 
 **不採用** `{ "before": { 整筆 }, "after": { 整筆 } }`。
@@ -163,11 +161,11 @@ sessions.main.refresh-token-reuse    偵測到憑證重用（無端點，由驗�
 
 每一張會被稽核的表，逐欄宣告它能進稽核到什麼程度：
 
-| 級別 | 意思 | 例子 |
-|---|---|---|
-| `value` | 記前後值 | `employeeCode`、`name`、`departmentId` |
+| 級別       | 意思                             | 例子                                        |
+| ---------- | -------------------------------- | ------------------------------------------- |
+| `value`    | 記前後值                         | `employeeCode`、`name`、`departmentId`      |
 | `presence` | **只記「這一欄變更了」，不記值** | `identityNumber`、`bankAccount`、`password` |
-| `excluded` | 明確不記 | `id`、`createdAt`、`updatedAt` |
+| `excluded` | 明確不記                         | `id`、`createdAt`、`updatedAt`              |
 
 宣告位置：`modules/audit/main/domain/audit-field-policy.ts`。
 
@@ -216,9 +214,7 @@ sessions.main.refresh-token-reuse    偵測到憑證重用（無端點，由驗�
 `presence` 級的 `changes` 長這樣：
 
 ```json
-[
-  { "field": "identityNumber", "changed": true }
-]
+[{ "field": "identityNumber", "changed": true }]
 ```
 
 刻意**不**帶 `before`／`after` 欄位（而不是塞 `"***"`）：塞遮罩字串的話，讀的程式仍然要判斷「這個值是真的還是遮罩」，而判斷錯的後果是把 `***` 當成使用者真的填了三個星號。結構不同，就沒有這個判斷。
@@ -374,10 +370,10 @@ modules/audit/
 
 ### Stage 2 — 補上三筆欠帳
 
-| 模組 | 動作碼 | 主體 |
-|---|---|---|
-| 角色指派／撤銷 | `company-users.roles.*` | `company_users` |
-| 員工建立／修改／刪除 | `employees.main.*` | `employees` |
+| 模組                   | 動作碼                              | 主體                                  |
+| ---------------------- | ----------------------------------- | ------------------------------------- |
+| 角色指派／撤銷         | `company-users.roles.*`             | `company_users`                       |
+| 員工建立／修改／刪除   | `employees.main.*`                  | `employees`                           |
 | refresh token 重用偵測 | `sessions.main.refresh-token-reuse` | `refresh_tokens`，`actor_type_code=2` |
 
 順手把 `employees` 與 `company_users` 的欄位政策補齊——這一步做完，`check:audit-policy` 才會第一次真的擋到東西。
@@ -390,12 +386,12 @@ modules/audit/
 
 ## 8. 本輪不做
 
-| 項目 | 為什麼 | 什麼時候 |
-|---|---|---|
-| **稽核查詢端點** | 已定案：稽核歸稽核，不與歷史表整合查詢。純稽核的查詢等有明確使用場景再開 | 有使用場景時 |
-| **登入行為、IP、User-Agent** | 已定案：不放進這張表，見 §2 | 各自做自己的紀錄，另有規劃 |
-| **只有 INSERT 權限的資料庫帳號** | 屬於部署層設定，不是應用程式碼 | 部署規劃時 |
-| **保存期限與清理** | 見 §10 | — |
+| 項目                             | 為什麼                                                                   | 什麼時候                   |
+| -------------------------------- | ------------------------------------------------------------------------ | -------------------------- |
+| **稽核查詢端點**                 | 已定案：稽核歸稽核，不與歷史表整合查詢。純稽核的查詢等有明確使用場景再開 | 有使用場景時               |
+| **登入行為、IP、User-Agent**     | 已定案：不放進這張表，見 §2                                              | 各自做自己的紀錄，另有規劃 |
+| **只有 INSERT 權限的資料庫帳號** | 屬於部署層設定，不是應用程式碼                                           | 部署規劃時                 |
+| **保存期限與清理**               | 見 §10                                                                   | —                          |
 
 ## 9. 連帶要改的規範（**已完成**）
 

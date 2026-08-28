@@ -22,7 +22,7 @@
 年度預設當年度，可依發放狀態查詢。列表按計薪期間由新到舊：
 
 | 計薪月份 | 計薪期間 | 發薪日 | 應發金額 | 扣款金額 | 實發金額 | 發放狀態 | 操作 |
-|---|---|---|---:|---:|---:|---|---|
+| -------- | -------- | ------ | -------: | -------: | -------: | -------- | ---- |
 
 操作只提供查看。
 
@@ -39,13 +39,13 @@
 
 結算時保存下列欄位於 `payrolls`：
 
-| 欄位 | 型態 | 必填性 | 註釋 |
-|---|---|---|---|
-| `company_name_snapshot` | `string` | 必填 | 結算當時公司名稱 |
-| `employee_code_snapshot` | `string` | 必填 | 結算當時員工編號 |
-| `employee_name_snapshot` | `string` | 必填 | 結算當時員工姓名 |
+| 欄位                       | 型態     | 必填性   | 註釋                       |
+| -------------------------- | -------- | -------- | -------------------------- |
+| `company_name_snapshot`    | `string` | 必填     | 結算當時公司名稱           |
+| `employee_code_snapshot`   | `string` | 必填     | 結算當時員工編號           |
+| `employee_name_snapshot`   | `string` | 必填     | 結算當時員工姓名           |
 | `department_name_snapshot` | `string` | 條件必填 | 結算當時部門；無部門時為空 |
-| `job_title_name_snapshot` | `string` | 選填 | 結算當時職稱 |
+| `job_title_name_snapshot`  | `string` | 選填     | 結算當時職稱               |
 
 結算後不可修改；歷史薪資單不得改讀目前最新人事資料。
 
@@ -53,18 +53,18 @@
 
 所有薪資單採用的出勤摘要都要在結算時記錄，不得在查看時即時讀取後來可能重算的出勤結果。採一張薪資單一筆 `payroll_attendance_snapshots`：
 
-| 欄位 | 型態 | 必填性 | 註釋 |
-|---|---|---|---|
-| `id` | `uuid` | 必填 | PK |
-| `payroll_id` | `uuid` | 必填 | FK → `payrolls.id`，一對一 |
-| `attendance_days` | `decimal(6,2)` | 必填 | 結算採用的出勤天數，支援半日 |
-| `worked_minutes` | `integer` | 必填 | 結算採用的實際工時分鐘 |
-| `overtime_minutes` | `integer` | 必填 | 結算採用的核准加班分鐘 |
-| `leave_minutes` | `integer` | 必填 | 結算採用的請假分鐘 |
-| `late_days` | `integer` | 必填 | 結算採用的遲到天數 |
-| `early_leave_days` | `integer` | 必填 | 結算採用的早退天數 |
-| `absence_days` | `decimal(6,2)` | 必填 | 結算採用的缺勤天數，支援部分日 |
-| `created_at` | `datetime` | 必填 | 快照建立時間 |
+| 欄位               | 型態           | 必填性 | 註釋                           |
+| ------------------ | -------------- | ------ | ------------------------------ |
+| `id`               | `uuid`         | 必填   | PK                             |
+| `payroll_id`       | `uuid`         | 必填   | FK → `payrolls.id`，一對一     |
+| `attendance_days`  | `decimal(6,2)` | 必填   | 結算採用的出勤天數，支援半日   |
+| `worked_minutes`   | `integer`      | 必填   | 結算採用的實際工時分鐘         |
+| `overtime_minutes` | `integer`      | 必填   | 結算採用的核准加班分鐘         |
+| `leave_minutes`    | `integer`      | 必填   | 結算採用的請假分鐘             |
+| `late_days`        | `integer`      | 必填   | 結算採用的遲到天數             |
+| `early_leave_days` | `integer`      | 必填   | 結算採用的早退天數             |
+| `absence_days`     | `decimal(6,2)` | 必填   | 結算採用的缺勤天數，支援部分日 |
+| `created_at`       | `datetime`     | 必填   | 快照建立時間                   |
 
 約束：`UNIQUE(payroll_id)`；所有數值不得為負；結算完成後不可修改。分鐘在畫面換算為小時，原始資料仍以分鐘保存。
 

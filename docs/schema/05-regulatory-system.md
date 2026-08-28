@@ -14,16 +14,16 @@
 
 **設計理由：** 公司法規設定只保存公司採用的同步與套用選項，將公司偏好與中央法規資料分離，避免每家公司複製整份法規。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `bigint` | 必填 | 主鍵，資料唯一識別碼 |
-| `company_id` | `bigint/uuid` | 必填 | 所屬公司外鍵 |
-| `occupational_industry_code` | `varchar(30)` | 必填 | 公司職業災害保險行業別代碼 |
-| `insurance_unit_type_code` | `varchar(30)` | 必填 | 投保單位類別代碼 |
-| `effective_from` | `date` | 必填 | 生效開始日 |
-| `effective_to` | `date` | 選填 | 生效結束日 |
-| `created_by` | `FK` | 必填 | 建立者外鍵 |
-| `created_at` | `datetime` | 必填 | 建立時間 |
+| 欄位名稱                     | 資料型態      | 必填性 | 欄位註釋                   |
+| ---------------------------- | ------------- | ------ | -------------------------- |
+| `id`                         | `bigint`      | 必填   | 主鍵，資料唯一識別碼       |
+| `company_id`                 | `bigint/uuid` | 必填   | 所屬公司外鍵               |
+| `occupational_industry_code` | `varchar(30)` | 必填   | 公司職業災害保險行業別代碼 |
+| `insurance_unit_type_code`   | `varchar(30)` | 必填   | 投保單位類別代碼           |
+| `effective_from`             | `date`        | 必填   | 生效開始日                 |
+| `effective_to`               | `date`        | 選填   | 生效結束日                 |
+| `created_by`                 | `FK`          | 必填   | 建立者外鍵                 |
+| `created_at`                 | `datetime`    | 必填   | 建立時間                   |
 
 公司只保存選擇，不複製政府當期費率；同公司有效期間不得重疊。
 
@@ -33,21 +33,21 @@
 
 **設計理由：** 法規資料集採版本表並保存生效日，可同時保留歷史與未來版本；不使用 is_current，因「目前版本」應由生效區間判定而非容易失真的旗標。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `bigint` | 必填 | 主鍵，資料唯一識別碼 |
-| `dataset_code` | `integer` | 必填 | 法規資料集代碼 |
-| `version_code` | `varchar(30)` | 必填 | 西元版本代碼，例如 `2026-01` |
-| `effective_from` | `date` | 必填 | 版本生效日 |
-| `effective_to` | `date` | 選填 | 版本失效日；可由下一版本推導 |
-| `government_resource_id` | `varchar(150)` | 選填 | 本次取得的政府資源識別碼，不視為永久固定 URL |
-| `source_modified_at` | `datetime` | 選填 | 政府來源標示的修改時間 |
-| `synced_at` | `datetime` | 必填 | 同步完成時間 |
-| `checksum` | `varchar(128)` | 必填 | 原始內容雜湊，用於判斷內容是否改變 |
-| `record_count` | `integer` | 選填 | 解析後筆數 |
-| `raw_format_code` | `integer` | 必填 | 原始資料格式代碼 |
-| `raw_data` | `LONGTEXT` | 必填 | 政府原始資料 Snapshot |
-| `created_at` | `datetime` | 必填 | 建立時間 |
+| 欄位名稱                 | 資料型態       | 必填性 | 欄位註釋                                     |
+| ------------------------ | -------------- | ------ | -------------------------------------------- |
+| `id`                     | `bigint`       | 必填   | 主鍵，資料唯一識別碼                         |
+| `dataset_code`           | `integer`      | 必填   | 法規資料集代碼                               |
+| `version_code`           | `varchar(30)`  | 必填   | 西元版本代碼，例如 `2026-01`                 |
+| `effective_from`         | `date`         | 必填   | 版本生效日                                   |
+| `effective_to`           | `date`         | 選填   | 版本失效日；可由下一版本推導                 |
+| `government_resource_id` | `varchar(150)` | 選填   | 本次取得的政府資源識別碼，不視為永久固定 URL |
+| `source_modified_at`     | `datetime`     | 選填   | 政府來源標示的修改時間                       |
+| `synced_at`              | `datetime`     | 必填   | 同步完成時間                                 |
+| `checksum`               | `varchar(128)` | 必填   | 原始內容雜湊，用於判斷內容是否改變           |
+| `record_count`           | `integer`      | 選填   | 解析後筆數                                   |
+| `raw_format_code`        | `integer`      | 必填   | 原始資料格式代碼                             |
+| `raw_data`               | `LONGTEXT`     | 必填   | 政府原始資料 Snapshot                        |
+| `created_at`             | `datetime`     | 必填   | 建立時間                                     |
 
 約束：`UNIQUE(dataset_code, version_code)`；`effective_from` 必填；不用 `is_current`。
 
@@ -57,20 +57,20 @@
 
 **設計理由：** 同一版本內以 record_key 對應多筆法規內容，通用 data 欄先承載不同資料集結構，可在未確認專屬欄位前避免過早拆出錯誤 Schema。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `bigint` | 必填 | 主鍵，資料唯一識別碼 |
-| `dataset_version_id` | `bigint` | 必填 | 政府法規版本外鍵 |
-| `record_key` | `varchar(150)` | 必填 | 同一版本內穩定且唯一的資料鍵 |
-| `code` | `varchar(100)` | 選填 | 業務代碼 |
-| `name` | `varchar(250)` | 選填 | 顯示名稱 |
-| `range_from` | `decimal(18,4)` | 選填 | 級距下限 |
-| `range_to` | `decimal(18,4)` | 選填 | 級距上限 |
-| `amount` | `decimal(18,4)` | 選填 | 金額或計算基礎值 |
-| `rate` | `decimal(18,8)` | 選填 | 費率／比率 |
-| `data` | `json` | 必填 | 無法由通用欄位承載的完整標準化內容 |
-| `sort_order` | `integer` | 選填 | 同版本顯示／運算順序 |
-| `created_at` | `datetime` | 必填 | 建立時間 |
+| 欄位名稱             | 資料型態        | 必填性 | 欄位註釋                           |
+| -------------------- | --------------- | ------ | ---------------------------------- |
+| `id`                 | `bigint`        | 必填   | 主鍵，資料唯一識別碼               |
+| `dataset_version_id` | `bigint`        | 必填   | 政府法規版本外鍵                   |
+| `record_key`         | `varchar(150)`  | 必填   | 同一版本內穩定且唯一的資料鍵       |
+| `code`               | `varchar(100)`  | 選填   | 業務代碼                           |
+| `name`               | `varchar(250)`  | 選填   | 顯示名稱                           |
+| `range_from`         | `decimal(18,4)` | 選填   | 級距下限                           |
+| `range_to`           | `decimal(18,4)` | 選填   | 級距上限                           |
+| `amount`             | `decimal(18,4)` | 選填   | 金額或計算基礎值                   |
+| `rate`               | `decimal(18,8)` | 選填   | 費率／比率                         |
+| `data`               | `json`          | 必填   | 無法由通用欄位承載的完整標準化內容 |
+| `sort_order`         | `integer`       | 選填   | 同版本顯示／運算順序               |
+| `created_at`         | `datetime`      | 必填   | 建立時間                           |
 
 約束：`UNIQUE(dataset_version_id, record_key)`。所得稅特殊結構先放 `data`，暫不另拆表。
 
@@ -80,19 +80,19 @@
 
 **設計理由：** 同步紀錄獨立保存每次下載、驗證與套用結果，讓失敗可追查且不影響已生效資料，亦不以最後同步時間取代完整歷程。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `bigint` | 必填 | 主鍵，資料唯一識別碼 |
-| `dataset_code` | `integer` | 必填 | 本次同步的法規資料集代碼 |
-| `trigger_type_code` | `integer` | 必填 | 1 自動排程、2 人工觸發 |
-| `started_at` | `datetime` | 必填 | 同步開始時間 |
-| `finished_at` | `datetime` | 選填 | 同步結束時間 |
-| `status_code` | `integer` | 必填 | 1 執行中、2 更新成功、3 失敗、4 無異動 |
-| `dataset_version_id` | `bigint` | 選填 | 成功產生／辨識出的版本 FK |
-| `government_resource_id` | `varchar(150)` | 選填 | 本次實際使用的政府資源識別碼 |
-| `records_received` | `integer` | 選填 | 本次收到／解析筆數 |
-| `error_message` | `text` | 選填 | 失敗原因 |
-| `created_at` | `datetime` | 必填 | 建立時間 |
+| 欄位名稱                 | 資料型態       | 必填性 | 欄位註釋                               |
+| ------------------------ | -------------- | ------ | -------------------------------------- |
+| `id`                     | `bigint`       | 必填   | 主鍵，資料唯一識別碼                   |
+| `dataset_code`           | `integer`      | 必填   | 本次同步的法規資料集代碼               |
+| `trigger_type_code`      | `integer`      | 必填   | 1 自動排程、2 人工觸發                 |
+| `started_at`             | `datetime`     | 必填   | 同步開始時間                           |
+| `finished_at`            | `datetime`     | 選填   | 同步結束時間                           |
+| `status_code`            | `integer`      | 必填   | 1 執行中、2 更新成功、3 失敗、4 無異動 |
+| `dataset_version_id`     | `bigint`       | 選填   | 成功產生／辨識出的版本 FK              |
+| `government_resource_id` | `varchar(150)` | 選填   | 本次實際使用的政府資源識別碼           |
+| `records_received`       | `integer`      | 選填   | 本次收到／解析筆數                     |
+| `error_message`          | `text`         | 選填   | 失敗原因                               |
+| `created_at`             | `datetime`     | 必填   | 建立時間                               |
 
 同步失敗不得破壞既有有效版本。
 
@@ -126,18 +126,18 @@
 
 **設計理由：** 稽核紀錄獨立且只承載「資料異動」一種語意，不混入登入行為、系統 log 或查詢行為——稽核要求「一筆不少、永久保存、不可修改」，行為紀錄要求「量大、可過期清理、可取樣」，兩種保存策略互斥；混在同一張表就只能取其一，而通常取到的是後者，稽核紀錄會跟著被清掉。
 
-| 欄位名稱 | 資料型態 | 必填性 | 欄位註釋 |
-|---|---|---|---|
-| `id` | `uuid` | 必填 | 主鍵，資料唯一識別碼 |
-| `company_id` | `uuid` | 必填 | 所屬公司外鍵 |
-| `actor_type_code` | `integer` | 必填 | 1 公司成員、2 系統（排程／驗證器） |
-| `actor_company_user_id` | `uuid` | 條件必填 | 操作者公司成員外鍵；`actor_type_code=1` 時必填 |
-| `action` | `varchar(150)` | 必填 | 動作碼，由模組路徑推導，例如 `employees.main.update` |
-| `subject_table` | `varchar(64)` | 必填 | 資料主體所在的表，例如 `employees` |
-| `subject_id` | `varchar(64)` | 必填 | 資料主體主鍵的字串形式；uuid 直接存，`bigint` 存十進位字串 |
-| `changes` | `json` | 必填 | 逐欄差異；新增時 `before` 為 NULL，刪除時 `after` 為 NULL |
-| `effective_date` | `date` | 選填 | 適用時的生效日；帶生效日的異動才有 |
-| `created_at` | `datetime` | 必填 | 建立時間，即「操作時間」——稽核與業務同一交易寫入，兩者必然相同 |
+| 欄位名稱                | 資料型態       | 必填性   | 欄位註釋                                                       |
+| ----------------------- | -------------- | -------- | -------------------------------------------------------------- |
+| `id`                    | `uuid`         | 必填     | 主鍵，資料唯一識別碼                                           |
+| `company_id`            | `uuid`         | 必填     | 所屬公司外鍵                                                   |
+| `actor_type_code`       | `integer`      | 必填     | 1 公司成員、2 系統（排程／驗證器）                             |
+| `actor_company_user_id` | `uuid`         | 條件必填 | 操作者公司成員外鍵；`actor_type_code=1` 時必填                 |
+| `action`                | `varchar(150)` | 必填     | 動作碼，由模組路徑推導，例如 `employees.main.update`           |
+| `subject_table`         | `varchar(64)`  | 必填     | 資料主體所在的表，例如 `employees`                             |
+| `subject_id`            | `varchar(64)`  | 必填     | 資料主體主鍵的字串形式；uuid 直接存，`bigint` 存十進位字串     |
+| `changes`               | `json`         | 必填     | 逐欄差異；新增時 `before` 為 NULL，刪除時 `after` 為 NULL      |
+| `effective_date`        | `date`         | 選填     | 適用時的生效日；帶生效日的異動才有                             |
+| `created_at`            | `datetime`     | 必填     | 建立時間，即「操作時間」——稽核與業務同一交易寫入，兩者必然相同 |
 
 **`subject_id` 為何是字串而非 `uuid`：** 全站主鍵型態不只一種（法規三表與 `company_regulatory_settings` 用 `bigint`），而公司投保設定正是稽核表要服務的第一個對象。訂成 `uuid` 會讓它存不進去，且要到那個模組動工才會發現，屆時已套用的 migration 不得修改。
 
@@ -174,7 +174,3 @@
 - 離職生效、未休假、補休與最終薪資結算。
 - 報表／統計、通知中心、員工自助入口及附件中心。
 - 法定計算公式的版本化實作細節。
-
-
-
-
