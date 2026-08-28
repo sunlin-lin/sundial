@@ -11,21 +11,21 @@
  * ## 兩條路：單資源與多資源
  *
  * ```
- * 單資源（1、3、4、6）             多資源（2、5）
+ * 單資源（1、3、4、6）             多資源（2、5、8、9）
  * ─────────────────────────────    ────────────────────────────────────────
- * 下載 raw                          列出該格式的全部資源（16／19 個）
- * checksum 比對最新版               每個資源由**資源說明**推導生效日 → version_code
- *   └ 相同 → status=4 無異動         排出計畫：新建／已存在跳過／推導不出來就失敗（§7.2）
- * 解析 → records（§6 形狀驗證）      逐一處理「新建」的那些：
- * 決定 version_code                   下載 → 解析 → 形狀驗證 → **各自一個交易**寫入
- *   └ 推導不出來 → status=3（§7.2）  一個版本失敗不中斷其餘
- *   └ 撞既有代碼 → status=3
+ * 下載 raw                          列出全部資源（16／19／7／8 個）
+ * checksum 比對最新版               每個資源由**它自己的名字**推導生效日 → version_code
+ *   └ 相同 → status=4 無異動         排出計畫：新建／已存在跳過／不是候選就排除（§7.1.2）／
+ * 解析 → records（§6 形狀驗證）                  推導不出來就失敗（§7.2）
+ * 決定 version_code                 逐一處理「新建」的那些：
+ *   └ 推導不出來 → status=3（§7.2）    下載 → 解析 → 形狀驗證 → **各自一個交易**寫入
+ *   └ 撞既有代碼 → status=3          一個版本失敗不中斷其餘
  * 同一交易寫入 version ＋ records
  * status=2
  * ```
  *
  * **為什麼不是一條路**（＝把單資源當成 N=1）：兩者在一件事上有本質差異——單資源的版本代碼
- * **只有下載並解析之後才知道**（`1`、`3` 的生效日在資料列裡），多資源的**從 metadata 就知道**。
+ * **只有下載並解析之後才知道**（`1`、`3` 的生效日在資料列裡），多資源的**從資源探索就知道**。
  * 合成一條的話，多資源那一邊每天晚上都得把十幾份歷史資源重新下載一次才能發現「它們早就進來了」
  * （一年七千多次請求換零個新版本）；或者要在單資源那條路上加一堆「這一次要不要下載」的分支，
  * 而那條路現在的讀法是一條直線。完整論述見 `domain/regulatory-sync-model.ts` 的 `RegulatorySyncSource`。
@@ -43,7 +43,7 @@
  * 因此不是兩套規則。
  *
  * ⚠️ 代價要寫出來：多資源的既有版本**不重新下載**，因此偵測不到「政府改了某一份歷史資源的內容」。
- * 換來的是穩定狀態下一次同步只打一次 metadata API。而且就算偵測得到，處置也只能是「記一筆要人工
+ * 換來的是穩定狀態下一次同步只打一次探索網址。而且就算偵測得到，處置也只能是「記一筆要人工
  * 確認的失敗」——覆寫既有版本會改寫已結算 Payroll 引用的那一版（字典明文禁止）。單資源那四個
  * 仍然照舊會偵測到（它們本來就必須下載才知道版本代碼）。
  *
@@ -61,6 +61,18 @@
  * `records_received` 記的是**真的寫進去的筆數**，於是「失敗了、但補進來 5 個版本」也看得出來。
  * `dataset_version_id` 指向本次建立的版本中生效日最新的那一個（一個都沒建才是 NULL）——
  * 這一欄只能指一個，而多版本同步裡最有意義的單一答案是「現行的那一版是不是這次建的」。
+ *
+ * **(4) 「不是候選」不影響 `status_code`，但它一定要出現在 `error_message` 裡（計畫 §7.1.2）。**
+ *
+ * 排除與失敗是兩件事：失敗是「我們不知道它是哪一天」，排除是「我們決定不同步它」。
+ * 把排除算成失敗的後果很具體——`dataset_code=2` 的 16 個資源裡有 9 個是政府的年度標示，
+ * 於是那個資料集在**穩定狀態下永遠是 `status=3`、排程每晚一則 error**，而一個永遠紅的告警
+ * 三個月後就沒有人會看；那時政府真的改了格式，同一則 error 一樣被忽略。
+ *
+ * 但**排除不得靜默**：摘要裡一定要寫出「不在候選範圍 N 個」與逐一的明細，
+ * 因此 `status=2`／`4` 的紀錄上也可能有 `error_message`——這一欄在多版本流程裡承載的是
+ * **同步摘要**，不只是失敗原因。少了那一行，「政府哪天把新資源也只標年份」會變成
+ * 一個沒有人看得見的資料缺口。
  *
  * ## 這一支沒有對應的端點，而那是刻意的（計畫 D3）
  *
@@ -85,17 +97,8 @@ import { RegulatorySyncStatus } from '../../../../db/schema/index.ts'
 import { LogCategory, logger } from '../../../../shared/logger.ts'
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import { parseRegulatoryRecordData } from '../../datasets/domain/regulatory-record-shape.ts'
-import {
-  listDataGovResources,
-  selectDataGovResource,
-  toDataGovMetadataUrl,
-  type DataGovResource,
-} from '../domain/regulatory-data-gov.ts'
-import {
-  describeResource,
-  planMultiVersionSync,
-  type DatedMultiVersionPlanEntry,
-} from '../domain/regulatory-multi-version-plan.ts'
+import { planMultiVersionSync, type DatedMultiVersionPlanEntry } from '../domain/regulatory-multi-version-plan.ts'
+import { describeResource, type RegulatorySourceResource } from '../domain/regulatory-source-resource.ts'
 import { toContentChecksum } from '../domain/regulatory-sync-checksum.ts'
 import {
   HEARTBEAT_INTERVAL_MS,
@@ -282,9 +285,11 @@ const validateRecordShapes = (
 type VersionWrite = {
   readonly datasetCode: SyncableDatasetCode
   readonly source: RegulatorySyncSource
-  readonly resource: DataGovResource
+  readonly resource: RegulatorySourceResource
   readonly versionCode: string
   readonly effectiveFrom: string
+  /** 政府**明示**的失效日；只有 `dataset_code=9` 有值（計畫 §3.2 (d)，見 insert 切片檔頭）。 */
+  readonly effectiveTo: string | null
   readonly checksum: string
   readonly rawText: string
   readonly records: readonly ParsedRegulatoryRecord[]
@@ -308,6 +313,7 @@ const writeVersion = async (context: RegulatorySyncContext, write: VersionWrite)
       datasetCode: write.datasetCode,
       versionCode: write.versionCode,
       effectiveFrom: write.effectiveFrom,
+      effectiveTo: write.effectiveTo,
       governmentResourceId: write.resource.downloadUrl,
       sourceModifiedAt: write.resource.sourceModifiedAt,
       syncedAt: now,
@@ -353,9 +359,9 @@ const executeSingleVersionSync = async (
   datasetCode: SyncableDatasetCode,
   source: RegulatorySingleVersionSource,
   syncLogId: number,
-  metadataBody: string,
+  discoveryBody: string,
 ): Promise<ServiceResult<SyncOutcome>> => {
-  const resource = selectDataGovResource(metadataBody, source.resourceFormat)
+  const resource = source.selectResource(discoveryBody)
   if (!resource.ok) return failSync(context, datasetCode, syncLogId, null, resource.reason)
 
   const resourceUrl = resource.value.downloadUrl
@@ -426,6 +432,10 @@ const executeSingleVersionSync = async (
     resource: resource.value,
     versionCode,
     effectiveFrom: parsed.effectiveFrom,
+    // 單資源那四個的來源都沒有明示失效日（計畫 §3.2 (d)）：它們的資源說明講的是「自某日起適用」，
+    // 沒有一個字提到適用到哪一天。寫成常數 `null` 而不是讓解析器回答，是因為**沒有東西可以回答**
+    // ——多開一個永遠是 `null` 的回傳欄位，只會讓下一個人以為它是可以填的。
+    effectiveTo: null,
     checksum,
     rawText,
     records: parsed.records,
@@ -502,6 +512,9 @@ const createOneVersion = async (
     resource: entry.resource,
     versionCode: entry.versionCode,
     effectiveFrom: entry.effectiveFrom,
+    // 來源明示的失效日（目前只有 `dataset_code=9` 的「N年度」有值）。它在計畫階段就與生效日
+    // 一起從資源名稱推導出來了，理由見 `domain/regulatory-sync-model.ts` 的 `DeriveEffectiveFrom`。
+    effectiveTo: entry.effectiveTo,
     // checksum 是**這一個版本自己那一份內容**的雜湊，與同一列的 `raw_data` 對得起來（見檔頭 (2)）。
     checksum: toContentChecksum(rawText),
     rawText,
@@ -532,9 +545,9 @@ const executeMultiVersionSync = async (
   datasetCode: SyncableDatasetCode,
   source: RegulatoryMultiVersionSource,
   syncLogId: number,
-  metadataBody: string,
+  discoveryBody: string,
 ): Promise<ServiceResult<SyncOutcome>> => {
-  const resources = listDataGovResources(metadataBody, source.resourceFormat)
+  const resources = source.listResources(discoveryBody)
   if (!resources.ok) return failSync(context, datasetCode, syncLogId, null, resources.reason)
 
   // 已有的版本代碼一次撈完：這一次同步期間它不會變（同一個資料集的併發寫入由心跳那把鎖擋住）。
@@ -542,12 +555,18 @@ const executeMultiVersionSync = async (
   const plan = planMultiVersionSync(resources.values, source.deriveEffectiveFrom, existingVersionCodes)
 
   const failures: string[] = []
+  const excluded: string[] = []
   const created: CreatedVersion[] = []
   let skipped = 0
 
   for (const entry of plan) {
     if (entry.action === 'fail') {
       failures.push(`[${describeResource(entry.resource)}] ${entry.reason}`)
+      continue
+    }
+    if (entry.action === 'exclude') {
+      // **不是失敗**（計畫 §7.1.2），但要記下來——理由見下面組摘要那一段。
+      excluded.push(`[${describeResource(entry.resource)}] ${entry.reason}`)
       continue
     }
     if (entry.action === 'skip') {
@@ -568,7 +587,18 @@ const executeMultiVersionSync = async (
   const recordsWritten = created.reduce((total, version) => total + version.recordCount, 0)
   const summary =
     `共 ${String(plan.length)} 個資源：新建 ${String(created.length)} 個版本` +
-    `（${String(recordsWritten)} 筆）、已存在 ${String(skipped)} 個、失敗 ${String(failures.length)} 個`
+    `（${String(recordsWritten)} 筆）、已存在 ${String(skipped)} 個、` +
+    `不在候選範圍 ${String(excluded.length)} 個、失敗 ${String(failures.length)} 個`
+
+  /**
+   * 被排除的那幾個，逐一列出。
+   *
+   * **排除不得靜默**（計畫 §7.1.2）：靜默跳過會讓「政府哪天把新資源也只標年份」變成
+   * 看不見的資料缺口——那個資源不會有人發現它沒進來，而症狀是幾個月後補算某一期薪資時查不到版本。
+   * 列出來之後，`2` 的那九個年度標示、`9` 的民國 108 年度、`8` 的頁面雜項條列都寫在紀錄上，
+   * 而**數量一旦變了**（例如政府把最新那一份改成只標年份），看紀錄的人當場就知道。
+   */
+  const exclusionNote = excluded.length === 0 ? '' : `\n不在候選範圍（排除，不算失敗）：\n${excluded.join('\n')}`
 
   if (failures.length > 0) {
     // **有東西沒進來就是紅的**，即使同一次也補進了幾個版本（理由見檔頭 (3)）。
@@ -579,14 +609,14 @@ const executeMultiVersionSync = async (
       datasetVersionId: newest?.id ?? null,
       governmentResourceId: newest?.resourceUrl ?? null,
       recordsReceived: recordsWritten,
-      errorMessage: `${summary}。失敗明細：\n${failures.join('\n')}`,
+      errorMessage: `${summary}。失敗明細：\n${failures.join('\n')}${exclusionNote}`,
     })
     return fail([regulatorySyncFailed(datasetCode, syncLogId, `${summary}；第一則失敗：${failures[0] ?? ''}`)])
   }
 
   if (newest === null) {
     // 一個都沒新建、也沒有失敗＝十幾個版本全都已經在庫裡。**這就是多版本的「無異動」**，
-    // 而且它連一份資源都沒有下載——穩定狀態下一次同步只打一次 metadata API。
+    // 而且它連一份資源都沒有下載——穩定狀態下一次同步只打一次探索網址。
     const latest = await findLatestDatasetVersion(context.db, datasetCode)
     await closeSyncLog(context, syncLogId, {
       statusCode: RegulatorySyncStatus.NoChange,
@@ -595,7 +625,11 @@ const executeMultiVersionSync = async (
       // 這一次沒有向任何一個資源要過內容，因此沒有「本次使用的資源」可記。
       governmentResourceId: null,
       recordsReceived: null,
-      errorMessage: null,
+      // ⚠️ 這一欄在多版本流程裡承載的是**同步摘要**，不只是失敗原因：`status=4` 也可能有話要說
+      //（`dataset_code=2` 穩定狀態下就是「7 個已存在、9 個不在候選範圍」）。
+      // 排除不得靜默（計畫 §7.1.2），而這裡是唯一一個留得住那句話的欄位。
+      // 沒有東西被排除時仍然是 `null`，於是「有沒有話要說」一眼看得出來。
+      errorMessage: exclusionNote === '' ? null : `${summary}。${exclusionNote}`,
     })
     return succeed({
       syncLogId,
@@ -614,7 +648,8 @@ const executeMultiVersionSync = async (
     datasetVersionId: newest.id,
     governmentResourceId: newest.resourceUrl,
     recordsReceived: recordsWritten,
-    errorMessage: null,
+    // 同上：成功也可能有排除要交代（第一次跑 `dataset_code=9` 就是「新建 7 個、排除 1 個」）。
+    errorMessage: exclusionNote === '' ? null : `${summary}。${exclusionNote}`,
   })
 
   return succeed({
@@ -636,9 +671,14 @@ const executeMultiVersionSync = async (
  * 拆出來的理由是 `finally`：心跳一旦啟動就必須停掉，而把整段流程寫在 `try` 裡會讓
  * 「哪些步驟在心跳的保護範圍內」變成要靠縮排判斷的事。
  *
- * 兩條路**共用 resource discovery 這一步**（都要打同一支 metadata API），從第二步開始才分岔。
+ * 兩條路**共用 resource discovery 這一步**（都要打自己的 `discoveryUrl`），從第二步開始才分岔。
  * 分岔點寫成 `kind` 的字面值比對而不是「有沒有 `deriveEffectiveFrom`」：後者在加第三種形態時
  * 不會有任何地方變紅。
+ *
+ * ⚠️ **探索的網址與解讀方式都在來源設定上**，本檔一個字都不知道 data.gov.tw 的存在：
+ * `8` 打的是勞動部公告頁、`9` 打的是財政部下載專區列表頁（計畫 §7.0：那兩個資料集沒有
+ * metadata API 可用）。這一段之後的每一步——幂等、候選判準、逐版本交易、狀態碼對應
+ * ——三個來源完全共用，而那些才是這條路的規格。
  */
 const executeSync = async (
   context: RegulatorySyncContext,
@@ -646,14 +686,13 @@ const executeSync = async (
   source: RegulatorySyncSource,
   syncLogId: number,
 ): Promise<ServiceResult<SyncOutcome>> => {
-  // ① resource discovery：`government_resource_id` 不得硬編（計畫 §7.0）。
-  const metadataUrl = toDataGovMetadataUrl(source.datasetId)
-  const metadata = await fetchText(context, metadataUrl, 'metadata API ')
-  if (!metadata.ok) return failSync(context, datasetCode, syncLogId, null, metadata.reason)
+  // ① resource discovery：`government_resource_id` 不得硬編（計畫 §7.0），每次同步重新探索。
+  const discovery = await fetchText(context, source.discoveryUrl, '資源探索')
+  if (!discovery.ok) return failSync(context, datasetCode, syncLogId, null, discovery.reason)
 
   return source.kind === 'single-version'
-    ? executeSingleVersionSync(context, datasetCode, source, syncLogId, metadata.body)
-    : executeMultiVersionSync(context, datasetCode, source, syncLogId, metadata.body)
+    ? executeSingleVersionSync(context, datasetCode, source, syncLogId, discovery.body)
+    : executeMultiVersionSync(context, datasetCode, source, syncLogId, discovery.body)
 }
 
 export const runSync = async (

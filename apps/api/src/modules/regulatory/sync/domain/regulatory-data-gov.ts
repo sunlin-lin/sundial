@@ -19,52 +19,22 @@
  * `distribution[]` 同時有 CSV／JSON／XML／WEBSERVICES 四筆。挑錯格式不會報錯：
  * 解析器會拿到一串 CSV 然後在 `JSON.parse` 失敗，而錯誤訊息會指向解析器，
  * 不會指向「探索階段挑錯了」。因此格式是**由呼叫端指定、比對不到就失敗**，沒有回退順序。
+ *
+ * ## 產物的型別不在這個檔案裡
+ *
+ * `RegulatorySourceResource` 與那三道檢查（有沒有網址、是不是 https、長度上限）住在
+ * `regulatory-source-resource.ts`：`dataset_code=8`、`9` 的資源不經過 data.gov.tw，
+ * 而它們要的是同一個產物與同一組檢查。理由完整寫在那個檔案的檔頭。
  */
+import {
+  toSourceResource,
+  type RegulatorySourceResource,
+  type RegulatorySourceResourceListResult,
+  type RegulatorySourceResourceResult,
+} from './regulatory-source-resource.ts'
 
 /** metadata 的 `modifiedDate`：`YYYY-MM-DD HH:mm:ss`。 */
 const MODIFIED_DATE_PATTERN = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/
-
-/**
- * `government_resource_id` 欄位長度（`varchar(150)`）。
- *
- * 超長時**在這裡失敗**，而不是讓 MariaDB 截斷或報錯：截斷後的網址仍然像一個網址，
- * 而它是事後追查「這一版是從哪裡抓來的」唯一的線索。
- */
-const MAX_RESOURCE_ID_LENGTH = 150
-
-export type DataGovResource = {
-  /** 本次要下載的網址，同時寫進 `regulatory_dataset_versions.government_resource_id`。 */
-  readonly downloadUrl: string
-  /** 資源說明（`勞工保險投保薪資分級表(115年1月1日起適用)`）。只進 log 與錯誤訊息，不進資料表。 */
-  readonly resourceDescription: string | null
-  /**
-   * 政府標示的最後修改時間，台北牆鐘 `YYYY-MM-DD HH:mm:ss`（§6）。
-   *
-   * **時區在這一步就確定，不留到寫入時再想**（計畫 §3.2）：data.gov.tw 是我國政府的平台，
-   * 這個時戳本來就是台北時間，因此換算是**恆等**——但這句話必須寫下來，否則下一個資料集的
-   * 解析器會不知道這一欄到底換算過沒有，而漏換算的症狀是時間差 8 小時、不報錯。
-   *
-   * 格式對不上時是 `null` 而不是失敗：這一欄在資料表上是選填，它**不是** `effective_from`
-   * （後者適用計畫 §7.2 那條「推導不出就失敗」）。為了一個只供參考的時戳讓整次同步失敗，
-   * 會讓真正該紅的那條規則被稀釋。
-   */
-  readonly sourceModifiedAt: string | null
-}
-
-export type DataGovResourceResult =
-  | { readonly ok: true; readonly value: DataGovResource }
-  | { readonly ok: false; readonly reason: string }
-
-/**
- * 探索到的**全部**該格式資源（多版本資料集用，見 {@link listDataGovResources}）。
- *
- * 與 {@link DataGovResourceResult} 分開而不是讓後者回一個陣列：單資源那四個資料集的呼叫端
- * 拿到的必須是「一個資源」，讓它們去處理一個長度可能不是 1 的陣列，等於把多版本的問題
- * 搬進一條現在是直線的路。
- */
-export type DataGovResourceListResult =
-  | { readonly ok: true; readonly values: readonly DataGovResource[] }
-  | { readonly ok: false; readonly reason: string }
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -145,45 +115,28 @@ const readDistribution = (rawMetadata: string): DataGovDistributionResult => {
 /**
  * 一筆 `distribution[]` → 一個可以下載的資源。
  *
- * 三道檢查都在這裡，兩個呼叫端因此不可能有不同的嚴格度：有沒有網址、是不是 https、
- * 長度會不會超過 `government_resource_id` 的欄位上限。
+ * 三道檢查不在這裡，在 {@link toSourceResource}：`8`、`9` 的資源不經過 data.gov.tw，
+ * 而三個來源必須有同一組嚴格度（見 `regulatory-source-resource.ts` 檔頭）。
  */
 const toDataGovResource = (
   entry: Record<string, unknown>,
   format: string,
   sourceModifiedAt: string | null,
-): DataGovResourceResult => {
-  const downloadUrl = readString(entry, 'resourceDownloadUrl')
-  if (downloadUrl === null) {
-    return { ok: false, reason: `metadata 的 ${format} 資源沒有 resourceDownloadUrl` }
-  }
-  // 只走 TLS：這份內容會成為薪資結算的法定基準，明文 HTTP 的內容在傳輸途中可以被改寫，
-  // 而被改寫過的分級表在系統裡與正確的分級表長得一模一樣。
-  if (!downloadUrl.startsWith('https://')) {
-    return { ok: false, reason: `metadata 的資源網址不是 https：${downloadUrl}` }
-  }
-  if (downloadUrl.length > MAX_RESOURCE_ID_LENGTH) {
-    return {
-      ok: false,
-      reason: `資源網址長度 ${String(downloadUrl.length)} 超過 government_resource_id 的 ${String(MAX_RESOURCE_ID_LENGTH)} 字元上限：${downloadUrl}`,
-    }
-  }
-
-  return {
-    ok: true,
-    value: {
-      downloadUrl,
+): RegulatorySourceResourceResult =>
+  toSourceResource(
+    {
+      downloadUrl: readString(entry, 'resourceDownloadUrl'),
       resourceDescription: readString(entry, 'resourceDescription'),
       sourceModifiedAt,
     },
-  }
-}
+    `metadata 的 ${format} 資源`,
+  )
 
 /** 沒有比對到指定格式時的說明：把實際有哪些格式印出來，那是「政府改版了」最典型的樣子。 */
 const describeMissingFormat = (resourceFormat: string, availableFormats: readonly string[]): string =>
   `metadata 的 distribution 裡沒有 ${resourceFormat} 格式的資源（實際有：${availableFormats.join('、') || '無'}）`
 
-export const selectDataGovResource = (rawMetadata: string, resourceFormat: string): DataGovResourceResult => {
+export const selectDataGovResource = (rawMetadata: string, resourceFormat: string): RegulatorySourceResourceResult => {
   const distribution = readDistribution(rawMetadata)
   if (!distribution.ok) return distribution
 
@@ -219,13 +172,13 @@ export const selectDataGovResource = (rawMetadata: string, resourceFormat: strin
  * **任何一筆讀不出合法網址就整批失敗**，不是「跳過壞掉的那一筆」：跳過會讓某一個年度的版本
  * 安靜地永遠不進來，而症狀是幾個月後有人問「補算 111 年的薪資怎麼查不到版本」。
  */
-export const listDataGovResources = (rawMetadata: string, resourceFormat: string): DataGovResourceListResult => {
+export const listDataGovResources = (rawMetadata: string, resourceFormat: string): RegulatorySourceResourceListResult => {
   const distribution = readDistribution(rawMetadata)
   if (!distribution.ok) return distribution
 
   const wanted = resourceFormat.toUpperCase()
   const availableFormats: string[] = []
-  const values: DataGovResource[] = []
+  const values: RegulatorySourceResource[] = []
 
   for (const entry of distribution.value.entries) {
     const format = readString(entry, 'resourceFormat')

@@ -29,6 +29,10 @@ import type { RegulatoryDatasetCode } from '../../datasets/regulatory-datasets.s
 // repository**——要資料一律走 service，而這裡要的是一個零 IO 的判定函式。
 import { isRegulatoryDatasetCode } from '../../datasets/domain/regulatory-dataset-model.ts'
 import type { Clock } from '../../../../shared/clock.ts'
+import type {
+  RegulatorySourceResourceListResult,
+  RegulatorySourceResourceResult,
+} from './regulatory-source-resource.ts'
 
 /**
  * 對政府端點的一次 GET。
@@ -236,11 +240,37 @@ export type RegulatoryDatasetParser = (rawText: string, context: RegulatoryParse
 export type RegulatoryVersionRecordsParser = (rawText: string, context: RegulatoryParseContext) => RegulatoryRecordsResult
 
 /**
- * 生效日推導的結果。形狀與 `regulatory-roc-date.ts` 的 `RocDateResult` 相同（結構相容，可直接回傳）。
+ * 生效日推導的結果。
+ *
+ * ## 失敗分支有兩種，而它們是**兩件不同的事**（計畫 §7.1.2）
+ *
+ * | `excluded` | 語意 | 處置 |
+ * |---|---|---|
+ * | `false` | **推導不出生效日**：我們不知道它是哪一天 | 那個版本失敗（§7.2） |
+ * | `true` | **不是候選**：我們決定不同步它 | 排除，不算失敗 |
+ *
+ * 這個欄位存在的理由是一個實際發生過的問題：`dataset_code=2` 的 16 個資源裡有 9 個是政府的
+ * 年度標示（`100年…`～`109年…`）。照 §7.2 的字面處理，它們每晚都失敗，於是那個資料集在
+ * **穩定狀態下永遠是 `status=3`、排程每晚一則 error**——而一個永遠紅的告警三個月後就沒有人會看，
+ * 那時真正的失敗（政府改了格式）跟著被忽略。**告警疲勞比缺那幾版資料危險得多。**
+ *
+ * ⚠️ **但排除不得靜默**：被排除的數量必須出現在同步摘要裡（見
+ * `impl/regulatory-sync.run.service.ts` 的多版本流程）。靜默跳過會讓「政府哪天把新資源也
+ * 只標年份」變成看不見的資料缺口。
+ *
+ * **`excluded` 是必填欄位，不是選填**：做成選填之後，新來源的推導函式會在不做任何決定的情況下
+ * 落到「失敗」那一邊——而那正是這個欄位要防的事。少寫它是編譯錯誤。
+ *
+ * ## 成功分支帶著 `effectiveTo`，而它幾乎總是 `null`
+ *
+ * `effective_to` **只在政府明示失效日時才寫入**（計畫 §3.2 (d)），不拿來記「下一版開始日的
+ * 前一天」。目前只有 `dataset_code=9` 有值：扣繳稅額表的資源名稱寫著「115年度」，
+ * 那四個字本身就宣告了它管到當年 12 月 31 日為止（理由見 `regulatory-roc-date.ts` 的
+ * `parseRocFiscalYear`）。其餘資料集一律 `null`——而它是**必填**的，理由與 `excluded` 相同。
  */
 export type RegulatoryEffectiveFromResult =
-  | { readonly ok: true; readonly value: string }
-  | { readonly ok: false; readonly reason: string }
+  | { readonly ok: true; readonly effectiveFrom: string; readonly effectiveTo: string | null }
+  | { readonly ok: false; readonly excluded: boolean; readonly reason: string }
 
 /**
  * 從**一個資源的說明**推導它的版本生效日 `YYYY-MM-DD`（多版本資料集專用）。
@@ -249,21 +279,29 @@ export type RegulatoryEffectiveFromResult =
  * 也不會被任何 fallback 補上一個日期。簽章裡只有資源說明——沒有 clock、沒有 `sourceModifiedAt`、
  * 沒有上一版的生效日，於是那幾個「看起來完全合理」的推測值一行都寫不出來
  * （理由與 {@link RegulatoryParseContext} 刻意只有一欄逐字相同）。
+ *
+ * **候選判準也在這一支裡**（計畫 §7.1.2）：它同時回答「這一份是不是候選」與「它是哪一天生效」，
+ * 因為兩者的材料是同一個——資源自己的名字。分成兩支函式的話，其中一支哪天改了 pattern，
+ * 會出現「推導得出生效日、卻不是候選」這種沒有人想得出來的狀態。
  */
 export type DeriveEffectiveFrom = (resourceDescription: string | null) => RegulatoryEffectiveFromResult
 
 /**
  * 同步來源設定的共同部分。
  *
- * **只硬編 `datasetId`（一個穩定的數字），資源網址每次同步重新探索**（計畫 §7.0）：
- * 實測勞動部的資源網址帶隨機尾碼（`A17000000J-020014-Uy8`），硬編一定會壞，
- * 而壞掉的形式是 404——政府改版的那一天，同步從此失敗，沒有人知道原因在哪一行。
+ * **資源網址每次同步重新探索，一律不硬編**（計畫 §7.0）：實測勞動部的資源網址帶隨機尾碼
+ * （`A17000000J-020014-Uy8`），硬編一定會壞，而壞掉的形式是 404——政府改版的那一天，
+ * 同步從此失敗，沒有人知道原因在哪一行。硬編的只有**探索的入口**（{@link discoveryUrl}）。
  */
 type RegulatorySyncSourceBase = {
-  /** data.gov.tw 的資料集 id。這是本模組唯一可以寫死的政府識別碼。 */
-  readonly datasetId: number
-  /** 要挑 `distribution[]` 裡哪一種格式的資源（`JSON`／`CSV`／`XML`）。 */
-  readonly resourceFormat: string
+  /**
+   * 資源探索要打的網址。**這是每個資料集唯一寫死的政府位址。**
+   *
+   * 三種形態（計畫 §7.0）：data.gov.tw 的 metadata API（`1`–`6`，由 `datasetId` 組出來，
+   * 而 `datasetId` 是一個穩定的數字）、財政部下載專區的列表頁（`9`）、勞動部的公告頁（`8`）。
+   * 後兩者沒有 metadata API 可用，那一頁的網址就是我們能硬編的最穩定的東西。
+   */
+  readonly discoveryUrl: string
   /** 對應 `regulatory_dataset_versions.raw_format_code`：Snapshot 那串位元組原本是什麼格式。 */
   readonly rawFormatCode: RegulatoryRawFormatValue
 }
@@ -279,21 +317,34 @@ type RegulatorySyncSourceBase = {
 export type RegulatorySingleVersionSource = RegulatorySyncSourceBase & {
   /** 判別欄位。寫成字面值而不是「有沒有 `deriveEffectiveFrom`」，是為了讓兩條路在 `switch` 上是總的。 */
   readonly kind: 'single-version'
+  /** 探索回應 → 這一次要下載的那一個資源。目前四個都是 `selectDataGovResource(body, 格式)`。 */
+  readonly selectResource: (discoveryBody: string) => RegulatorySourceResourceResult
   readonly parse: RegulatoryDatasetParser
 }
 
 /**
- * **一個資源 → 一個版本，而同一個資料集底下有十幾個資源**的資料集（`2`、`5`）。
+ * **一個資源 → 一個版本，而同一個資料集底下有十幾個資源**的資料集（`2`、`5`、`8`、`9`）。
  *
  * `20251` 有 16 個 CSV 資源、`20246` 有 19 個（實測 2026-08），每一個是一個歷史版本，
  * 生效日各自寫在自己的資源說明裡。一次同步會把**所有還沒有的版本**補進來，
- * 於是歷史一次回補（`5` 回補到民國 100 年 1 月）。
+ * 於是歷史一次回補（`5` 回補到民國 100 年 1 月、`9` 回補到民國 107 年度）。
  *
- * 兩個欄位分工：{@link deriveEffectiveFrom} 只看 metadata（因此可以在下載之前決定要不要下載），
- * {@link parse} 只看內容。詳見 {@link RegulatoryVersionRecordsParser}。
+ * 三個欄位分工：{@link listResources} 說「有哪些資源」、{@link deriveEffectiveFrom} 只看資源的名字
+ * （因此可以在下載之前決定要不要下載），{@link parse} 只看內容。
+ * 詳見 {@link RegulatoryVersionRecordsParser}。
+ *
+ * ## `listResources` 是一個函式，不是「格式字串」
+ *
+ * 原本這裡是 `datasetId` ＋ `resourceFormat`，因為四個多資源資料集全部來自 data.gov.tw。
+ * `8`（勞動部公告頁）與 `9`（財政部下載專區）沒有那一層：前者的「資源」是頁面上的一則公告條列，
+ * 後者是列表頁上的一個年度連結。做成函式之後，「怎麼把探索回應讀成一份資源清單」是各來源自己的事，
+ * 而**它後面的每一步（幂等、候選判準、逐版本交易、狀態碼對應）三個來源完全共用**
+ * ——那些才是這條路真正的規格。
  */
 export type RegulatoryMultiVersionSource = RegulatorySyncSourceBase & {
   readonly kind: 'multi-version'
+  /** 探索回應 → 這個資料集底下的**全部**資源（每一個是一個版本）。 */
+  readonly listResources: (discoveryBody: string) => RegulatorySourceResourceListResult
   readonly deriveEffectiveFrom: DeriveEffectiveFrom
   readonly parse: RegulatoryVersionRecordsParser
 }

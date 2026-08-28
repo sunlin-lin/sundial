@@ -22,16 +22,97 @@
  * 於是逐字比對同時擋住了「比率改了」——那是法規變更，必須有人知道，而它在資料列上完全看不出來
  *（每一格都還是合法的金額）。
  *
- * ## 刻意不支援引號跳脫
+ * ## 引號跳脫是**呼叫端必須明講**的期望，不是「兩種都接受」
  *
- * RFC 4180 的引號欄位（`"a,b"`）在這兩份資料裡一次都沒出現過（實測 35 個資源）。
- * 寫一個「順便支援」的版本要多一台狀態機，而那台狀態機**沒有任何測試資料會經過它**
- * ——它只會在政府哪天真的改成帶引號的格式時第一次執行，而那正是最不該由沒跑過的程式碼接手的時刻。
- * 因此看到引號一律失敗（§7.2 的精神：讀不懂就停下來），失敗訊息會講明是引號。
+ * 健保署那兩份（`dataset_code=2`、`5`）從來沒有出現過引號（實測 35 個資源），而財政部臺北國稅局的
+ * 扣繳稅額表（`9`）**每一列都有**：第一欄是 `"80,001 ~ 80,500"`，加引號正是因為值裡有逗號。
+ *
+ * 因此 {@link CsvQuoting} 是必填參數且是封閉聯集，形式與 `regulatory-amount.ts` 的
+ * `AmountUnit`／`PercentSuffix` 逐字相同：**呼叫端必須明講自己期望哪一種**。
+ *
+ * 做成「有沒有都接受」的代價是實的：健保署那兩份哪天冒出引號，寬容的版本會照樣解析成功，
+ * 而那正是我們最需要有人去看一眼的時刻（引號代表某一欄的值裡出現了逗號，
+ * 而那多半是政府把兩欄併成一欄或加了千分位）。宣告 `reject` 的那兩個資料集會當場失敗。
+ *
+ * 反過來說，`rfc4180` 那條路**不是一台沒有人跑過的狀態機**：`dataset_code=9` 的每一列、
+ * 每一次同步都會經過它，而且測試餵的就是政府那一份的實測內容。
+ * 這與「寫一個順便支援的版本」是兩件事——後者的問題從來不是複雜度，是沒有資料會經過它。
  */
 
 /** UTF-8 BOM。健保署那兩份都帶（實測），不去掉的話第一個欄位名會變成 `﻿組別級距`。 */
 const BYTE_ORDER_MARK = '﻿'
+
+/** 這一份 CSV 期望的引號處置。封閉聯集，呼叫端必須明講，見檔頭。 */
+export type CsvQuoting =
+  /** 一律不該有引號（`dataset_code=2`、`5`）：出現引號即代表格式已變，整份失敗。 */
+  | 'reject'
+  /** RFC 4180 的引號欄位（`dataset_code=9` 的 `"80,001 ~ 80,500"`）。 */
+  | 'rfc4180'
+
+/** 一列 CSV → 各欄的原始字串（未 trim）。失敗代表引號用法讀不懂。 */
+type CsvLineResult = { readonly ok: true; readonly cells: readonly string[] } | { readonly ok: false; readonly reason: string }
+
+/**
+ * 拆一列 RFC 4180 的 CSV。
+ *
+ * 支援的只有兩件事：以引號包住整個欄位，以及欄位內用 `""` 表示一個引號字元。
+ * **不支援跨列的引號欄位**（欄位裡有換行）——那一種在讀到列尾時仍然停在引號內，
+ * 本函式回失敗而不是把下一列接進來。實測財政部那八個年度一次都沒有出現過，
+ * 而「把下一列接進來」會讓一份被截斷的檔案安靜地少掉一整列。
+ *
+ * 引號只准出現在欄位的開頭：`80,0"01` 這種值代表政府那一份壞了或我們讀錯了分隔符號，
+ * 一律失敗（§7.2 的精神：讀不懂就停下來）。
+ */
+const splitRfc4180Line = (line: string): CsvLineResult => {
+  const cells: string[] = []
+  let index = 0
+
+  while (index <= line.length) {
+    if (line[index] === '"') {
+      index += 1
+      let value = ''
+      for (;;) {
+        const closing = line.indexOf('"', index)
+        if (closing === -1) {
+          return { ok: false, reason: `引號欄位沒有結尾的引號（本解析器不支援跨列的引號欄位）：${JSON.stringify(line)}` }
+        }
+        value += line.slice(index, closing)
+        // `""` 是一個引號字元本身；否則這個引號就是欄位的結尾。
+        if (line[closing + 1] === '"') {
+          value += '"'
+          index = closing + 2
+          continue
+        }
+        index = closing + 1
+        break
+      }
+      if (index < line.length && line[index] !== ',') {
+        return { ok: false, reason: `引號欄位的結尾後面不是逗號：${JSON.stringify(line)}` }
+      }
+      cells.push(value)
+      index += 1
+      // 剛好在列尾結束（`index === line.length + 1`）時不再開下一欄。
+      if (index > line.length) return { ok: true, cells }
+      continue
+    }
+
+    const comma = line.indexOf(',', index)
+    const end = comma === -1 ? line.length : comma
+    const value = line.slice(index, end)
+    if (value.includes('"')) {
+      return { ok: false, reason: `引號出現在欄位中間（只支援整個欄位加引號）：${JSON.stringify(line)}` }
+    }
+    cells.push(value)
+    if (comma === -1) return { ok: true, cells }
+    index = comma + 1
+  }
+
+  return { ok: true, cells }
+}
+
+/** 拆一列 CSV，依呼叫端宣告的引號處置。`reject` 那一種的引號檢查在 {@link parseCsvTable} 一次做完。 */
+const splitCsvLine = (line: string, quoting: CsvQuoting): CsvLineResult =>
+  quoting === 'reject' ? { ok: true, cells: line.split(',') } : splitRfc4180Line(line)
 
 /**
  * 一列 CSV：欄位名 → 值（值已 trim，空字串保留原樣，由呼叫端的 `readField` 決定要不要當成缺）。
@@ -46,8 +127,8 @@ export type CsvTableResult =
  * 把政府的 CSV 讀成一批「欄位名 → 值」。
  *
  * @param rawText 資源的原始內容（未經任何前處理，與寫進 `raw_data` 的是同一串）。
- * @param options `header` 是期望的表頭（**逐字、逐順序**）；`label` 是這份資料叫什麼，
- *   只用來組錯誤訊息——那句話會原樣進 `regulatory_sync_logs.error_message`。
+ * @param options `header` 是期望的表頭（**逐字、逐順序**）；`quoting` 是期望的引號處置（見檔頭）；
+ *   `label` 是這份資料叫什麼，只用來組錯誤訊息——那句話會原樣進 `regulatory_sync_logs.error_message`。
  *
  * 每一格都會 trim。這與 `normalizeAmount` 去逗號同一種處置：前後空白是欄寬補齊，不是資訊，
  * 去掉它沒有做任何推測。**但欄位數不夠或多出來一律失敗**，不補空值也不忽略多的那一欄
@@ -56,14 +137,14 @@ export type CsvTableResult =
  */
 export const parseCsvTable = (
   rawText: string,
-  options: { readonly header: readonly string[]; readonly label: string },
+  options: { readonly header: readonly string[]; readonly quoting: CsvQuoting; readonly label: string },
 ): CsvTableResult => {
-  const { header, label } = options
+  const { header, quoting, label } = options
 
-  if (rawText.includes('"')) {
+  if (quoting === 'reject' && rawText.includes('"')) {
     return {
       ok: false,
-      reason: `${label}的 CSV 出現引號：本解析器不支援 RFC 4180 的引號欄位（實測從未出現），格式已變`,
+      reason: `${label}的 CSV 出現引號：本資料集宣告不使用 RFC 4180 的引號欄位（實測從未出現），格式已變`,
     }
   }
 
@@ -77,7 +158,10 @@ export const parseCsvTable = (
     return { ok: false, reason: `${label}的 CSV 是空的，一列都沒有` }
   }
 
-  const actualHeader = headerLine.split(',').map((cell) => cell.trim())
+  const headerCells = splitCsvLine(headerLine, quoting)
+  if (!headerCells.ok) return { ok: false, reason: `${label}的 CSV 表頭讀不懂：${headerCells.reason}` }
+
+  const actualHeader = headerCells.cells.map((cell) => cell.trim())
   if (actualHeader.length !== header.length || actualHeader.some((cell, index) => cell !== header[index])) {
     return {
       ok: false,
@@ -94,7 +178,11 @@ export const parseCsvTable = (
 
   const rows: CsvRow[] = []
   for (const [index, line] of dataLines.entries()) {
-    const cells = line.split(',').map((cell) => cell.trim())
+    const split = splitCsvLine(line, quoting)
+    if (!split.ok) {
+      return { ok: false, reason: `${label}的 CSV 第 ${String(index + 1)} 列讀不懂：${split.reason}` }
+    }
+    const cells = split.cells.map((cell) => cell.trim())
     if (cells.length !== header.length) {
       return {
         ok: false,

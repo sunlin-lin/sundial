@@ -46,6 +46,49 @@ export const ZH_TW = {
 
   'menu.overview': '總覽',
   'menu.dashboard': '首頁',
+  'menu.system-settings': '系統設定',
+  'menu.regulatory-sync': '法規資料同步歷程',
+
+  'regulatory-sync.heading': '法規資料同步歷程',
+  'regulatory-sync.description':
+    '每一次自動同步的結果。政府法規全國一份，這一頁不分公司，所有公司看到的是同一份紀錄。',
+  'regulatory-sync.filter.dataset': '資料集',
+  'regulatory-sync.column.dataset': '資料集',
+  'regulatory-sync.column.started-at': '開始時間',
+  'regulatory-sync.column.finished-at': '結束時間',
+  'regulatory-sync.column.status': '狀態',
+  'regulatory-sync.column.records-received': '收到筆數',
+  'regulatory-sync.column.error-message': '失敗原因',
+
+  /** 四種狀態，值取自後端的 `RegulatorySyncStatus`（1/2/3/4）。 */
+  'regulatory-sync.status.running': '執行中',
+  'regulatory-sync.status.succeeded': '更新成功',
+  'regulatory-sync.status.failed': '失敗',
+  'regulatory-sync.status.no-change': '無異動',
+
+  /**
+   * 空結果。**這一頁的篩選條件不能清除**（後端的 `datasetCode` 是必填，一次只查一個資料集），
+   * 所以 §7.2 的「提示可清除篩選」在這裡的對應動作是「換一個資料集」——旁邊那個下拉就是。
+   * 空白畫面在 HR 系統特別危險：該處理的清單顯示空白，使用者就真的不去處理了。
+   */
+  'regulatory-sync.empty': '這個資料集還沒有同步紀錄。可以在上方換一個資料集看看。',
+  'regulatory-sync.retry': '重新載入',
+
+  /**
+   * 資料集名稱。**必須與後端 `REGULATORY_DATASETS` 的 `name` 逐字相同**——那一份與計畫 §3.1
+   * 的表格由 `bun run check:dataset-code` 互相比對，但**這一份不在它的守備範圍內**
+   * （理由與代價完整寫在 `pages/regulatory/sync/regulatory-sync.dataset.view.ts` 檔頭）。
+   * `7` 是永久空號，不是漏打。
+   */
+  'regulatory-sync.dataset.1': '勞工保險投保薪資分級表',
+  'regulatory-sync.dataset.2': '全民健康保險投保金額分級表',
+  'regulatory-sync.dataset.3': '勞工退休金月提繳工資分級表',
+  'regulatory-sync.dataset.4': '勞就保保險費分擔金額表',
+  'regulatory-sync.dataset.5': '健保費負擔金額表（有一定雇主之受僱者）',
+  'regulatory-sync.dataset.6': '職業災害保險行業別費率',
+  'regulatory-sync.dataset.8': '最低工資（月薪與時薪）',
+  'regulatory-sync.dataset.9': '薪資所得扣繳稅額表',
+  'regulatory-sync.dataset.10': '健保補充保險費（費率與計費門檻）',
 
   /** 前端自己要說的話，見檔頭的「唯一的例外」。 */
   'error.system': '系統發生錯誤，請稍後再試。',

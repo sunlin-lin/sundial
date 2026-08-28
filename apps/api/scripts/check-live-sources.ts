@@ -22,9 +22,10 @@
  * 停掉它的時候知道自己在放棄什麼——放棄的是那段提前量（幾小時到一天，以及「不必等到隔天
  * 才發現今晚的同步會失敗」），**不是**對格式變更的偵測能力本身。
  *
- * **這句話有一個註腳，見 `checkMultiVersionDataset`**：多版本資料集（`2`、`5`）裡
- * 「推導不出生效日的資源」在這支指令裡是印出來、計數，不是紅燈——那是本檔唯一一條自己的規則，
- * 而它決定的是「這種結果算不算紅」，不是「怎麼判定」。判準仍然全部來自模組。
+ * **這句話有一個註腳，見 `checkMultiVersionDataset`**：多版本資料集（`2`、`5`、`8`、`9`）裡
+ * **「不是候選」的資源在這支指令裡是印出來、計數，不是紅燈**——與正式同步的處置一致
+ * （計畫 §7.1.2：排除不算失敗，但不得靜默）。**「是候選、卻推導不出生效日」仍然是紅的**，
+ * 那也與正式同步一致（§7.2）。判準仍然全部來自模組，本檔只負責把兩者印成不同的樣子。
  *
  * **除此之外這句話是沒有例外的，而那是靠結構保證的：本檔一條自己的斷言都沒有。** 下面跑的每一條規則
  * 都在 `modules/regulatory` 裡、都是排程同步也會跑的同一份程式碼（見「它走的是正式流程的
@@ -64,12 +65,9 @@
  */
 import { parseRegulatoryRecordData } from '../src/modules/regulatory/datasets/domain/regulatory-record-shape.ts'
 import {
-  listDataGovResources,
-  selectDataGovResource,
-  toDataGovMetadataUrl,
-  type DataGovResource,
-} from '../src/modules/regulatory/sync/domain/regulatory-data-gov.ts'
-import { describeResource } from '../src/modules/regulatory/sync/domain/regulatory-multi-version-plan.ts'
+  describeResource,
+  type RegulatorySourceResource,
+} from '../src/modules/regulatory/sync/domain/regulatory-source-resource.ts'
 import {
   RESOURCE_FETCH_TIMEOUT_MS,
   type ParsedRegulatoryRecord,
@@ -144,9 +142,9 @@ const checkRecordShapes = (
 const checkSingleVersionDataset = async (
   datasetCode: SyncableDatasetCode,
   source: RegulatorySingleVersionSource,
-  metadataBody: string,
+  discoveryBody: string,
 ): Promise<void> => {
-  const resource = selectDataGovResource(metadataBody, source.resourceFormat)
+  const resource = source.selectResource(discoveryBody)
   if (!resource.ok) {
     // 連得上卻挑不到資源，這正是「政府改版了」最典型的樣子。
     failures.push({ datasetCode, resourceUrl: null, detail: `resource discovery 失敗：${resource.reason}` })
@@ -184,33 +182,39 @@ const checkSingleVersionDataset = async (
 /**
  * 多資源資料集（`2`、`5`）：**每一個資源都檢查**（推導生效日 → 下載 → 解析 → 形狀驗證）。
  *
- * ## 這裡有本檔唯一的一條自己的規則，寫出來讓下一個人知道它存在
+ * ## 兩種「沒進來」印成兩種樣子，而那個區分完全來自模組
  *
- * 檔頭說「本檔一條自己的斷言都沒有」，多版本資料集讓那句話多了一個註腳：
- * **推導不出生效日的資源在這裡是「印出來、計數」，不是失敗**，而在正式同步裡它是 `status=3`。
+ * `deriveEffectiveFrom` 回的失敗分支帶著 `excluded`，本檔照它分成兩堆（計畫 §7.1.2）：
  *
- * 理由是這支指令與同步問的問題不同。同步問「這一版能不能寫進資料庫」，答案只能是不能；
- * 這支指令問「政府那一份還是不是我們認得的樣子」，而 `20251` 那九個只有年份的歷史資源
- * （`100年…`～`109年…`）是一個**已知、而且永遠不會變**的狀態，不是一個變化。
- * 把它記成失敗會讓這支指令**永遠是紅的**，而永遠紅的檢查會被關掉——關掉之後，
- * 另外五個資料集也一起失去了那段提前量。
+ * | | 語意 | 這支指令 | 正式同步 |
+ * |---|---|---|---|
+ * | `excluded: true` | 我們**決定不同步**它 | 印一行「－」，不是紅燈 | 排除、計入摘要 |
+ * | `excluded: false` | 我們**不知道**它是哪一天 | **紅燈** | `status=3` 失敗 |
  *
- * 因此判準仍然全部來自模組（`deriveEffectiveFrom`、`parse`、形狀定義），
- * 本檔只決定**「推導不出來」這一種結果在這支指令裡算不算紅**。
- * 而「政府改了說明的寫法」仍然看得見：可推導的資源數會掉，最新的那一版會從清單上消失，
+ * 兩邊的處置一致，因此檔頭那句「判準全部來自模組」仍然成立——本檔只決定**印成什麼樣子**。
+ *
+ * 為什麼排除不能是紅燈：`20251` 那九個只有年份的歷史資源（`100年…`～`109年…`）、
+ * 財政部那一份沒有年度的檔名、勞動部公告頁上的頁面雜項條列，都是**已知、而且永遠不會變**的狀態，
+ * 不是一個變化。把它們記成失敗會讓這支指令**永遠是紅的**，而永遠紅的檢查會被關掉
+ * ——關掉之後，另外七個資料集也一起失去了那段提前量。
+ *
+ * 而「政府改了名稱的寫法」仍然看得見：可推導的資源數會掉、最新的那一版會從清單上消失，
  * 而若**一個都推導不出來**，這支指令直接失敗（見下）。
  */
 const checkMultiVersionDataset = async (
   datasetCode: SyncableDatasetCode,
   source: RegulatoryMultiVersionSource,
-  metadataBody: string,
+  discoveryBody: string,
 ): Promise<void> => {
-  const resources = listDataGovResources(metadataBody, source.resourceFormat)
+  const resources = source.listResources(discoveryBody)
   if (!resources.ok) {
     failures.push({ datasetCode, resourceUrl: null, detail: `resource discovery 失敗：${resources.reason}` })
     return
   }
 
+  /** 不是候選（我們決定不同步）。**不是紅燈，但要印出來**，見本函式的說明。 */
+  const excluded: string[] = []
+  /** 是候選、卻推導不出生效日。**這一種是紅燈**：判準說它該進來，我們卻讀不出它的生效日。 */
   const undatable: string[] = []
   let datedCount = 0
 
@@ -219,24 +223,30 @@ const checkMultiVersionDataset = async (
   for (const resource of resources.values) {
     const effective = source.deriveEffectiveFrom(resource.resourceDescription)
     if (!effective.ok) {
-      undatable.push(`${describeResource(resource)}：${effective.reason}`)
+      ;(effective.excluded ? excluded : undatable).push(`${describeResource(resource)}：${effective.reason}`)
       continue
     }
     datedCount += 1
-    await checkMultiVersionResource(datasetCode, source, resource, effective.value)
+    await checkMultiVersionResource(datasetCode, source, resource, effective.effectiveFrom, effective.effectiveTo)
+  }
+
+  for (const note of excluded) {
+    // 印成「－」而不是「✗」：它不是紅燈，但它必須看得見（見本函式的說明）。
+    process.stdout.write(`      － 不在候選範圍：${note}\n`)
   }
 
   for (const note of undatable) {
-    // 印成「－」而不是「✗」：它不是紅燈，但它必須看得見（見本函式的說明）。
-    process.stdout.write(`      － 推導不出生效日：${note}\n`)
+    // 這一種**是**紅燈，而它與上面那一種的差別正是計畫 §7.1.2 那條線：
+    // 「我們決定不同步它」不是失敗，「我們讀不出它是哪一天」是。
+    failures.push({ datasetCode, resourceUrl: null, detail: `是候選卻推導不出生效日：${note}` })
   }
 
   if (datedCount === 0) {
-    // 一個都推導不出來＝政府把說明的寫法整批換掉了，而那是真正的「不是我們認得的樣子」。
+    // 一個都推導不出來＝政府把名稱的寫法整批換掉了，而那是真正的「不是我們認得的樣子」。
     failures.push({
       datasetCode,
       resourceUrl: null,
-      detail: `${String(resources.values.length)} 個資源沒有任何一個推導得出生效日：資源說明的寫法已整批改變`,
+      detail: `${String(resources.values.length)} 個資源沒有任何一個推導得出生效日：資源名稱的寫法已整批改變`,
     })
   }
 }
@@ -245,8 +255,9 @@ const checkMultiVersionDataset = async (
 const checkMultiVersionResource = async (
   datasetCode: SyncableDatasetCode,
   source: RegulatoryMultiVersionSource,
-  resource: DataGovResource,
+  resource: RegulatorySourceResource,
   effectiveFrom: string,
+  effectiveTo: string | null,
 ): Promise<void> => {
   const resourceUrl = resource.downloadUrl
   const downloaded = await fetchText(resourceUrl)
@@ -268,7 +279,8 @@ const checkMultiVersionResource = async (
   checkRecordShapes(datasetCode, resourceUrl, parsed.records)
 
   process.stdout.write(
-    `      ✓ 生效日 ${effectiveFrom}（版本代碼 ${toVersionCode(effectiveFrom)}）、` +
+    `      ✓ 生效日 ${effectiveFrom}${effectiveTo === null ? '' : ` ～ ${effectiveTo}`}` +
+      `（版本代碼 ${toVersionCode(effectiveFrom)}）、` +
       `${String(parsed.records.length)} 筆　${describeResource(resource)}\n`,
   )
 }
@@ -278,17 +290,18 @@ const checkDataset = async (datasetCode: SyncableDatasetCode): Promise<void> => 
   const source: RegulatorySyncSource = REGULATORY_SYNC_SOURCES[datasetCode]
 
   // ① resource discovery：`government_resource_id` 不得硬編（計畫 §7.0），每次重新探索。
-  const metadataUrl = toDataGovMetadataUrl(source.datasetId)
-  const metadata = await fetchText(metadataUrl)
-  if (!metadata.ok) {
-    failures.push({ datasetCode, resourceUrl: null, detail: `metadata API ${metadata.reason}：${metadataUrl}` })
+  // 探索的網址與解讀方式都在來源設定上：`1`–`6` 打 data.gov.tw 的 metadata API，
+  // `8` 打勞動部公告頁、`9` 打財政部下載專區列表頁（那兩個沒有 metadata API 可用，計畫 §7.0）。
+  const discovery = await fetchText(source.discoveryUrl)
+  if (!discovery.ok) {
+    failures.push({ datasetCode, resourceUrl: null, detail: `資源探索${discovery.reason}：${source.discoveryUrl}` })
     return
   }
 
   if (source.kind === 'single-version') {
-    await checkSingleVersionDataset(datasetCode, source, metadata.body)
+    await checkSingleVersionDataset(datasetCode, source, discovery.body)
   } else {
-    await checkMultiVersionDataset(datasetCode, source, metadata.body)
+    await checkMultiVersionDataset(datasetCode, source, discovery.body)
   }
 
   // 「這一個資料集有沒有新增失敗」而不是「整支有沒有失敗」：多個資料集時，前一個壞掉不該讓

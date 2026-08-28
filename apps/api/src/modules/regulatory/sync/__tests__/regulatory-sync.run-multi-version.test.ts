@@ -354,25 +354,76 @@ describe('★ 一個版本失敗，其餘仍然寫入', () => {
     const { result } = await runOnce({
       resources: [
         { id: 'roc40', description: '40年1月全民健康保險投保金額分級表' },
-        // 政府的年度標示：只有年份、沒有月份。實測 `20251` 有九個資源長這樣。
-        { id: 'roc41', description: '41年全民健康保險投保金額分級表' },
-        // 完全沒有說明。
+        // 完全沒有說明——我們**不知道**它是哪一天，那是失敗（不是「決定不同步它」）。
         { id: 'roc42', description: null },
       ],
     })
 
     expect(result.ok).toBe(false)
 
-    // 推導得出來的那一個進來了；推導不出來的兩個**一個版本都沒有建**
+    // 推導得出來的那一個進來了；推導不出來的那一個**一個版本都沒有建**
     // ——不是「建一個生效日是今天的版本」，也不是「當成 1 月 1 日」。
     const versions = await listVersionRows()
     expect(versions.map((version) => version.versionCode)).toEqual(['1951-01'])
 
     const logs = await listSyncLogRows()
     expect(logs[0]?.statusCode).toBe(RegulatorySyncStatus.Failed)
-    expect(logs[0]?.errorMessage).toContain('只有年份')
     expect(logs[0]?.errorMessage).toContain('沒有給資源說明')
-    // 推導不出來的那兩個**連下載都沒有**：計畫階段就出局了。
+    // 推導不出來的那一個**連下載都沒有**：計畫階段就出局了。
+  })
+})
+
+describe('★ 只有年度標示的資源是「不是候選」，不是失敗（計畫 §7.1.2）', () => {
+  test('排除不讓同步變紅，而且排除的數量與明細寫在摘要裡', async () => {
+    const { result } = await runOnce({
+      resources: [
+        { id: 'roc40', description: '40年1月全民健康保險投保金額分級表' },
+        // 政府的年度標示：只有年份、沒有月份。實測 `20251` 有九個資源長這樣，
+        // 而把它們記成失敗會讓 `dataset_code=2` 在穩定狀態下每晚一則 error
+        // ——三個月後沒有人會看那個告警，那時政府真的改了格式也一樣被忽略。
+        { id: 'roc41', description: '41年全民健康保險投保金額分級表' },
+        { id: 'roc42', description: '42年全民健康保險投保金額分級表' },
+      ],
+    })
+
+    // ★ 綠的：有東西沒進來，但那是我們**決定**不同步的。
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.statusCode).toBe(RegulatorySyncStatus.Succeeded)
+
+    // 被排除的兩個沒有建版本，也沒有下載。
+    const versions = await listVersionRows()
+    expect(versions.map((version) => version.versionCode)).toEqual(['1951-01'])
+
+    // ★ 但**排除不得靜默**：數量與明細都要在摘要裡看得到，否則「政府哪天把新資源也只標年份」
+    // 會變成看不見的資料缺口。
+    const logs = await listSyncLogRows()
+    expect(logs[0]?.statusCode).toBe(RegulatorySyncStatus.Succeeded)
+    expect(logs[0]?.errorMessage).toContain('不在候選範圍 2 個')
+    expect(logs[0]?.errorMessage).toContain('41年全民健康保險投保金額分級表')
+    expect(logs[0]?.errorMessage).toContain('只有年份')
+  })
+
+  test('全部都已存在時仍然是 status=4 無異動，而排除的那幾個照樣寫在摘要裡', async () => {
+    const scenario = {
+      resources: [
+        { id: 'roc40', description: '40年1月全民健康保險投保金額分級表' },
+        { id: 'roc41', description: '41年全民健康保險投保金額分級表' },
+      ],
+    }
+    await runOnce(scenario)
+
+    instant = new Date(instant.getTime() + 3600_000)
+    const second = await runOnce(scenario)
+
+    expect(second.result.ok).toBe(true)
+    if (!second.result.ok) return
+    // ★ 這就是計畫 §7.1.2 要的穩定狀態：`2` 每晚是 `4 無異動`，不是 `3 失敗`。
+    expect(second.result.value.statusCode).toBe(RegulatorySyncStatus.NoChange)
+
+    const logs = await listSyncLogRows()
+    expect(logs[1]?.statusCode).toBe(RegulatorySyncStatus.NoChange)
+    expect(logs[1]?.errorMessage).toContain('不在候選範圍 1 個')
   })
 })
 

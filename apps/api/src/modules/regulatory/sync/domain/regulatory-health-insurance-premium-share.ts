@@ -151,7 +151,7 @@ const readIntegerAmount = (
  * 版本代碼由生效日推導（`YYYY-MM`），規則對所有資料集共用，放在 `regulatory-sync-source.ts`。
  */
 export const parseHealthInsurancePremiumShares = (rawText: string): RegulatoryRecordsResult => {
-  const table = parseCsvTable(rawText, { header: CSV_HEADER, label: '健保費負擔金額表' })
+  const table = parseCsvTable(rawText, { header: CSV_HEADER, quoting: 'reject', label: '健保費負擔金額表' })
   if (!table.ok) return { ok: false, reason: table.reason }
 
   const { rows } = table

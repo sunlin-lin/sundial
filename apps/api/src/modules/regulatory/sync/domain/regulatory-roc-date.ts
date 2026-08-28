@@ -185,11 +185,109 @@ export const parseRocEffectiveDateFromText = (text: string, label: string): RocD
   return { ok: true, value: only }
 }
 
+/**
+ * 中文文字裡的「N年度」（財政部下載專區的檔名形態：`…薪資所得扣繳稅額表_115年度.csv`）。
+ *
+ * **必須是「年度」兩個字，不是「年」**，理由見 {@link parseRocFiscalYear}。`(?<!\d)` 的理由同上。
+ */
+const ROC_FISCAL_YEAR_PATTERN = /(?<!\d)(\d{2,3})年度/g
+
+/** 一個會計年度的起訖日。 */
+export type RocFiscalYearResult =
+  | { readonly ok: true; readonly from: string; readonly to: string }
+  | { readonly ok: false; readonly reason: string }
+
+/**
+ * 從一段文字裡取出「民國 N 年度」，讀成那一年的**起日與訖日**
+ * （`財政部臺北國稅局薪資所得扣繳稅額表_115年度.csv` → `2026-01-01` ～ `2026-12-31`）。
+ *
+ * @param text 資源自己的名字（財政部下載專區的連結檔名）。
+ * @param label 這段文字是什麼（`資源名稱`），只用來組錯誤訊息。
+ *
+ * ## 為什麼「年度」推導得出唯一版本，而 `dataset_code=2` 的「年」推導不出來
+ *
+ * 兩者看起來只差一個字，但它們是不同的東西，而這個差別正是計畫 §7.2 那條線在這裡的落點：
+ *
+ * - **健保分級表的「100年」是一個標示**，那一年可能有兩次調整（實測 `20246` 有 102年1月 與
+ *   102年7月），因此「100年那一份是哪一天生效」沒有唯一答案，挑一個就是推測值。
+ * - **扣繳稅額表的「115年度」是這張表自己的適用範圍**：所得稅是按年度課徵，
+ *   一個年度一張表，而年度的邊界就是 1 月 1 日到 12 月 31 日。把它讀成那一整年
+ *   **沒有補進任何來源裡沒有的資訊**，只是把政府自己講的「年度」寫成日曆日。
+ *
+ * ## 訖日一起回傳，因為那是這張表**明示**的失效日（計畫 §3.2 (d)）
+ *
+ * §3.2 (d) 禁止的是拿「下一版開始日的前一天」去填 `effective_to`。這裡不是那件事：
+ * 「115年度」這四個字本身就宣告了它管到 2026-12-31 為止。
+ *
+ * **而且這一欄在這個資料集上是必要的，不是加分項**：財政部那一頁缺 108 與 110 兩個年度（實測），
+ * 少了訖日，補算民國 110 年度的薪資會挑到**109 年度**那一張表——`effective_from <= asOfDate`
+ * 而它是最新的一版，於是回一個完全合理、不會報錯的錯誤稅額。有了訖日就會查不到版本，
+ * 而查不到會有人來看，算錯不會。
+ *
+ * 同一段文字出現兩個**不同**年度時失敗，理由與 {@link parseRocEffectiveDateFromText} 逐字相同。
+ */
+export const parseRocFiscalYear = (text: string, label: string): RocFiscalYearResult => {
+  const years = new Set<number>()
+  let firstFailure: string | null = null
+
+  for (const matched of text.matchAll(ROC_FISCAL_YEAR_PATTERN)) {
+    // 補上「0101」之後交給 `parseRocCompactDate` 做民國元年檢查，這裡不重寫一份。
+    const parsed = parseRocCompactDate(`${matched[1] ?? ''}0101`)
+    if (!parsed.ok) {
+      firstFailure ??= parsed.reason
+      continue
+    }
+    years.add(Number(matched[1] ?? '') + ROC_EPOCH_OFFSET)
+  }
+
+  if (years.size === 0) {
+    return {
+      ok: false,
+      reason:
+        firstFailure === null
+          ? `${label}裡找不到「N年度」：${JSON.stringify(text)}`
+          : `${label}裡的年度不是合法民國年（${firstFailure}）：${JSON.stringify(text)}`,
+    }
+  }
+  if (years.size > 1) {
+    return {
+      ok: false,
+      reason: `${label}裡出現兩個以上的年度（${[...years].join('、')}），無法推導唯一的版本：${JSON.stringify(text)}`,
+    }
+  }
+
+  const [only] = [...years]
+  if (only === undefined) return { ok: false, reason: `${label}的年度推導失敗：${JSON.stringify(text)}` }
+  return { ok: true, from: `${String(only)}-01-01`, to: `${String(only)}-12-31` }
+}
+
 /** 中文句子裡的「N年N月」（健保署那兩份資源說明的形態）。`(?<!\d)` 的理由同上。 */
 const ROC_YEAR_MONTH_PATTERN = /(?<!\d)(\d{2,3})年(\d{1,2})月/g
 
-/** 只有年份、沒有月份的形態（`100年全民健康保險投保金額分級表`）。只用來組一句講得清楚的失敗原因。 */
+/** 只有年份、沒有月份的形態（`100年全民健康保險投保金額分級表`）。用來組失敗原因，也用來判定候選（見下）。 */
 const ROC_YEAR_ONLY_PATTERN = /(?<!\d)(\d{2,3})年/
+
+/**
+ * 這段文字**只有年份、沒有月份**嗎（`100年全民健康保險投保金額分級表`）？
+ *
+ * ## 這一支存在的理由：候選判準必須機械可判定，而且與「推導不出來」是兩件事（計畫 §7.1.2）
+ *
+ * `dataset_code=2` 的 16 個資源裡有 9 個是政府的年度標示。照 §7.2 的字面處理，它們每晚都失敗，
+ * 於是那個資料集在穩定狀態下**永遠是 `status=3`、排程每晚一則 error**——
+ * 而一個永遠紅的告警三個月後就沒有人會看，那時真正的失敗（政府改了格式）跟著被忽略。
+ *
+ * 因此那九個的處置是**排除**（不是候選），不是失敗。判準就是這一支：
+ * 有年份、但 {@link parseRocYearMonthFromText} 的「N年M月」比對不到 → 不是候選。
+ *
+ * **它與 `parseRocYearMonthFromText` 共用同兩個 pattern，不另寫一份**：
+ * 兩份的話，其中一份哪天為了讓某個新寫法通過而放寬，另一份不會跟著鬆，
+ * 於是同一個資源會同時「推導得出生效日」又「不是候選」——一個沒有人想得出來的狀態。
+ *
+ * ⚠️ 這一支**不**回答「該不該失敗」，只回答「是不是候選」。呼叫端要自己把兩件事接起來，
+ * 見 `regulatory-sync-source.ts` 的 `deriveNhiEffectiveFrom`。
+ */
+export const isRocYearWithoutMonth = (text: string): boolean =>
+  !new RegExp(ROC_YEAR_MONTH_PATTERN.source).test(text) && ROC_YEAR_ONLY_PATTERN.test(text)
 
 /**
  * 從一段中文文字裡取出「年月」並讀成該月的第一天（`115年1月全民健康保險投保金額分級表` → `2026-01-01`）。

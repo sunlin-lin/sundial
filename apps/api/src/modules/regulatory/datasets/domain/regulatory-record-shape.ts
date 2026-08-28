@@ -474,22 +474,142 @@ const OCCUPATIONAL_ACCIDENT_INSURANCE_RATE_SHAPE = Type.Object({
   occupationalAccidentRate: DecimalString,
 })
 
+/** 日曆日 `YYYY-MM-DD`（台北，§6）。與 `effective_from` 同一種寫法，全程不經過 `Date`。 */
+const CalendarDateString = Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$' })
+
 /**
- * 「這個資料集的 `data` 形狀還沒有定義」。
+ * `dataset_code = 8` 最低工資（月薪與時薪）的 `data`
+ * （勞動部「歷年最低工資/基本工資調整」公告頁，計畫 §7.0 的兩條路裡的第一條）。
  *
- * **這是一個明確的宣告，不是留空**，而且它**驗什麼都不會過**。理由與計畫 §7.2
- * 「推導不出生效日一律失敗，不得猜」同一條：形狀是跟著**解析器**一起被確定的
- * （要先看過政府真實資料才知道每個欄位叫什麼），而那九支解析器屬於 Stage 3。
+ * 政府那一頁的一則公告長這樣（2026-08 實測，逐字）：
  *
- * 在那之前先寫一個「看起來合理」的寬鬆形狀，代價是實的：它會**通過**驗證，
- * 於是一份欄位名對不上的資料會安靜地流進 Payroll，而 §6 那條「讀出後也驗證」等於沒有作用。
- * 驗不過則是一個會進告警、有堆疊、指得出 `dataset_code` 的系統錯誤。
+ * ```
+ * 民國114年10月21日發布，自115年1月1日起實施，訂定每月最低工資為29,500元，每小時最低工資為196元。
+ * ```
  *
- * 不用 `Type.Unknown()`：計畫 §6 明文「不能讓 `data` 以 `unknown` 流進 Payroll」。
- * `Type.Never()` 在靜態型別上是 `never`，於是連「先取出來再說」都寫不出來。
+ * **一則公告 → 一個版本 → 兩筆 record**（月薪一筆、時薪一筆）。
+ *
+ * ## 為什麼是兩筆 record 而不是一筆帶兩個金額的
+ *
+ * 形式與 `dataset_code=10` 的補充保險費逐字相同（`rate`／`chargeLowerBound`／
+ * `singlePaymentUpperLimit` 三筆），而理由也一樣：`regulatory_records` 的 `amount` 欄位
+ * 是「這一筆的金額」，一筆塞兩個金額就得有一個欄位空著或另外編一個名字。
+ * 兩筆之後，Payroll 問「這一天的每月最低工資是多少」拿到的就是一筆 record 的 `amount`。
+ *
+ * ## `item` 是字面值聯集，理由與 `dataset_code=10` 的 `item` 逐字同構（§2）
+ *
+ * 寫成 `Type.String()` 之後，解析器打錯一個字母會**通過驗證**，然後 Payroll 找不到那一項，
+ * 於是最低工資檢核靜靜地不做——一個不會報錯的漏洞。
+ *
+ * ## 為什麼有 `announcedOn` 與 `announcementText`，卻沒有 `effectiveFrom`
+ *
+ * 生效日是**版本的屬性**（`effective_from`），抄一份進 `data` 會產生第二份真相，
+ * 理由與 `dataset_code=1`、`3` 逐字相同。
+ *
+ * 但**發布日在版本上沒有對應欄位**（`source_modified_at` 是「政府標示的檔案修改時間」，
+ * 不是「這則公告哪天發布」），而它是對帳時唯一能指認「是哪一則公告」的東西——
+ * 同一個實施日不會有兩則公告，但公告本身的日期是公報上查得到的那個號碼的同義詞。
+ * `announcementText` 同理：政府原文留著，拆解結果對不上時要能回頭看原文
+ * （與 `dataset_code=1` 的 `monthlySalaryRangeText` 同一條）。
+ *
+ * ⚠️ 兩筆 record 的這兩欄**值相同**（它們出自同一句話）。這是刻意的，不是冗餘：
+ * 兩筆各自完整，Payroll 取其中一筆時不必再回頭找另一筆。
+ *
+ * ## 涵蓋範圍：**民國 114 年 1 月起**，之前的基本工資不在這個資料集裡
+ *
+ * 勞動部把 113 年以前的調整放在另一頁（「基本工資之制訂與調整經過」），
+ * 而那一頁**刻意不爬**——理由不是它難解析，是它有「只調月薪」與「只調時薪」的單值公告
+ * （實測：102年1月1日只調時薪 109 元、102年4月1日只調月薪 19,047 元）。
+ * 完整論述在 `sync/domain/regulatory-minimum-wage.ts` 的檔頭。
  */
-const SHAPE_NOT_YET_DEFINED = Type.Never({
-  description: '此資料集的 data 形狀尚未定義（Stage 3 與解析器一起確定）',
+const MINIMUM_WAGE_SHAPE = Type.Union([
+  /** 每月最低工資，例如 `29500`。 */
+  Type.Object({
+    item: Type.Literal('monthly'),
+    amount: DecimalString,
+    announcedOn: CalendarDateString,
+    announcementText: Type.String({ minLength: 1 }),
+  }),
+  /** 每小時最低工資，例如 `196`。 */
+  Type.Object({
+    item: Type.Literal('hourly'),
+    amount: DecimalString,
+    announcedOn: CalendarDateString,
+    announcementText: Type.String({ minLength: 1 }),
+  }),
+])
+
+/**
+ * 扣繳稅額表的「配偶及受扶養親屬人數」欄位（`dataset_code=9`）。
+ *
+ * **這一份清單是政府那張表的欄位數與本形狀的陣列長度的共同來源**，因此兩者不可能分岔：
+ * 下面 {@link WITHHOLDING_TAX_BRACKET_SHAPE} 的 `taxByDependentCount` 用它的長度當
+ * `minItems`／`maxItems`，而 `sync/domain/regulatory-withholding-tax.ts` 用它逐一組出
+ * CSV 的 12 個欄位名（`配偶及受扶養親屬計0人(元)`…）。
+ *
+ * 政府少發一欄 → 表頭比對失敗；形狀少一格 → 這裡的長度變了、表頭跟著變、同樣失敗。
+ * 兩個地方各寫一次 `12` 的話，「政府從 11 人擴到 12 人」會變成一份**通過驗證但少一欄**的資料，
+ * 而少的那一欄正好是扶養人數最多、稅額最低的那一群人。
+ *
+ * 上限 11 人是政府那張表自己的上限（實測 107–115 八個年度皆然），不是我們訂的。
+ */
+export const WITHHOLDING_TAX_DEPENDENT_COUNTS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const
+
+/**
+ * `dataset_code = 9` 薪資所得扣繳稅額表的 `data`
+ * （財政部臺北國稅局 Open Data 下載專區的 **CSV**，**不是** data.gov.tw `25627`，計畫 §7.0）。
+ *
+ * 政府那一份的表頭與資料列長這樣（2026-08 實測，115 年度那一份 840 列）：
+ *
+ * ```csv
+ * 每月薪資所得,配偶及受扶養親屬計0人(元),…,配偶及受扶養親屬計11人(元)
+ * "80,001 ~ 80,500",0,0,0,0,0,0,0,0,0,0,0,0
+ * "499,501 ~ 500,000",100700,97340,93970,91430,88900,86380,83850,81330,78800,76280,73750,71230
+ * ```
+ *
+ * | 政府欄位 | 去哪裡 |
+ * |---|---|
+ * | `每月薪資所得` | {@link monthlySalaryRangeText} ＋ `range_from`／`range_to` |
+ * | 12 個 `配偶及受扶養親屬計N人` | {@link taxByDependentCount}（**依人數排序的 12 格**） |
+ *
+ * ## 為什麼是一列一筆、12 個稅額放在同一筆的陣列裡
+ *
+ * 另一種做法是「薪資級距 × 扶養人數」各一筆（840 × 12 ＝ 10,080 筆／版本）。不這樣做的理由是
+ * **政府那一份的一列就是一個級距**：一列裡的 12 個數字回答的是同一個問題的 12 種情況，
+ * 拆開之後「這一級的資料完整嗎」要靠數筆數才答得出來，而少了其中一格不會有任何地方報錯。
+ * 收成陣列之後，「必須剛好 12 格」由形狀驗證擋（見 {@link WITHHOLDING_TAX_DEPENDENT_COUNTS}）。
+ *
+ * ## 這張表**沒有**開放的一端，與四張分級表相反
+ *
+ * 分級表的最低一級是「N以下」、最高一級是「N以上」（`null` 表示那一邊沒有界線），
+ * 扣繳稅額表則是**每一列兩端都有界線**，最後一列到 `499,501 ~ 500,000` 就停了
+ * （超過 50 萬另依公式計算，不在這張表上）。因此這裡兩欄都不是 `Type.Union([…, Type.Null()])`
+ * ——真的出現開放的一端，代表政府改了這張表的組織方式，那必須失敗。
+ * 「被截斷」由解析器的尾端錨定擋（見那支解析器的完整性檢查）。
+ *
+ * ## 稅額 `0` 是真的 0，不是「沒有資料」
+ *
+ * 起扣點以下的列每一格都是 `0`（實測 115 年度前 17 列）。因此形狀上它與其他金額一樣是
+ * decimal 字串，**不允許 `null`**：允許 `null` 之後，一個讀不到值的欄位會與「這一級不用扣繳」
+ * 長得一模一樣，而後者是法定結果。
+ */
+const WITHHOLDING_TAX_BRACKET_SHAPE = Type.Object({
+  /** 政府原文的每月薪資所得區間（`80,001 ~ 80,500`）。**分隔符號是空格包住的半形波浪號**。 */
+  monthlySalaryRangeText: Type.String({ minLength: 1 }),
+  /** 每月薪資所得下限（含）。這張表沒有「N以下」那種開放的一端，因此必填（見上）。 */
+  monthlySalaryFrom: DecimalString,
+  /** 每月薪資所得上限（含）。同上，必填。 */
+  monthlySalaryTo: DecimalString,
+  /**
+   * 這一級在各扶養人數下的應扣繳稅額，**索引即人數**（第 0 格是 0 人、第 11 格是 11 人）。
+   *
+   * 長度由 {@link WITHHOLDING_TAX_DEPENDENT_COUNTS} 釘死，不是寫一個 `12`——理由見那個常數。
+   * 值一律 decimal 字串，禁止 `Number(...)`（§4.7）。
+   */
+  taxByDependentCount: Type.Array(DecimalString, {
+    minItems: WITHHOLDING_TAX_DEPENDENT_COUNTS.length,
+    maxItems: WITHHOLDING_TAX_DEPENDENT_COUNTS.length,
+  }),
 })
 
 /**
@@ -503,8 +623,12 @@ const SHAPE_NOT_YET_DEFINED = Type.Never({
  * 刻意不寫 `as const`：`as const` 會把 TypeBox 的內部結構一起變成唯讀，`Static<>` 就算不出型別了。
  */
 export const REGULATORY_RECORD_SHAPES = {
-  // `1`–`6` 已經有解析器（`sync` 次目錄）。其餘兩項（`8`、`9`）維持 `Type.Never()`
-  // ——它們的形狀要跟著各自的解析器一起定，先寫一個「看起來合理」的寬鬆形狀會**通過**驗證。
+  // 九個資料集的形狀現在**全部都定了**：每一個都是跟著它自己的解析器一起確定的
+  // （計畫 §6：先看過政府真實資料才知道每個欄位叫什麼）。
+  //
+  // 這裡曾經有一個 `Type.Never()` 的佔位形狀給還沒有解析器的 `8`、`9` 用，現在沒有了——
+  // 留著一個沒有人指向的佔位常數，下一個資料集會**理所當然地**先指向它，
+  // 而那正好跳過「形狀要跟解析器一起定」這個決定。真的又多一個資料集時，重新寫一個就好。
   1: LABOR_INSURANCE_SALARY_GRADE_SHAPE,
   2: HEALTH_INSURANCE_SALARY_GRADE_SHAPE,
   3: LABOR_PENSION_CONTRIBUTION_WAGE_SHAPE,
@@ -513,8 +637,8 @@ export const REGULATORY_RECORD_SHAPES = {
   6: OCCUPATIONAL_ACCIDENT_INSURANCE_RATE_SHAPE,
   // `7` 是永久空號（見 `regulatory-dataset-code.ts`），因此這裡也沒有它——
   // 補一個進來就等於讓那個空號變成「一個沒有形狀的資料集」。
-  8: SHAPE_NOT_YET_DEFINED,
-  9: SHAPE_NOT_YET_DEFINED,
+  8: MINIMUM_WAGE_SHAPE,
+  9: WITHHOLDING_TAX_BRACKET_SHAPE,
   10: SUPPLEMENTARY_PREMIUM_SHAPE,
 } satisfies Record<RegulatoryDatasetCode, TSchema>
 

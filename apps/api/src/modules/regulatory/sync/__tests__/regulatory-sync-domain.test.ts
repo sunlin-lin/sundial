@@ -18,7 +18,8 @@ import { describe, expect, test } from 'bun:test'
 import { parseRegulatoryRecordData } from '../../datasets/domain/regulatory-record-shape.ts'
 import { isDecimalSum, parseAmountRange, percentToRate } from '../domain/regulatory-amount.ts'
 import { parseCsvTable } from '../domain/regulatory-csv.ts'
-import { selectDataGovResource, toDataGovMetadataUrl, type DataGovResource } from '../domain/regulatory-data-gov.ts'
+import { selectDataGovResource, toDataGovMetadataUrl } from '../domain/regulatory-data-gov.ts'
+import type { RegulatorySourceResource } from '../domain/regulatory-source-resource.ts'
 import { parseHealthInsurancePremiumShares } from '../domain/regulatory-health-insurance-premium-share.ts'
 import { parseHealthInsuranceSalaryGrades } from '../domain/regulatory-health-insurance-salary-grade.ts'
 import { planMultiVersionSync } from '../domain/regulatory-multi-version-plan.ts'
@@ -961,10 +962,9 @@ describe('心跳逾時判定與版本代碼', () => {
     expect(toVersionCode('2025-12-31')).toBe('2025-12')
   })
 
-  test('isSyncableDatasetCode：目前是 1–6，人工維護的 10 與永久空號 7 都不是', () => {
-    for (const code of [1, 2, 3, 4, 5, 6]) expect(isSyncableDatasetCode(code)).toBe(true)
-    // `8`、`9` 的形狀仍是 `Type.Never()`，沒有解析器。
-    for (const code of [8, 9]) expect(isSyncableDatasetCode(code)).toBe(false)
+  test('isSyncableDatasetCode：1–6、8、9 都同步得了，人工維護的 10 與永久空號 7 不是', () => {
+    for (const code of [1, 2, 3, 4, 5, 6, 8, 9]) expect(isSyncableDatasetCode(code)).toBe(true)
+    // `7` 永久空號、`10` 沒有任何來源（計畫 §3.1.1），兩者都不會有解析器。
     expect(isSyncableDatasetCode(7)).toBe(false)
     expect(isSyncableDatasetCode(10)).toBe(false)
   })
@@ -1011,7 +1011,7 @@ const healthShareCsv = (...rows: readonly string[]): string =>
 const HEALTH_SHARE_ROWS = ['1,29500,458,916,1374,1832,1428,238', '2,30300,470,940,1410,1880,1466,244'] as const
 
 describe('parseCsvTable：政府 CSV 的讀取（dataset_code=2、5 共用）', () => {
-  const options = { header: ['甲', '乙'], label: '測試表' } as const
+  const options = { header: ['甲', '乙'], quoting: 'reject', label: '測試表' } as const
 
   test('BOM、CRLF、尾端換行都不影響結果', () => {
     const parsed = parseCsvTable('﻿甲,乙\r\n1,2\r\n', options)
@@ -1032,11 +1032,23 @@ describe('parseCsvTable：政府 CSV 的讀取（dataset_code=2、5 共用）', 
     expect(parseCsvTable('甲,乙\n1,2,3\n', options).ok).toBe(false)
   })
 
-  test('只有表頭、空內容、出現引號都失敗', () => {
+  test('只有表頭、空內容都失敗；宣告 reject 時出現引號也失敗', () => {
     expect(parseCsvTable('甲,乙\n', options).ok).toBe(false)
     expect(parseCsvTable('', options).ok).toBe(false)
-    // RFC 4180 的引號欄位實測從未出現；支援它等於加一台沒有任何測試資料會經過的狀態機。
+    // `2`、`5` 宣告 `reject`：那兩份實測從未出現引號，冒出引號代表某一欄的值裡有了逗號。
     expect(parseCsvTable('甲,乙\n"1,x",2\n', options).ok).toBe(false)
+  })
+
+  test('★ 宣告 rfc4180 時讀得懂引號欄位（`dataset_code=9` 每一列都有）', () => {
+    const quoted = { header: ['甲', '乙'], quoting: 'rfc4180', label: '測試表' } as const
+    // 加引號正是因為值裡有逗號——把它切成兩欄會讓後面每一欄整批位移。
+    expect(parseCsvTable('甲,乙\n"1,x",2\n', quoted)).toEqual({ ok: true, rows: [{ 甲: '1,x', 乙: '2' }] })
+    // `""` 是一個引號字元本身。
+    expect(parseCsvTable('甲,乙\n"a""b",2\n', quoted)).toEqual({ ok: true, rows: [{ 甲: 'a"b', 乙: '2' }] })
+    // 沒有結尾引號、引號在欄位中間、引號後面不是逗號——三種都失敗，不猜。
+    expect(parseCsvTable('甲,乙\n"1,x,2\n', quoted).ok).toBe(false)
+    expect(parseCsvTable('甲,乙\n1"x,2\n', quoted).ok).toBe(false)
+    expect(parseCsvTable('甲,乙\n"1"x,2\n', quoted).ok).toBe(false)
   })
 })
 
@@ -1081,10 +1093,32 @@ describe('parseRocYearMonthFromText：健保署資源說明的「N年M月」', (
     // 「生效日從哪裡來」這個問題就會有兩個答案。
     for (const code of [2, 5] as const) {
       const source = REGULATORY_SYNC_SOURCES[code]
-      expect(source.deriveEffectiveFrom('115年1月分級表')).toEqual({ ok: true, value: '2026-01-01' })
+      expect(source.deriveEffectiveFrom('115年1月分級表')).toEqual({
+        ok: true,
+        effectiveFrom: '2026-01-01',
+        // 健保署那兩份沒有明示失效日：一版沿用到下一版為止（計畫 §3.2 (d)）。
+        effectiveTo: null,
+      })
       // 政府沒給說明時是 `null`，而 `null` 走失敗分支，不是回一個預設日期。
       expect(source.deriveEffectiveFrom(null).ok).toBe(false)
     }
+  })
+
+  test('★ 只有年份的資源是「不是候選」，不是失敗（計畫 §7.1.2）', () => {
+    // 這一條就是「告警疲勞比缺那幾版資料危險」那個決定的落點：`20251` 有九個資源長這樣，
+    // 記成失敗的話 `dataset_code=2` 在穩定狀態下永遠是 status=3、每晚一則 error。
+    const source = REGULATORY_SYNC_SOURCES[2]
+    const yearOnly = source.deriveEffectiveFrom('100年全民健康保險投保金額分級表')
+    expect(yearOnly.ok).toBe(false)
+    if (yearOnly.ok) return
+    expect(yearOnly.excluded).toBe(true)
+
+    // 而「政府沒給說明」與「說明讀不懂」仍然是失敗——我們不知道它是哪一天，
+    // 那與「我們決定不同步它」是兩件事。
+    const noDescription = source.deriveEffectiveFrom(null)
+    expect(noDescription.ok || noDescription.excluded).toBe(false)
+    const unreadable = source.deriveEffectiveFrom('全民健康保險投保金額分級表')
+    expect(unreadable.ok || unreadable.excluded).toBe(false)
   })
 })
 
@@ -1264,7 +1298,7 @@ describe('parseHealthInsurancePremiumShares：dataset_code=5 的解析器', () =
 })
 
 describe('planMultiVersionSync：一個資料集 → N 個版本的計畫', () => {
-  const resource = (description: string | null, id: string): DataGovResource => ({
+  const resource = (description: string | null, id: string): RegulatorySourceResource => ({
     downloadUrl: `https://info.nhi.test.invalid/api/iode0000s01/Dataset?rId=${id}`,
     resourceDescription: description,
     sourceModifiedAt: '2026-08-12 11:05:17',
@@ -1277,26 +1311,37 @@ describe('planMultiVersionSync：一個資料集 → N 個版本的計畫', () =
       '2025-01',
     ])
     expect(plan.map((entry) => entry.action)).toEqual(['skip', 'create'])
-    expect(plan.map((entry) => (entry.action === 'fail' ? null : entry.versionCode))).toEqual(['2025-01', '2026-01'])
+    expect(plan.map((entry) => ('versionCode' in entry ? entry.versionCode : null))).toEqual(['2025-01', '2026-01'])
   })
 
-  test('★ 推導不出生效日的資源是 fail，不是 skip（計畫 §7.2）', () => {
+  test('★ 讀不懂的資源是 fail，不是 skip（計畫 §7.2）', () => {
     // skip 的話，政府哪天把最新那一份的說明改成別的寫法，同步會回報「無異動」而我們永遠拿不到新版本。
-    const plan = planMultiVersionSync([resource('100年分級表', 'a'), resource('115年1月分級表', 'b')], derive, [])
+    const plan = planMultiVersionSync([resource(null, 'a'), resource('115年1月分級表', 'b')], derive, [])
     expect(plan.map((entry) => entry.action)).toEqual(['create', 'fail'])
     const failed = plan.find((entry) => entry.action === 'fail')
-    expect(failed?.action === 'fail' && failed.reason).toContain('只有年份')
+    expect(failed?.action === 'fail' && failed.reason).toContain('沒有給資源說明')
   })
 
-  test('依生效日由舊到新排序，失敗的排在最後（回補時 id 的順序才與生效日一致）', () => {
+  test('★ 只有年度標示的資源是 exclude，不是 fail（計畫 §7.1.2）', () => {
+    // 這一條與上一條是本檔最重要的一組對照：兩者都不會產生版本，但**只有一種是紅的**。
+    // 記成 fail 的話，`20251` 那九個年度標示會讓 `dataset_code=2` 每晚一則 error，
+    // 三個月後沒有人會看那個告警，而那時政府真的改了格式也一樣被忽略。
+    const plan = planMultiVersionSync([resource('100年分級表', 'a'), resource('115年1月分級表', 'b')], derive, [])
+    expect(plan.map((entry) => entry.action)).toEqual(['create', 'exclude'])
+    const skippedOut = plan.find((entry) => entry.action === 'exclude')
+    expect(skippedOut?.action === 'exclude' && skippedOut.reason).toContain('只有年份')
+  })
+
+  test('依生效日由舊到新排序，排除與失敗的排在最後（回補時 id 的順序才與生效日一致）', () => {
     const plan = planMultiVersionSync(
-      [resource('115年1月分級表', 'c'), resource('100年分級表', 'x'), resource('110年1月分級表', 'a')],
+      [resource('115年1月分級表', 'c'), resource('100年分級表', 'x'), resource(null, 'y'), resource('110年1月分級表', 'a')],
       derive,
       [],
     )
-    expect(plan.map((entry) => (entry.action === 'fail' ? 'fail' : entry.effectiveFrom))).toEqual([
+    expect(plan.map((entry) => ('effectiveFrom' in entry ? entry.effectiveFrom : entry.action))).toEqual([
       '2021-01-01',
       '2026-01-01',
+      'exclude',
       'fail',
     ])
   })
@@ -1311,5 +1356,309 @@ describe('planMultiVersionSync：一個資料集 → N 個版本的計畫', () =
   test('全部都已經存在時，計畫裡一個 create 都沒有（＝那一次同步不下載任何資源）', () => {
     const plan = planMultiVersionSync([resource('115年1月分級表', 'a')], derive, ['2026-01'])
     expect(plan.every((entry) => entry.action === 'skip')).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// `dataset_code=8` 最低工資（勞動部公告頁）
+//
+// 這一批與前六個資料集有一個結構上的差別：**來源是 HTML**，因此「頁面改版」是一種新的失敗模式。
+// 每一條爬 HTML 的測試都在驗同一件事——**改版之後我們抓不到東西（失敗），不是抓到錯的東西**。
+// ---------------------------------------------------------------------------
+
+/** 政府那一頁的兩則公告，逐字取自 2026-08 的實測內容。 */
+const WAGE_114 = '民國113年9月19日發布，自114年1月1日起實施，訂定每月最低工資為28,590元，每小時最低工資為190元。'
+const WAGE_115 = '民國114年10月21日發布，自115年1月1日起實施，訂定每月最低工資為29,500元，每小時最低工資為196元。'
+
+/**
+ * 一頁公告頁。內容區塊的結構與實測相同：導覽列在區塊外，區塊內混著頁面自己的資訊條列
+ * （`更新日期`、`發布單位`）與一個指向歷年基本工資的連結。
+ */
+const wagePage = (...items: readonly string[]): string =>
+  [
+    '<html><body>',
+    // 導覽列裡也有「最低工資」四個字（實測整頁 25 處）——它在內容區塊外，因此不該被看見。
+    '<nav><ul><li><a href="/x">最低工資</a></li></ul></nav>',
+    '<section class="cp">',
+    '<ul class="publish_info_top"><li>更新日期:2025-12-04</li></ul>',
+    '<ul style="list-style-type: disc;">',
+    '<li><a href="https://www.mol.gov.tw/x"><strong>歷年基本工資調整情形</strong></a></li>',
+    ...items.map((item) => `<li>${item}</li>`),
+    '</ul>',
+    '<ul class="publish_info_down"><li>發布單位:勞動條件及就業平等司</li></ul>',
+    '</section>',
+    '</body></html>',
+  ].join('\n')
+
+describe('dataset_code=8：最低工資（勞動部公告頁）', () => {
+  const source = REGULATORY_SYNC_SOURCES[8]
+
+  test('資源探索：內容區塊裡的每一則條列都是一個資源，導覽列的不算', () => {
+    const listed = source.listResources(wagePage(WAGE_114, WAGE_115))
+    expect(listed.ok).toBe(true)
+    if (!listed.ok) return
+
+    // 內容區塊裡共 5 個條列：更新日期、歷年連結、兩則公告、發布單位。導覽列那一個不在其中。
+    expect(listed.values.map((resource) => resource.resourceDescription)).toEqual([
+      '更新日期:2025-12-04',
+      '歷年基本工資調整情形',
+      WAGE_114,
+      WAGE_115,
+      '發布單位:勞動條件及就業平等司',
+    ])
+    // 每一則公告的「資源網址」都是公告頁本身：它們在同一頁上，幂等只能靠 version_code。
+    expect(new Set(listed.values.map((resource) => resource.downloadUrl)).size).toBe(1)
+  })
+
+  test('★ 頁面結構改變 → 抓不到 → 失敗（不是抓到一個看起來合理的值）', () => {
+    // 內容區塊的標記換了：這正是改版最典型的樣子。
+    expect(source.listResources('<html><body><section class="content">…</section></body></html>').ok).toBe(false)
+    // 區塊在、但裡面一個條列都沒有（改成表格或段落之類的）。
+    expect(source.listResources(`<html><section class="cp"><p>${WAGE_115}</p></section></html>`).ok).toBe(false)
+    // 整頁換掉。
+    expect(source.listResources('{"result":{}}').ok).toBe(false)
+  })
+
+  test('候選判準：不含「最低工資」的條列是 exclude，句型變了才是 fail（計畫 §7.1.2）', () => {
+    // 頁面自己的資訊條列不是公告 → 排除，不算失敗（否則這個資料集每晚一則 error）。
+    const chrome = source.deriveEffectiveFrom('更新日期:2025-12-04')
+    expect(chrome.ok).toBe(false)
+    if (chrome.ok) return
+    expect(chrome.excluded).toBe(true)
+
+    // 但**含「最低工資」卻讀不懂**必須是失敗：那代表政府改了句型，而漏掉一次調整
+    // 會讓 Payroll 一整年用錯的工資下限。
+    const reworded = source.deriveEffectiveFrom('自115年1月1日起，每月最低工資為29,500元。')
+    expect(reworded.ok).toBe(false)
+    if (reworded.ok) return
+    expect(reworded.excluded).toBe(false)
+  })
+
+  test('生效日是「起實施」那一天，不是發布日；沒有明示失效日', () => {
+    expect(source.deriveEffectiveFrom(WAGE_115)).toEqual({
+      ok: true,
+      effectiveFrom: '2026-01-01',
+      // 最低工資沿用到下一次調整為止，政府沒有明示失效日（計畫 §3.2 (d)）。
+      effectiveTo: null,
+    })
+    expect(source.deriveEffectiveFrom(WAGE_114)).toEqual({
+      ok: true,
+      effectiveFrom: '2025-01-01',
+      effectiveTo: null,
+    })
+  })
+
+  test('★ 一個版本兩筆：月薪與時薪，金額是字串不是 number', () => {
+    const parsed = source.parse(wagePage(WAGE_114, WAGE_115), { resourceDescription: WAGE_115 })
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+
+    expect(parsed.records.map((record) => record.recordKey)).toEqual(['monthly-minimum-wage', 'hourly-minimum-wage'])
+    const [monthly, hourly] = parsed.records
+    expect(monthly?.amount).toBe('29500')
+    expect(hourly?.amount).toBe('196')
+    // §4.7、計畫 §6.1：金額一律 decimal 字串，禁止 `Number(...)`。
+    expect(typeof monthly?.amount).toBe('string')
+    expect(typeof hourly?.amount).toBe('string')
+    // 不是級距，因此沒有上下限——不補 0（補了之後一支寫錯的級距查詢會命中它）。
+    expect(monthly?.rangeFrom).toBeNull()
+    expect(monthly?.rangeTo).toBeNull()
+    expect(monthly?.rate).toBeNull()
+    expect(monthly?.data).toEqual({
+      item: 'monthly',
+      amount: '29500',
+      announcedOn: '2025-10-21',
+      announcementText: WAGE_115,
+    })
+
+    // 寫入前的形狀驗證（計畫 §6）：型別擋不到的那一半在這裡。
+    for (const record of parsed.records) expect(parseRegulatoryRecordData(8, record.data).ok).toBe(true)
+  })
+
+  test('★ 完整性檢查會紅：月薪與時薪對調、公告不在那一頁上', () => {
+    // 兩個金額對調之後**每一個值單獨看都完全合法**，只有「月薪必須大於時薪」這一條會發現。
+    const swapped = '民國114年10月21日發布，自115年1月1日起實施，訂定每月最低工資為196元，每小時最低工資為29,500元。'
+    expect(source.parse(wagePage(swapped), { resourceDescription: swapped }).ok).toBe(false)
+
+    // 探索階段讀到的那一則不在下載回來的頁面上＝頁面在同步途中被改過。寧可失敗重來，
+    // 也不要拿另一則公告的金額配上這一版的生效日。
+    expect(source.parse(wagePage(WAGE_114), { resourceDescription: WAGE_115 }).ok).toBe(false)
+
+    // 沒有指定要解析哪一則。
+    expect(source.parse(wagePage(WAGE_115), { resourceDescription: null }).ok).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// `dataset_code=9` 薪資所得扣繳稅額表（財政部臺北國稅局下載專區）
+// ---------------------------------------------------------------------------
+
+/** 十二個扶養人數欄位的表頭（民國 112 年度起帶 `(元)`，107–111 不帶）。 */
+const taxHeader = (unit: string): string =>
+  ['每月薪資所得', ...Array.from({ length: 12 }, (_, count) => `配偶及受扶養親屬計${String(count)}人${unit}`)].join(',')
+
+/** 一列：薪資區間 ＋ 十二個稅額（依扶養人數遞減，與政府那一份同構）。 */
+const taxRow = (range: string, base: number): string =>
+  [`"${range}"`, ...Array.from({ length: 12 }, (_, count) => String(base - count * 100))].join(',')
+
+/** 三列，尾端錨在 50 萬（政府那七個年度都以 `499,501 ~ 500,000` 結束）。 */
+const TAX_ROWS = [
+  taxRow('498,501 ~ 499,000', 100300),
+  taxRow('499,001 ~ 499,500', 100500),
+  taxRow('499,501 ~ 500,000', 100700),
+] as const
+
+const taxCsv = (unit: string, ...rows: readonly string[]): string => `${[taxHeader(unit), ...rows].join('\r\n')}\r\n`
+
+/** 下載專區列表頁：目標那一項，加上一項**連結文字也是民國年**的鄰居（實測真的有）。 */
+const taxPage = (
+  ...anchors: readonly { readonly id: string; readonly title: string | null; readonly text: string }[]
+): string =>
+  [
+    '<html><body><ul>',
+    '<li>財政部臺北國稅局扣免繳申報收件統計表_CSV [<a href="/download/other" title="…統計表_114年度.csv">114</a>]</li>',
+    `<li>財政部臺北國稅局薪資所得扣繳稅額表_CSV ${anchors
+      .map(
+        (anchor) =>
+          `[<a href="/download/${anchor.id}"${anchor.title === null ? '' : ` title="${anchor.title}"`}>${anchor.text}</a>]`,
+      )
+      .join('、')}</li>`,
+    '</ul></body></html>',
+  ].join('\n')
+
+const TAX_ANCHORS = [
+  { id: 'y107', title: '財政部臺北國稅局107年度薪資所得扣繳稅額表 [CSV]', text: '107' },
+  // 實測：民國 108 年度那一個的檔名裡**沒有年度**。
+  { id: 'y108', title: '薪資所得扣繳稅額表[CSV]', text: '108' },
+  { id: 'y115', title: '財政部臺北國稅局薪資所得扣繳稅額表_115年度.csv', text: '115' },
+] as const
+
+describe('dataset_code=9：薪資所得扣繳稅額表（財政部下載專區）', () => {
+  const source = REGULATORY_SYNC_SOURCES[9]
+
+  test('資源探索：只抓目標那一項底下的 /download 連結，資源名稱取 title（檔名）', () => {
+    const listed = source.listResources(taxPage(...TAX_ANCHORS))
+    expect(listed.ok).toBe(true)
+    if (!listed.ok) return
+
+    // 鄰居那一項的連結文字也是 `114`，但它不在目標 `<li>` 裡——用連結文字定位就會抓到它。
+    expect(listed.values).toHaveLength(3)
+    expect(listed.values.map((resource) => resource.resourceDescription)).toEqual(
+      TAX_ANCHORS.map((anchor) => anchor.title),
+    )
+    expect(listed.values[0]?.downloadUrl).toBe('https://www.ntbt.gov.tw/download/y107')
+  })
+
+  test('★ 頁面結構改變 → 抓不到 → 失敗', () => {
+    // 那一項的標籤改了（例如政府把「_CSV」拿掉）→ 找不到 → 失敗，而不是抓到鄰居那一項的年度。
+    const relabelled = '<html><ul><li>財政部臺北國稅局薪資所得扣繳稅額表 [<a href="/download/a">115</a>]</li></ul></html>'
+    expect(source.listResources(relabelled).ok).toBe(false)
+    // 那一項在、但連結換成別的形式。
+    const otherLink = '<html><ul><li>財政部臺北國稅局薪資所得扣繳稅額表_CSV <a href="/file?id=1">115</a></li></ul></html>'
+    expect(source.listResources(otherLink).ok).toBe(false)
+    expect(source.listResources('<html><body>維護中</body></html>').ok).toBe(false)
+  })
+
+  test('★ 候選判準：檔名沒有「N年度」的是 exclude（民國 108 年度那一份），不是 fail', () => {
+    const excluded = source.deriveEffectiveFrom('薪資所得扣繳稅額表[CSV]')
+    expect(excluded.ok).toBe(false)
+    if (excluded.ok) return
+    expect(excluded.excluded).toBe(true)
+
+    // 連 title 都沒有的連結同理。
+    const noTitle = source.deriveEffectiveFrom(null)
+    expect(noTitle.ok || noTitle.excluded).toBe(true)
+  })
+
+  test('★ 年度 → 生效日與**明示的失效日**（少了訖日，補算 110 年度會挑到 109 年度那一張表）', () => {
+    expect(source.deriveEffectiveFrom('財政部臺北國稅局薪資所得扣繳稅額表_115年度.csv')).toEqual({
+      ok: true,
+      effectiveFrom: '2026-01-01',
+      effectiveTo: '2026-12-31',
+    })
+    expect(source.deriveEffectiveFrom('財政部臺北國稅局107年度薪資所得扣繳稅額表 [CSV]')).toEqual({
+      ok: true,
+      effectiveFrom: '2018-01-01',
+      effectiveTo: '2018-12-31',
+    })
+    // 西元寫法不會被當成民國：少了 `(?<!\d)` 會 match 到 `026年度`（民國 26 年＝1937）。
+    expect(source.deriveEffectiveFrom('薪資所得扣繳稅額表_2026年度.csv').ok).toBe(false)
+    // 兩個年度就沒有唯一答案，一律失敗（是候選、推導不出來 → 紅）。
+    const ambiguous = source.deriveEffectiveFrom('114年度與115年度薪資所得扣繳稅額表.csv')
+    expect(ambiguous.ok || ambiguous.excluded).toBe(false)
+  })
+
+  test('★ 成功解析：一列一筆、十二個稅額在 data 裡，全部是字串不是 number', () => {
+    const parsed = source.parse(taxCsv('(元)', ...TAX_ROWS))
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+
+    expect(parsed.records).toHaveLength(3)
+    // `record_key` 是級距下限，不是列序：政府 111 年度把起扣的第一列從 81,001 改成 80,001，
+    // 用列序的話跨版本比對會說「每一級的稅額都變了」。
+    expect(parsed.records.map((record) => record.recordKey)).toEqual([
+      'salary-498501',
+      'salary-499001',
+      'salary-499501',
+    ])
+
+    const last = parsed.records[2]
+    expect(last?.rangeFrom).toBe('499501')
+    expect(last?.rangeTo).toBe('500000')
+    // 這一列有十二個稅額，沒有「這一筆的金額」可言——取其中一個就是替 Payroll 決定預設扶養人數。
+    expect(last?.amount).toBeNull()
+    expect(last?.rate).toBeNull()
+    expect(last?.code).toBeNull()
+    expect(last?.data).toEqual({
+      monthlySalaryRangeText: '499,501 ~ 500,000',
+      monthlySalaryFrom: '499501',
+      monthlySalaryTo: '500000',
+      taxByDependentCount: [
+        '100700',
+        '100600',
+        '100500',
+        '100400',
+        '100300',
+        '100200',
+        '100100',
+        '100000',
+        '99900',
+        '99800',
+        '99700',
+        '99600',
+      ],
+    })
+    for (const record of parsed.records) expect(parseRegulatoryRecordData(9, record.data).ok).toBe(true)
+  })
+
+  test('107–111 那一代的表頭（沒有「(元)」）一樣讀得懂，第三種寫法失敗', () => {
+    expect(source.parse(taxCsv('', ...TAX_ROWS)).ok).toBe(true)
+    // 第三種寫法一律失敗：兩代都是已凍結的歷史檔案，接受它們不是放寬 pattern。
+    expect(source.parse(taxCsv('（元）', ...TAX_ROWS)).ok).toBe(false)
+    // 少一欄（政府把扶養人數上限從 11 改成 10）——形狀那邊的十二格與表頭同一份來源。
+    const shortHeader = taxCsv('(元)', ...TAX_ROWS).replace(',配偶及受扶養親屬計11人(元)', '')
+    expect(source.parse(shortHeader).ok).toBe(false)
+  })
+
+  test('★ 完整性檢查會紅：級距缺口、尾端被截短、扶養欄位錯位、薪資與稅額不同向', () => {
+    // 級距之間有缺口：落在缺口裡的薪資查不到任何一級。
+    const gap = taxCsv('(元)', taxRow('498,501 ~ 499,000', 100300), taxRow('499,101 ~ 500,000', 100700))
+    expect(source.parse(gap).ok).toBe(false)
+
+    // 尾巴少一截：被截短的表最後一列仍然是一個完全正常的封閉級距，只有尾端錨定會發現。
+    const truncated = taxCsv('(元)', TAX_ROWS[0], TAX_ROWS[1])
+    expect(source.parse(truncated).ok).toBe(false)
+
+    // 扶養欄位錯位：稅額不該隨扶養人數上升，而每一個值單獨看都是合法金額。
+    const ascendingRow = ['"499,501 ~ 500,000"', ...Array.from({ length: 12 }, (_, count) => String(90000 + count * 100))].join(',')
+    expect(source.parse(taxCsv('(元)', ascendingRow)).ok).toBe(false)
+
+    // 薪資較高的級距扣得比較少：列的順序或內容不對。
+    const descending = taxCsv('(元)', taxRow('499,001 ~ 499,500', 100700), taxRow('499,501 ~ 500,000', 100300))
+    expect(source.parse(descending).ok).toBe(false)
+
+    // 區間句型變了（政府改用開放的一端）——這張表沒有開放的一端。
+    const openEnded = taxCsv('(元)', taxRow('499,501 ~ 500,000', 100700).replace('499,501 ~ 500,000', '499,501以上'))
+    expect(source.parse(openEnded).ok).toBe(false)
   })
 })

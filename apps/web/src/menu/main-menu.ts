@@ -28,4 +28,19 @@ export const MAIN_MENU: readonly MenuGroup[] = [
     labelKey: 'menu.overview',
     items: [{ labelKey: 'menu.dashboard', routeName: 'dashboard-main' }],
   },
+  /**
+   * 系統設定。分組依資料字典 `docs/schema/05` 的分層（計畫 03 §6）：
+   *「系統設定：角色、權限、帳號；法規設定：政府資料與公司投保設定」，兩者並列。
+   * 法規目前只有這一頁，還撐不起一個獨立分組，先掛在系統設定底下。
+   *
+   * ⚠️ 這一項**目前對每個登入者都看得到**。計畫 §6 要求沒有 `regulatory.sync.list` 的人看不到它，
+   * 但前端拿不到登入者的權限碼（沒有任何端點回得出來，見 `pages/regulatory/sync/*.route.ts`），
+   * 因此這裡刻意**不加一個沒有人讀得懂的 `permissionCode` 欄位**——一個沒有消費者的欄位
+   * 會讓人以為權限已經接上了，而它一行都沒被執行（通用規範 §7.1）。
+   * 無權限的人點進去會看到後端回的「無權限」，不會被導去登入頁（§3.6）。
+   */
+  {
+    labelKey: 'menu.system-settings',
+    items: [{ labelKey: 'menu.regulatory-sync', routeName: 'regulatory-sync' }],
+  },
 ]
