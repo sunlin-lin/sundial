@@ -17,18 +17,31 @@
 import { describe, expect, test } from 'bun:test'
 import { parseRegulatoryRecordData } from '../../datasets/domain/regulatory-record-shape.ts'
 import { isDecimalSum, parseAmountRange, percentToRate } from '../domain/regulatory-amount.ts'
-import { selectDataGovResource, toDataGovMetadataUrl } from '../domain/regulatory-data-gov.ts'
+import { parseCsvTable } from '../domain/regulatory-csv.ts'
+import { selectDataGovResource, toDataGovMetadataUrl, type DataGovResource } from '../domain/regulatory-data-gov.ts'
+import { parseHealthInsurancePremiumShares } from '../domain/regulatory-health-insurance-premium-share.ts'
+import { parseHealthInsuranceSalaryGrades } from '../domain/regulatory-health-insurance-salary-grade.ts'
+import { planMultiVersionSync } from '../domain/regulatory-multi-version-plan.ts'
 import { parseLaborEmploymentInsurancePremiumShares } from '../domain/regulatory-labor-employment-insurance-premium.ts'
 import { parseLaborInsuranceSalaryGrades, parseMonthlySalaryRange } from '../domain/regulatory-labor-insurance-salary.ts'
 import { parseLaborPensionContributionWageGrades } from '../domain/regulatory-labor-pension-contribution-wage.ts'
 import { parseOccupationalAccidentInsuranceRates } from '../domain/regulatory-occupational-accident-insurance-rate.ts'
-import { parseRocCompactDate, parseRocEffectiveDateFromText } from '../domain/regulatory-roc-date.ts'
+import {
+  parseRocCompactDate,
+  parseRocEffectiveDateFromText,
+  parseRocYearMonthFromText,
+} from '../domain/regulatory-roc-date.ts'
 import {
   isHeartbeatStale,
   type RegulatoryParseContext,
   type RegulatoryParseResult,
 } from '../domain/regulatory-sync-model.ts'
-import { isSyncableDatasetCode, toVersionCode } from '../domain/regulatory-sync-source.ts'
+import {
+  isSyncableDatasetCode,
+  REGULATORY_SYNC_SOURCES,
+  SYNCABLE_DATASET_CODES,
+  toVersionCode,
+} from '../domain/regulatory-sync-source.ts'
 import type { RegulatoryDatasetCode } from '../../datasets/regulatory-datasets.service.ts'
 
 /** 政府那一份的一列。工廠函式讓每條測試只寫它要壞掉的那一欄。 */
@@ -948,11 +961,355 @@ describe('心跳逾時判定與版本代碼', () => {
     expect(toVersionCode('2025-12-31')).toBe('2025-12')
   })
 
-  test('isSyncableDatasetCode：目前是 1、3、4、6，人工維護的 10 與永久空號 7 都不是', () => {
-    for (const code of [1, 3, 4, 6]) expect(isSyncableDatasetCode(code)).toBe(true)
-    // `2`、`5`、`8`、`9` 的形狀仍是 `Type.Never()`，沒有解析器。
-    for (const code of [2, 5, 8, 9]) expect(isSyncableDatasetCode(code)).toBe(false)
+  test('isSyncableDatasetCode：目前是 1–6，人工維護的 10 與永久空號 7 都不是', () => {
+    for (const code of [1, 2, 3, 4, 5, 6]) expect(isSyncableDatasetCode(code)).toBe(true)
+    // `8`、`9` 的形狀仍是 `Type.Never()`，沒有解析器。
+    for (const code of [8, 9]) expect(isSyncableDatasetCode(code)).toBe(false)
     expect(isSyncableDatasetCode(7)).toBe(false)
     expect(isSyncableDatasetCode(10)).toBe(false)
+  })
+
+  test('SYNCABLE_DATASET_CODES 與 REGULATORY_SYNC_SOURCES 的 key 一字不差', () => {
+    // 兩者互相釘死是編譯期的事（見 `regulatory-sync-source.ts` 檔頭），這一條驗的是
+    // **執行期真的一致**——排程器現在直接掃這個陣列，而 `runSync` 是拿代碼去查那個物件的。
+    // 少了它，一個「型別上對得起來、執行期少一個 key」的重構會讓某個資料集安靜地永遠不被同步。
+    const codes: readonly number[] = SYNCABLE_DATASET_CODES
+    expect([...codes]).toEqual(Object.keys(REGULATORY_SYNC_SOURCES).map(Number))
+  })
+})
+
+// ---------------------------------------------------------------------------
+// dataset_code = 2、5：健保署那兩份（CSV ＋ 多版本）
+// ---------------------------------------------------------------------------
+
+/** `dataset_code=2` 的表頭，逐字取自實測（全形括號是政府原文的一部分）。 */
+const HEALTH_GRADE_HEADER = '組別級距,投保等級,月投保金額（元）,實際薪資月額（元）'
+
+/**
+ * 組一份 `dataset_code=2` 的 CSV。**帶 BOM、CRLF 換行、尾端一個換行**——三者都是實測的形態，
+ * 而三者都各自弄壞過一次解析（BOM 讓第一個欄位名對不上、CRLF 讓最後一欄多一個 `\r`、
+ * 尾端換行多出一列空的）。用真實形態當預設，那三件事就每一條測試都在驗。
+ */
+const healthGradeCsv = (...rows: readonly string[]): string =>
+  `﻿${[HEALTH_GRADE_HEADER, ...rows].join('\r\n')}\r\n`
+
+/** 三級的完整分級表：頭一級沒有下限、末一級沒有上限、中間首尾相接。 */
+const HEALTH_GRADE_ROWS = [
+  '第一組級距1200元,1,29500,29500以下',
+  '第二組級距1500元,2,30300,29501-30300',
+  '第二組級距1500元,3,31800,30301以上',
+] as const
+
+/** `dataset_code=5` 的表頭。**負擔比率就寫在裡面**，因此逐字比對同時是「比率有沒有變」的檢查。 */
+const HEALTH_SHARE_HEADER =
+  '投保金額等級,月投保金額,本人負擔金額（負擔比率30%）,本人+1眷口負擔金額,本人+2眷口負擔金額,本人+3眷口負擔金額,投保單位負擔金額（負擔比率60%）,政府補助金額（補助比率10%）'
+
+const healthShareCsv = (...rows: readonly string[]): string =>
+  `﻿${[HEALTH_SHARE_HEADER, ...rows].join('\r\n')}\r\n`
+
+/** 兩級，值逐字取自政府 115年1月 那一份的前兩列。 */
+const HEALTH_SHARE_ROWS = ['1,29500,458,916,1374,1832,1428,238', '2,30300,470,940,1410,1880,1466,244'] as const
+
+describe('parseCsvTable：政府 CSV 的讀取（dataset_code=2、5 共用）', () => {
+  const options = { header: ['甲', '乙'], label: '測試表' } as const
+
+  test('BOM、CRLF、尾端換行都不影響結果', () => {
+    const parsed = parseCsvTable('﻿甲,乙\r\n1,2\r\n', options)
+    expect(parsed).toEqual({ ok: true, rows: [{ 甲: '1', 乙: '2' }] })
+  })
+
+  test('★ 表頭逐字比對：改名、改順序、多一欄少一欄都失敗', () => {
+    // 「找得到就好」的比對會讓政府把 `本人負擔金額（負擔比率30%）` 改成 40% 這件事完全沒有症狀。
+    expect(parseCsvTable('甲,丙\n1,2\n', options).ok).toBe(false)
+    expect(parseCsvTable('乙,甲\n1,2\n', options).ok).toBe(false)
+    expect(parseCsvTable('甲,乙,丙\n1,2,3\n', options).ok).toBe(false)
+    expect(parseCsvTable('甲\n1\n', options).ok).toBe(false)
+  })
+
+  test('欄位數對不上一律失敗，不補空值也不忽略多的那一欄', () => {
+    // 補空值會讓「政府少給一欄」變成「那一欄是空的」，而後者的錯誤訊息會指向欄位內容。
+    expect(parseCsvTable('甲,乙\n1\n', options).ok).toBe(false)
+    expect(parseCsvTable('甲,乙\n1,2,3\n', options).ok).toBe(false)
+  })
+
+  test('只有表頭、空內容、出現引號都失敗', () => {
+    expect(parseCsvTable('甲,乙\n', options).ok).toBe(false)
+    expect(parseCsvTable('', options).ok).toBe(false)
+    // RFC 4180 的引號欄位實測從未出現；支援它等於加一台沒有任何測試資料會經過的狀態機。
+    expect(parseCsvTable('甲,乙\n"1,x",2\n', options).ok).toBe(false)
+  })
+})
+
+describe('parseRocYearMonthFromText：健保署資源說明的「N年M月」', () => {
+  test('實測的兩段資源說明', () => {
+    expect(parseRocYearMonthFromText('115年1月全民健康保險投保金額分級表', '資源說明')).toEqual({
+      ok: true,
+      value: '2026-01-01',
+    })
+    expect(parseRocYearMonthFromText('111年7月有一定雇主受僱者健保費負擔金額表', '資源說明')).toEqual({
+      ok: true,
+      value: '2022-07-01',
+    })
+  })
+
+  test('★ 只有年份時失敗，而且訊息要講明是「只有年份」（計畫 §7.2）', () => {
+    // `20251` 的 16 個資源裡有 9 個長這樣。挑一個「1 月 1 日」正是禁止的推測值——
+    // 同一年可能有兩次調整（實測 `20246` 有 102年1月 與 102年7月）。
+    const parsed = parseRocYearMonthFromText('100年全民健康保險投保金額分級表', '資源說明')
+    expect(parsed.ok).toBe(false)
+    if (parsed.ok) return
+    expect(parsed.reason).toContain('只有年份')
+    // 「政府沒寫」與「讀不懂」要分得出來：前者重跑一百次也一樣。
+    expect(parseRocYearMonthFromText('全民健康保險投保金額分級表', '資源說明').ok).toBe(false)
+  })
+
+  test('★ 西元寫法不會被當成民國，兩個不同年月也失敗', () => {
+    // `2026年1月` 少了 `(?<!\d)` 會 match 到 `026年`，算成民國 26 年（1937）。
+    expect(parseRocYearMonthFromText('2026年1月分級表', '資源說明').ok).toBe(false)
+    expect(parseRocYearMonthFromText('115年1月與114年1月分級表', '資源說明').ok).toBe(false)
+    // 同一個年月寫兩次不是歧義。
+    expect(parseRocYearMonthFromText('115年1月分級表（115年1月起）', '資源說明')).toEqual({
+      ok: true,
+      value: '2026-01-01',
+    })
+    // 月份不合法時走日曆檢查那條失敗分支。
+    expect(parseRocYearMonthFromText('115年13月分級表', '資源說明').ok).toBe(false)
+  })
+
+  test('來源設定上的 deriveEffectiveFrom 就是這一支（`2` 與 `5` 共用）', () => {
+    // 驗的是**接線**：解析器與同步流程都靠它，而它若被接成別的函式，
+    // 「生效日從哪裡來」這個問題就會有兩個答案。
+    for (const code of [2, 5] as const) {
+      const source = REGULATORY_SYNC_SOURCES[code]
+      expect(source.deriveEffectiveFrom('115年1月分級表')).toEqual({ ok: true, value: '2026-01-01' })
+      // 政府沒給說明時是 `null`，而 `null` 走失敗分支，不是回一個預設日期。
+      expect(source.deriveEffectiveFrom(null).ok).toBe(false)
+    }
+  })
+})
+
+describe('parseHealthInsuranceSalaryGrades：dataset_code=2 的解析器', () => {
+  test('成功路徑：record_key 用月投保金額、級距與金額都拆得開', () => {
+    const parsed = parseHealthInsuranceSalaryGrades(healthGradeCsv(...HEALTH_GRADE_ROWS))
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+
+    expect(parsed.records).toHaveLength(3)
+    // `record_key` 是月投保金額，不是級數：基本工資一調，低薪的幾級被刪掉，級數整批位移。
+    expect(parsed.records.map((record) => record.recordKey)).toEqual(['amount-29500', 'amount-30300', 'amount-31800'])
+
+    const lowest = parsed.records[0]
+    expect(lowest?.code).toBe('1')
+    // 最低一級沒有下限——不補 0（補了之後一支寫錯的級距查詢會回一個看起來正常的級距）。
+    expect(lowest?.rangeFrom).toBeNull()
+    expect(lowest?.rangeTo).toBe('29500')
+    expect(lowest?.amount).toBe('29500')
+    expect(lowest?.rate).toBeNull()
+    expect(lowest?.name).toBeNull()
+    expect(lowest?.data).toEqual({
+      groupRangeText: '第一組級距1200元',
+      grade: '1',
+      monthlyInsuredAmount: '29500',
+      actualSalaryRangeText: '29500以下',
+      actualSalaryFrom: null,
+      actualSalaryTo: '29500',
+    })
+
+    // 最高一級沒有上限，而且它的月投保金額不等於任何一個級距端點。
+    expect(parsed.records[2]?.rangeTo).toBeNull()
+    expect(parsed.records[2]?.amount).toBe('31800')
+  })
+
+  test('金額一律是字串不是 number（§4.7、計畫 §6.1），而且通得過形狀驗證', () => {
+    const parsed = parseHealthInsuranceSalaryGrades(healthGradeCsv(...HEALTH_GRADE_ROWS))
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+
+    for (const record of parsed.records) {
+      expect(typeof record.amount).toBe('string')
+      // 寫入前的形狀驗證（計畫 §6）：`2.95e4` 通得過編譯，通不過這一行。
+      const shape = parseRegulatoryRecordData(2, record.data)
+      expect(shape.ok).toBe(true)
+      if (!shape.ok) return
+      expect(typeof shape.value.monthlyInsuredAmount).toBe('string')
+    }
+  })
+
+  test('★ 完整性（一）：級距之間有缺口時失敗——落在缺口裡的薪資查不到任何一級', () => {
+    // 實測 `100年` 那一份真的有這種缺口（18301–18780 沒有任何一級涵蓋）。
+    const withGap = healthGradeCsv(
+      '第一組級距1200元,1,29500,29500以下',
+      '第二組級距1500元,2,30300,29800-30300',
+      '第二組級距1500元,3,31800,30301以上',
+    )
+    expect(parseHealthInsuranceSalaryGrades(withGap).ok).toBe(false)
+  })
+
+  test('★ 完整性（二）：最後一級不是「N以上」時失敗——這是「只抓到半截」的攔截點', () => {
+    const truncated = healthGradeCsv('第一組級距1200元,1,29500,29500以下', '第二組級距1500元,2,30300,29501-30300')
+    expect(parseHealthInsuranceSalaryGrades(truncated).ok).toBe(false)
+    // 第一級不是「N以下」同理（那代表前面幾級被切掉了）。
+    const headless = healthGradeCsv('第二組級距1500元,1,30300,29501-30300', '第二組級距1500元,2,31800,30301以上')
+    expect(parseHealthInsuranceSalaryGrades(headless).ok).toBe(false)
+  })
+
+  test('★ 完整性（三）：月投保金額不等於級距上限時失敗——欄位錯位之後每個值單獨看都合法', () => {
+    const mismatched = healthGradeCsv(
+      '第一組級距1200元,1,29500,29500以下',
+      '第二組級距1500元,2,30301,29501-30300',
+      '第二組級距1500元,3,31800,30301以上',
+    )
+    expect(parseHealthInsuranceSalaryGrades(mismatched).ok).toBe(false)
+  })
+
+  test('★ 完整性（四）：級數頭尾錨定——中間少一列時最後一列的級數會大於列數', () => {
+    const missingMiddle = healthGradeCsv('第一組級距1200元,1,29500,29500以下', '第二組級距1500元,3,30300,29501以上')
+    expect(parseHealthInsuranceSalaryGrades(missingMiddle).ok).toBe(false)
+  })
+
+  test('表頭改了、金額不是整數、區間句型讀不懂都失敗', () => {
+    expect(parseHealthInsuranceSalaryGrades('組別級距,投保等級,月投保金額,實際薪資月額\n甲,1,1,1以下\n').ok).toBe(false)
+    expect(parseHealthInsuranceSalaryGrades(healthGradeCsv('第一組級距1200元,1,29500.5,29500以下')).ok).toBe(false)
+    // 勞動部那批用「至」，健保署用半形連字號；把「至」讀通會讓格式變更完全沒有症狀。
+    expect(
+      parseHealthInsuranceSalaryGrades(
+        healthGradeCsv('第一組級距1200元,1,29500,29500以下', '第二組級距1500元,2,30300,29501至30300'),
+      ).ok,
+    ).toBe(false)
+  })
+})
+
+describe('parseHealthInsurancePremiumShares：dataset_code=5 的解析器', () => {
+  test('成功路徑：record_key 與 dataset_code=2 用同一種寫法（兩張表是同一組級距的兩面）', () => {
+    const parsed = parseHealthInsurancePremiumShares(healthShareCsv(...HEALTH_SHARE_ROWS))
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+
+    expect(parsed.records.map((record) => record.recordKey)).toEqual(['amount-29500', 'amount-30300'])
+    const first = parsed.records[0]
+    expect(first?.code).toBe('1')
+    expect(first?.amount).toBe('29500')
+    // 這不是級距表：每一列對應一個確切的月投保金額，填一個假區間會讓級距查詢看起來成立。
+    expect(first?.rangeFrom).toBeNull()
+    expect(first?.rangeTo).toBeNull()
+    // 負擔比率寫在表頭裡，抄一份到 `rate` 會產生第二份真相。
+    expect(first?.rate).toBeNull()
+    expect(first?.data).toEqual({
+      grade: '1',
+      monthlyInsuredAmount: '29500',
+      insuredShareAmount: '458',
+      insuredWithOneDependentAmount: '916',
+      insuredWithTwoDependentsAmount: '1374',
+      insuredWithThreeDependentsAmount: '1832',
+      employerShareAmount: '1428',
+      governmentSubsidyAmount: '238',
+    })
+  })
+
+  test('金額一律是字串不是 number（§4.7），而且通得過形狀驗證', () => {
+    const parsed = parseHealthInsurancePremiumShares(healthShareCsv(...HEALTH_SHARE_ROWS))
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+
+    for (const record of parsed.records) {
+      const shape = parseRegulatoryRecordData(5, record.data)
+      expect(shape.ok).toBe(true)
+      if (!shape.ok) return
+      for (const value of Object.values(shape.value)) expect(typeof value).toBe('string')
+    }
+  })
+
+  test('★ 完整性（一）：表頭裡的負擔比率改了就失敗——那是法規變更，資料列上看不出來', () => {
+    const changedRate = healthShareCsv(...HEALTH_SHARE_ROWS).replace('負擔比率30%', '負擔比率40%')
+    expect(parseHealthInsurancePremiumShares(changedRate).ok).toBe(false)
+  })
+
+  test('★ 完整性（二）：眷口金額不是本人金額的 2／3／4 倍時失敗', () => {
+    const broken = healthShareCsv('1,29500,458,917,1374,1832,1428,238')
+    const parsed = parseHealthInsurancePremiumShares(broken)
+    expect(parsed.ok).toBe(false)
+    if (parsed.ok) return
+    expect(parsed.reason).toContain('本人+1眷口負擔金額')
+  })
+
+  test('★ 完整性（三）：月投保金額沒有嚴格遞增時失敗', () => {
+    const notIncreasing = healthShareCsv('1,30300,470,940,1410,1880,1466,244', '2,29500,458,916,1374,1832,1428,238')
+    expect(parseHealthInsurancePremiumShares(notIncreasing).ok).toBe(false)
+  })
+
+  test('★ 完整性（四）：級數頭尾錨定，但**中間打錯一格不算**（政府 107年1月 真的打錯過）', () => {
+    // 第 2 列的等級寫成 `8`：頭尾仍然是 1 與 2，因此放行——等級不是識別鍵（record_key 用月投保金額），
+    // 而讓一個永遠修不好的歷史筆誤每天晚上把同步打紅，只會讓這道檢查被放寬掉。
+    const governmentTypo = healthShareCsv(
+      '1,29500,458,916,1374,1832,1428,238',
+      '8,30300,470,940,1410,1880,1466,244',
+      '3,31800,493,986,1479,1972,1539,256',
+    )
+    const typo = parseHealthInsurancePremiumShares(governmentTypo)
+    expect(typo.ok).toBe(true)
+    if (!typo.ok) return
+    // 打錯的那一格仍然照原樣保留在 `code` 與 `data.grade` 裡——我們不替政府改資料。
+    expect(typo.records[1]?.code).toBe('8')
+
+    // 但「中間少了一列」照樣紅：最後一列的等級大於列數。
+    const missingMiddle = healthShareCsv('1,29500,458,916,1374,1832,1428,238', '3,30300,470,940,1410,1880,1466,244')
+    expect(parseHealthInsurancePremiumShares(missingMiddle).ok).toBe(false)
+  })
+
+  test('表頭改了、金額不是整數、只有表頭都失敗', () => {
+    expect(parseHealthInsurancePremiumShares('投保金額等級,月投保金額\n1,29500\n').ok).toBe(false)
+    expect(parseHealthInsurancePremiumShares(healthShareCsv('1,29500,458.5,917,1375.5,1834,1428,238')).ok).toBe(false)
+    expect(parseHealthInsurancePremiumShares(healthShareCsv()).ok).toBe(false)
+  })
+})
+
+describe('planMultiVersionSync：一個資料集 → N 個版本的計畫', () => {
+  const resource = (description: string | null, id: string): DataGovResource => ({
+    downloadUrl: `https://info.nhi.test.invalid/api/iode0000s01/Dataset?rId=${id}`,
+    resourceDescription: description,
+    sourceModifiedAt: '2026-08-12 11:05:17',
+  })
+
+  const derive = REGULATORY_SYNC_SOURCES[2].deriveEffectiveFrom
+
+  test('★ 幂等：已經有的版本代碼一律 skip，其餘才 create', () => {
+    const plan = planMultiVersionSync([resource('114年1月分級表', 'a'), resource('115年1月分級表', 'b')], derive, [
+      '2025-01',
+    ])
+    expect(plan.map((entry) => entry.action)).toEqual(['skip', 'create'])
+    expect(plan.map((entry) => (entry.action === 'fail' ? null : entry.versionCode))).toEqual(['2025-01', '2026-01'])
+  })
+
+  test('★ 推導不出生效日的資源是 fail，不是 skip（計畫 §7.2）', () => {
+    // skip 的話，政府哪天把最新那一份的說明改成別的寫法，同步會回報「無異動」而我們永遠拿不到新版本。
+    const plan = planMultiVersionSync([resource('100年分級表', 'a'), resource('115年1月分級表', 'b')], derive, [])
+    expect(plan.map((entry) => entry.action)).toEqual(['create', 'fail'])
+    const failed = plan.find((entry) => entry.action === 'fail')
+    expect(failed?.action === 'fail' && failed.reason).toContain('只有年份')
+  })
+
+  test('依生效日由舊到新排序，失敗的排在最後（回補時 id 的順序才與生效日一致）', () => {
+    const plan = planMultiVersionSync(
+      [resource('115年1月分級表', 'c'), resource('100年分級表', 'x'), resource('110年1月分級表', 'a')],
+      derive,
+      [],
+    )
+    expect(plan.map((entry) => (entry.action === 'fail' ? 'fail' : entry.effectiveFrom))).toEqual([
+      '2021-01-01',
+      '2026-01-01',
+      'fail',
+    ])
+  })
+
+  test('兩個資源推導出同一個版本代碼時，第二個 fail（不是取其中一個）', () => {
+    // 放行的話會在寫第二份時撞 `UNIQUE(dataset_code, version_code)`，
+    // 而那時的錯誤訊息是一句 SQL 唯一鍵違反，看不出是哪兩個資源撞在一起。
+    const plan = planMultiVersionSync([resource('115年1月分級表', 'a'), resource('115年1月分級表', 'b')], derive, [])
+    expect(plan.map((entry) => entry.action)).toEqual(['create', 'fail'])
+  })
+
+  test('全部都已經存在時，計畫裡一個 create 都沒有（＝那一次同步不下載任何資源）', () => {
+    const plan = planMultiVersionSync([resource('115年1月分級表', 'a')], derive, ['2026-01'])
+    expect(plan.every((entry) => entry.action === 'skip')).toBe(true)
   })
 })

@@ -184,3 +184,80 @@ export const parseRocEffectiveDateFromText = (text: string, label: string): RocD
   if (only === undefined) return { ok: false, reason: `${label}的生效日推導失敗：${JSON.stringify(text)}` }
   return { ok: true, value: only }
 }
+
+/** 中文句子裡的「N年N月」（健保署那兩份資源說明的形態）。`(?<!\d)` 的理由同上。 */
+const ROC_YEAR_MONTH_PATTERN = /(?<!\d)(\d{2,3})年(\d{1,2})月/g
+
+/** 只有年份、沒有月份的形態（`100年全民健康保險投保金額分級表`）。只用來組一句講得清楚的失敗原因。 */
+const ROC_YEAR_ONLY_PATTERN = /(?<!\d)(\d{2,3})年/
+
+/**
+ * 從一段中文文字裡取出「年月」並讀成該月的第一天（`115年1月全民健康保險投保金額分級表` → `2026-01-01`）。
+ *
+ * @param text 政府 metadata 的資源說明。
+ * @param label 這段文字是什麼（`資源說明`），只用來組錯誤訊息——那句話會原樣進
+ *   `regulatory_sync_logs.error_message`。
+ *
+ * ## 為什麼健保署那兩份要另一支函式：措辭不同，而且沒有「日」
+ *
+ * 勞動部那批寫的是「(114年1月1日起適用)」，健保署寫的是「115年1月全民健康保險投保金額分級表」
+ * ——**沒有「起適用」、也沒有「日」**（2026-08 實測，`20251` 16 個資源、`20246` 19 個資源皆然）。
+ * 拿 {@link parseRocEffectiveDateFromText} 去讀一個字都比對不到，因此不是把那一支放寬，
+ * 而是另外一支只認這一種形態的函式——放寬那一支會讓「起適用」變成可有可無，
+ * 而那是勞動部那四個資料集唯一的生效日來源。
+ *
+ * ## 「N年M月」讀成該月 1 日**不是猜**，「只有 N 年」則真的推不出來
+ *
+ * 這兩件事的差別是本函式存在的理由，也是計畫 §7.2 那條線在這個資料集上的落點：
+ *
+ * - **月粒度是這份資料真正的粒度**：同一年可以有兩份（實測 `20246` 有「111年1月」與「111年7月」、
+ *   `20251` 亦然），而健保投保金額分級表的版本邊界本來就是月初。把「115年1月」讀成 2026-01-01
+ *   沒有補進任何來源裡沒有的資訊，只是把月粒度的標示寫成日曆日。
+ * - **只有年份的那一種真的少了資訊**：`20251` 的「100年」到「109年」九份就是這樣（實測），
+ *   而同一年有兩次調整時（`20246` 的 102年1月／102年7月）年度標示分不出是哪一次。
+ *   挑一個「1 月 1 日」正是 §7.2 禁止的推測值——它會產出一個完全合理、沒有任何斷言擋得住的錯日期。
+ *   因此這一種**一律失敗**，而且失敗訊息要講明是「只有年份」，不是「讀不懂」：
+ *   前者重跑一百次也一樣，後者代表政府改了措辭、要有人去看。
+ *
+ * 同一段文字出現兩個**不同**年月時失敗，理由與 {@link parseRocEffectiveDateFromText} 逐字相同。
+ */
+export const parseRocYearMonthFromText = (text: string, label: string): RocDateResult => {
+  const dates = new Set<string>()
+  let firstFailure: string | null = null
+
+  for (const matched of text.matchAll(ROC_YEAR_MONTH_PATTERN)) {
+    // 補上「01」之後交給 `parseRocCompactDate` 做日曆檢查（月份範圍、民國元年），這裡不重寫一份。
+    const compact = `${matched[1] ?? ''}${pad2(Number(matched[2] ?? ''))}01`
+    const parsed = parseRocCompactDate(compact)
+    if (!parsed.ok) {
+      firstFailure ??= parsed.reason
+      continue
+    }
+    dates.add(parsed.value)
+  }
+
+  if (dates.size === 0) {
+    if (firstFailure !== null) {
+      return { ok: false, reason: `${label}裡的年月不是合法日期（${firstFailure}）：${JSON.stringify(text)}` }
+    }
+    // 「有年份、沒有月份」與「整段都沒有民國年」分成兩句話：前者是這個資料集已知的歷史形態
+    //（政府的年度標示），後者比較可能是措辭改了。兩者的處置都是失敗，但看紀錄的人要分得出來。
+    return {
+      ok: false,
+      reason: ROC_YEAR_ONLY_PATTERN.test(text)
+        ? `${label}只有年份、沒有月份，推導不出唯一的版本生效日（同一年可能有兩次調整，例如 111年1月 與 111年7月）：${JSON.stringify(text)}`
+        : `${label}裡找不到「N年N月」的生效年月：${JSON.stringify(text)}`,
+    }
+  }
+
+  if (dates.size > 1) {
+    return {
+      ok: false,
+      reason: `${label}裡出現兩個以上的生效年月（${[...dates].join('、')}），無法推導唯一的版本生效日：${JSON.stringify(text)}`,
+    }
+  }
+
+  const [only] = [...dates]
+  if (only === undefined) return { ok: false, reason: `${label}的生效日推導失敗：${JSON.stringify(text)}` }
+  return { ok: true, value: only }
+}

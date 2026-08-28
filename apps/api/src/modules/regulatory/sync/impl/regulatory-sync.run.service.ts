@@ -5,14 +5,62 @@
  * 判死心跳逾時的舊紀錄 → 還有活著的就拒絕
  *   → 建 sync_log（status=1 執行中，心跳啟動）
  *   → resource discovery（打 data.gov.tw metadata API）
- *   → 下載 raw
- *   → checksum 比對該資料集最新版本 → 相同則 status=4 無異動，結束
- *   → 解析 → records（依 §6 的形狀驗證）
- *   → 決定 version_code 與 effective_from
- *        └─ 推導不出來 → status=3 失敗，結束（§7.2）
- *   → 同一交易寫入 version ＋ records
- *   → status=2
+ *   → 依來源形態分兩條（見下）
  * ```
+ *
+ * ## 兩條路：單資源與多資源
+ *
+ * ```
+ * 單資源（1、3、4、6）             多資源（2、5）
+ * ─────────────────────────────    ────────────────────────────────────────
+ * 下載 raw                          列出該格式的全部資源（16／19 個）
+ * checksum 比對最新版               每個資源由**資源說明**推導生效日 → version_code
+ *   └ 相同 → status=4 無異動         排出計畫：新建／已存在跳過／推導不出來就失敗（§7.2）
+ * 解析 → records（§6 形狀驗證）      逐一處理「新建」的那些：
+ * 決定 version_code                   下載 → 解析 → 形狀驗證 → **各自一個交易**寫入
+ *   └ 推導不出來 → status=3（§7.2）  一個版本失敗不中斷其餘
+ *   └ 撞既有代碼 → status=3
+ * 同一交易寫入 version ＋ records
+ * status=2
+ * ```
+ *
+ * **為什麼不是一條路**（＝把單資源當成 N=1）：兩者在一件事上有本質差異——單資源的版本代碼
+ * **只有下載並解析之後才知道**（`1`、`3` 的生效日在資料列裡），多資源的**從 metadata 就知道**。
+ * 合成一條的話，多資源那一邊每天晚上都得把十幾份歷史資源重新下載一次才能發現「它們早就進來了」
+ * （一年七千多次請求換零個新版本）；或者要在單資源那條路上加一堆「這一次要不要下載」的分支，
+ * 而那條路現在的讀法是一條直線。完整論述見 `domain/regulatory-sync-model.ts` 的 `RegulatorySyncSource`。
+ *
+ * ## 多版本流程的三個決定，寫在這裡因為它們只在這個檔案裡看得到
+ *
+ * **(1) 幂等以 `version_code` 判定，而且「已存在」代表不下載。**
+ * 判定在 `domain/regulatory-multi-version-plan.ts`（純函式）。用版本代碼而不是資源網址：
+ * 網址帶隨機尾碼、政府隨時可能重新編號，換一次尾碼就會讓十幾個版本全部被當成「新的」。
+ *
+ * **(2) `checksum` 是「這一個版本自己那一份資源內容」的雜湊，不是整批的。**
+ * 它是 `regulatory_dataset_versions` 的欄位，必須與**同一列的 `raw_data`** 對得起來——
+ * 整批雜湊會讓十幾個版本共用一個值，於是「這一版的內容變了沒」這個問題再也答不出來，
+ * 而那正是這一欄存在的理由。這個語意與單資源那條路**完全一致**（那裡的 checksum 也是該版本的內容），
+ * 因此不是兩套規則。
+ *
+ * ⚠️ 代價要寫出來：多資源的既有版本**不重新下載**，因此偵測不到「政府改了某一份歷史資源的內容」。
+ * 換來的是穩定狀態下一次同步只打一次 metadata API。而且就算偵測得到，處置也只能是「記一筆要人工
+ * 確認的失敗」——覆寫既有版本會改寫已結算 Payroll 引用的那一版（字典明文禁止）。單資源那四個
+ * 仍然照舊會偵測到（它們本來就必須下載才知道版本代碼）。
+ *
+ * **(3) `status_code` 只用既有的四個值，對應如下：**
+ *
+ * | 這一次的結果 | `status_code` | `records_received` |
+ * |---|---|---|
+ * | 有新建、且一個都沒失敗 | `2 更新成功` | 本次實際寫入的 records 總筆數 |
+ * | **有任何一個版本失敗**（不論有沒有新建成功） | `3 失敗` | 本次實際寫入的總筆數（可能是 0） |
+ * | 沒有新建、也沒有失敗（十幾個版本都已經在庫裡） | `4 無異動` | `null`（沒有下載、沒有解析） |
+ *
+ * 「有成功也有失敗」記成 `3` 而不是 `2`：**有東西沒進來就必須是紅的**。記成成功的話，
+ * 那個永遠補不進來的版本不會有任何人發現，而它的症狀是幾個月後「補算某一期薪資時查不到版本」。
+ * `error_message` 逐一列出每一個失敗的資源與原因，因此「16 個裡面壞了哪一個」看紀錄就知道；
+ * `records_received` 記的是**真的寫進去的筆數**，於是「失敗了、但補進來 5 個版本」也看得出來。
+ * `dataset_version_id` 指向本次建立的版本中生效日最新的那一個（一個都沒建才是 NULL）——
+ * 這一欄只能指一個，而多版本同步裡最有意義的單一答案是「現行的那一版是不是這次建的」。
  *
  * ## 這一支沒有對應的端點，而那是刻意的（計畫 D3）
  *
@@ -37,7 +85,17 @@ import { RegulatorySyncStatus } from '../../../../db/schema/index.ts'
 import { LogCategory, logger } from '../../../../shared/logger.ts'
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import { parseRegulatoryRecordData } from '../../datasets/domain/regulatory-record-shape.ts'
-import { selectDataGovResource, toDataGovMetadataUrl } from '../domain/regulatory-data-gov.ts'
+import {
+  listDataGovResources,
+  selectDataGovResource,
+  toDataGovMetadataUrl,
+  type DataGovResource,
+} from '../domain/regulatory-data-gov.ts'
+import {
+  describeResource,
+  planMultiVersionSync,
+  type DatedMultiVersionPlanEntry,
+} from '../domain/regulatory-multi-version-plan.ts'
 import { toContentChecksum } from '../domain/regulatory-sync-checksum.ts'
 import {
   HEARTBEAT_INTERVAL_MS,
@@ -45,6 +103,8 @@ import {
   isHeartbeatStale,
   RESOURCE_FETCH_TIMEOUT_MS,
   type ParsedRegulatoryRecord,
+  type RegulatoryMultiVersionSource,
+  type RegulatorySingleVersionSource,
   type RegulatorySyncContext,
   type RegulatorySyncSource,
   type RunSyncInput,
@@ -65,6 +125,7 @@ import {
   findLatestDatasetVersion,
   insertDatasetVersion,
   insertRegulatoryRecords,
+  listDatasetVersionCodes,
   listRunningSyncLogs,
   touchSyncLogHeartbeat,
 } from '../regulatory-sync.repository.ts'
@@ -217,24 +278,84 @@ const validateRecordShapes = (
   return null
 }
 
+/** 寫入一個版本要知道的一切（除了 `dataset_code` 與時間）。 */
+type VersionWrite = {
+  readonly datasetCode: SyncableDatasetCode
+  readonly source: RegulatorySyncSource
+  readonly resource: DataGovResource
+  readonly versionCode: string
+  readonly effectiveFrom: string
+  readonly checksum: string
+  readonly rawText: string
+  readonly records: readonly ParsedRegulatoryRecord[]
+}
+
 /**
- * 同步的主體。由 {@link runSync} 在心跳啟動之後呼叫。
+ * 同一交易寫入 version ＋ records（計畫 §7.1、§4.4），回傳新版本的 id。
  *
- * 拆出來的理由是 `finally`：心跳一旦啟動就必須停掉，而把整段流程寫在 `try` 裡會讓
- * 「哪些步驟在心跳的保護範圍內」變成要靠縮排判斷的事。
+ * **兩條路共用同一支**：單資源一次同步呼叫它一次，多資源呼叫它 N 次——而**每一次都是自己的交易**。
+ * 十幾個版本包成一個大交易的話，第十五個解析失敗會讓前面十四個一起回捲，
+ * 於是一次回補要嘛全成功要嘛全失敗，而政府那一份只要有一個年度的格式特別一點就永遠補不進來。
+ *
+ * 「現在」在這裡才問 clock：多資源一次同步跨十幾次下載，`synced_at` 記的是
+ * **這一份資源是什麼時候取得的**，共用一個批次時間會讓那個語意不成立。
  */
-const executeSync = async (
+const writeVersion = async (context: RegulatorySyncContext, write: VersionWrite): Promise<number> => {
+  const now = context.clock.now()
+
+  return context.db.transaction(async (tx): Promise<number> => {
+    const versionId = await insertDatasetVersion(tx, {
+      datasetCode: write.datasetCode,
+      versionCode: write.versionCode,
+      effectiveFrom: write.effectiveFrom,
+      governmentResourceId: write.resource.downloadUrl,
+      sourceModifiedAt: write.resource.sourceModifiedAt,
+      syncedAt: now,
+      checksum: write.checksum,
+      recordCount: write.records.length,
+      rawFormatCode: write.source.rawFormatCode,
+      // 保存原始 Snapshot，不是解析結果：政府資料格式變動時，沒有它就只能重新去抓，
+      // 而舊資源網址那時多半已經失效。
+      rawData: write.rawText,
+      createdAt: now,
+    })
+
+    await insertRegulatoryRecords(
+      tx,
+      write.records.map((record) => ({
+        datasetVersionId: versionId,
+        recordKey: record.recordKey,
+        code: record.code,
+        name: record.name,
+        rangeFrom: record.rangeFrom,
+        rangeTo: record.rangeTo,
+        amount: record.amount,
+        rate: record.rate,
+        data: record.data,
+        sortOrder: record.sortOrder,
+        createdAt: now,
+      })),
+    )
+
+    return versionId
+  })
+}
+
+/**
+ * 單資源那條路：**一次同步 → 一個版本**（`dataset_code=1`、`3`、`4`、`6`）。
+ *
+ * 這一段與多版本上線之前**逐字相同**（只有寫入那幾行搬進了 {@link writeVersion}）：
+ * 版本代碼要下載並解析之後才知道，因此「下載 → 比 checksum → 解析 → 決定版本代碼 → 寫入」
+ * 是一條直線，中間沒有「這一次要不要下載」這種分支。
+ */
+const executeSingleVersionSync = async (
   context: RegulatorySyncContext,
   datasetCode: SyncableDatasetCode,
-  source: RegulatorySyncSource,
+  source: RegulatorySingleVersionSource,
   syncLogId: number,
+  metadataBody: string,
 ): Promise<ServiceResult<SyncOutcome>> => {
-  // ① resource discovery：`government_resource_id` 不得硬編（計畫 §7.0）。
-  const metadataUrl = toDataGovMetadataUrl(source.datasetId)
-  const metadata = await fetchText(context, metadataUrl, 'metadata API ')
-  if (!metadata.ok) return failSync(context, datasetCode, syncLogId, null, metadata.reason)
-
-  const resource = selectDataGovResource(metadata.body, source.resourceFormat)
+  const resource = selectDataGovResource(metadataBody, source.resourceFormat)
   if (!resource.ok) return failSync(context, datasetCode, syncLogId, null, resource.reason)
 
   const resourceUrl = resource.value.downloadUrl
@@ -299,42 +420,15 @@ const executeSync = async (
   }
 
   // ⑥ 同一交易寫入 version ＋ records（計畫 §7.1、§4.4）。
-  const now = context.clock.now()
-  const datasetVersionId = await context.db.transaction(async (tx): Promise<number> => {
-    const versionId = await insertDatasetVersion(tx, {
-      datasetCode,
-      versionCode,
-      effectiveFrom: parsed.effectiveFrom,
-      governmentResourceId: resourceUrl,
-      sourceModifiedAt: resource.value.sourceModifiedAt,
-      syncedAt: now,
-      checksum,
-      recordCount: parsed.records.length,
-      rawFormatCode: source.rawFormatCode,
-      // 保存原始 Snapshot，不是解析結果：政府資料格式變動時，沒有它就只能重新去抓，
-      // 而舊資源網址那時多半已經失效。
-      rawData: rawText,
-      createdAt: now,
-    })
-
-    await insertRegulatoryRecords(
-      tx,
-      parsed.records.map((record) => ({
-        datasetVersionId: versionId,
-        recordKey: record.recordKey,
-        code: record.code,
-        name: record.name,
-        rangeFrom: record.rangeFrom,
-        rangeTo: record.rangeTo,
-        amount: record.amount,
-        rate: record.rate,
-        data: record.data,
-        sortOrder: record.sortOrder,
-        createdAt: now,
-      })),
-    )
-
-    return versionId
+  const datasetVersionId = await writeVersion(context, {
+    datasetCode,
+    source,
+    resource: resource.value,
+    versionCode,
+    effectiveFrom: parsed.effectiveFrom,
+    checksum,
+    rawText,
+    records: parsed.records,
   })
 
   await closeSyncLog(context, syncLogId, {
@@ -355,6 +449,211 @@ const executeSync = async (
     recordCount: parsed.records.length,
     governmentResourceId: resourceUrl,
   })
+}
+
+/** 多版本流程裡，一個「新建」成功之後我們知道的事。 */
+type CreatedVersion = {
+  readonly id: number
+  readonly versionCode: string
+  readonly effectiveFrom: string
+  readonly resourceUrl: string
+  readonly recordCount: number
+}
+
+type CreateVersionOutcome =
+  | { readonly ok: true; readonly value: CreatedVersion }
+  | { readonly ok: false; readonly reason: string }
+
+/**
+ * 多版本流程裡的**一個**版本：下載 → 解析 → 形狀驗證 → 自己的交易寫入。
+ *
+ * 生效日**不由解析器回答**（它在這條路上的簽章裡沒有那一欄）：那個答案在計畫階段就已經從資源說明
+ * 推導完成，而且正是「這一份要不要下載」的依據。同一個答案只有一個出處，見
+ * `domain/regulatory-sync-model.ts` 的 `RegulatoryVersionRecordsParser`。
+ *
+ * **失敗回 `reason` 而不是拋例外**：政府某一個年度的檔案壞掉是預期中的事，處置是記下來、跑下一個。
+ * 真正沒有預期的例外（資料庫斷線、唯一鍵在無人並行的情況下撞了）**照原樣往上拋**——那代表
+ * 這一次同步的前提壞了，繼續跑下十幾個版本沒有意義，而 {@link runSync} 的 `catch` 會先結案再拋。
+ */
+const createOneVersion = async (
+  context: RegulatorySyncContext,
+  datasetCode: SyncableDatasetCode,
+  source: RegulatoryMultiVersionSource,
+  entry: DatedMultiVersionPlanEntry,
+): Promise<CreateVersionOutcome> => {
+  const resourceUrl = entry.resource.downloadUrl
+
+  const downloaded = await fetchText(context, resourceUrl, '資源下載')
+  if (!downloaded.ok) return { ok: false, reason: downloaded.reason }
+
+  const rawText = downloaded.body
+  const parsed = source.parse(rawText, { resourceDescription: entry.resource.resourceDescription })
+  if (!parsed.ok) return { ok: false, reason: `解析失敗：${parsed.reason}` }
+  if (parsed.records.length === 0) {
+    return { ok: false, reason: '解析結果沒有任何 record，不寫入空版本' }
+  }
+
+  const shapeError = validateRecordShapes(datasetCode, parsed.records)
+  if (shapeError !== null) return { ok: false, reason: shapeError }
+
+  const id = await writeVersion(context, {
+    datasetCode,
+    source,
+    resource: entry.resource,
+    versionCode: entry.versionCode,
+    effectiveFrom: entry.effectiveFrom,
+    // checksum 是**這一個版本自己那一份內容**的雜湊，與同一列的 `raw_data` 對得起來（見檔頭 (2)）。
+    checksum: toContentChecksum(rawText),
+    rawText,
+    records: parsed.records,
+  })
+
+  return {
+    ok: true,
+    value: {
+      id,
+      versionCode: entry.versionCode,
+      effectiveFrom: entry.effectiveFrom,
+      resourceUrl,
+      recordCount: parsed.records.length,
+    },
+  }
+}
+
+/**
+ * 多資源那條路：**一次同步 → 把所有還沒有的版本都補進來**（`dataset_code=2`、`5`）。
+ *
+ * 三個決定（幂等判定、checksum 語意、`status_code` 對應）寫在本檔檔頭，因為它們是這一段的規格。
+ * 這裡只補一句迴圈本身的：**一個版本失敗不中斷其餘**，而且失敗的那一個不會動到任何已經寫進去的版本
+ * ——每一個版本各自一個交易（見 {@link writeVersion}）。
+ */
+const executeMultiVersionSync = async (
+  context: RegulatorySyncContext,
+  datasetCode: SyncableDatasetCode,
+  source: RegulatoryMultiVersionSource,
+  syncLogId: number,
+  metadataBody: string,
+): Promise<ServiceResult<SyncOutcome>> => {
+  const resources = listDataGovResources(metadataBody, source.resourceFormat)
+  if (!resources.ok) return failSync(context, datasetCode, syncLogId, null, resources.reason)
+
+  // 已有的版本代碼一次撈完：這一次同步期間它不會變（同一個資料集的併發寫入由心跳那把鎖擋住）。
+  const existingVersionCodes = await listDatasetVersionCodes(context.db, datasetCode)
+  const plan = planMultiVersionSync(resources.values, source.deriveEffectiveFrom, existingVersionCodes)
+
+  const failures: string[] = []
+  const created: CreatedVersion[] = []
+  let skipped = 0
+
+  for (const entry of plan) {
+    if (entry.action === 'fail') {
+      failures.push(`[${describeResource(entry.resource)}] ${entry.reason}`)
+      continue
+    }
+    if (entry.action === 'skip') {
+      skipped += 1
+      continue
+    }
+
+    const outcome = await createOneVersion(context, datasetCode, source, entry)
+    if (!outcome.ok) {
+      failures.push(`[${describeResource(entry.resource)}] ${outcome.reason}`)
+      continue
+    }
+    created.push(outcome.value)
+  }
+
+  // 計畫已依生效日由舊到新排序，因此最後一個成功的就是生效日最新的那一版。
+  const newest = created[created.length - 1] ?? null
+  const recordsWritten = created.reduce((total, version) => total + version.recordCount, 0)
+  const summary =
+    `共 ${String(plan.length)} 個資源：新建 ${String(created.length)} 個版本` +
+    `（${String(recordsWritten)} 筆）、已存在 ${String(skipped)} 個、失敗 ${String(failures.length)} 個`
+
+  if (failures.length > 0) {
+    // **有東西沒進來就是紅的**，即使同一次也補進了幾個版本（理由見檔頭 (3)）。
+    // 已經寫進去的版本留著：它們各自在自己的交易裡完成，而且「同步失敗不得破壞既有有效版本」
+    // 講的是不得**動到**既有版本，不是「這一次寫的都要撤掉」——撤掉才是把好資料丟了。
+    await closeSyncLog(context, syncLogId, {
+      statusCode: RegulatorySyncStatus.Failed,
+      datasetVersionId: newest?.id ?? null,
+      governmentResourceId: newest?.resourceUrl ?? null,
+      recordsReceived: recordsWritten,
+      errorMessage: `${summary}。失敗明細：\n${failures.join('\n')}`,
+    })
+    return fail([regulatorySyncFailed(datasetCode, syncLogId, `${summary}；第一則失敗：${failures[0] ?? ''}`)])
+  }
+
+  if (newest === null) {
+    // 一個都沒新建、也沒有失敗＝十幾個版本全都已經在庫裡。**這就是多版本的「無異動」**，
+    // 而且它連一份資源都沒有下載——穩定狀態下一次同步只打一次 metadata API。
+    const latest = await findLatestDatasetVersion(context.db, datasetCode)
+    await closeSyncLog(context, syncLogId, {
+      statusCode: RegulatorySyncStatus.NoChange,
+      // 指向**既有的**最新版，語意與單資源那條路的無異動逐字相同。
+      datasetVersionId: latest?.id ?? null,
+      // 這一次沒有向任何一個資源要過內容，因此沒有「本次使用的資源」可記。
+      governmentResourceId: null,
+      recordsReceived: null,
+      errorMessage: null,
+    })
+    return succeed({
+      syncLogId,
+      datasetCode,
+      statusCode: RegulatorySyncStatus.NoChange,
+      datasetVersionId: latest?.id ?? null,
+      versionCode: latest?.versionCode ?? null,
+      effectiveFrom: latest?.effectiveFrom ?? null,
+      recordCount: null,
+      governmentResourceId: null,
+    })
+  }
+
+  await closeSyncLog(context, syncLogId, {
+    statusCode: RegulatorySyncStatus.Succeeded,
+    datasetVersionId: newest.id,
+    governmentResourceId: newest.resourceUrl,
+    recordsReceived: recordsWritten,
+    errorMessage: null,
+  })
+
+  return succeed({
+    syncLogId,
+    datasetCode,
+    statusCode: RegulatorySyncStatus.Succeeded,
+    datasetVersionId: newest.id,
+    versionCode: newest.versionCode,
+    effectiveFrom: newest.effectiveFrom,
+    // 本次**實際寫入**的 records 總筆數（跨十幾個版本的加總），不是最後那一版的筆數。
+    recordCount: recordsWritten,
+    governmentResourceId: newest.resourceUrl,
+  })
+}
+
+/**
+ * 同步的主體。由 {@link runSync} 在心跳啟動之後呼叫。
+ *
+ * 拆出來的理由是 `finally`：心跳一旦啟動就必須停掉，而把整段流程寫在 `try` 裡會讓
+ * 「哪些步驟在心跳的保護範圍內」變成要靠縮排判斷的事。
+ *
+ * 兩條路**共用 resource discovery 這一步**（都要打同一支 metadata API），從第二步開始才分岔。
+ * 分岔點寫成 `kind` 的字面值比對而不是「有沒有 `deriveEffectiveFrom`」：後者在加第三種形態時
+ * 不會有任何地方變紅。
+ */
+const executeSync = async (
+  context: RegulatorySyncContext,
+  datasetCode: SyncableDatasetCode,
+  source: RegulatorySyncSource,
+  syncLogId: number,
+): Promise<ServiceResult<SyncOutcome>> => {
+  // ① resource discovery：`government_resource_id` 不得硬編（計畫 §7.0）。
+  const metadataUrl = toDataGovMetadataUrl(source.datasetId)
+  const metadata = await fetchText(context, metadataUrl, 'metadata API ')
+  if (!metadata.ok) return failSync(context, datasetCode, syncLogId, null, metadata.reason)
+
+  return source.kind === 'single-version'
+    ? executeSingleVersionSync(context, datasetCode, source, syncLogId, metadata.body)
+    : executeMultiVersionSync(context, datasetCode, source, syncLogId, metadata.body)
 }
 
 export const runSync = async (

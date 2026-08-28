@@ -76,7 +76,16 @@ export {
   SYNC_LOG_SORT_FIELDS,
   resolveSyncLogSort,
 } from './domain/regulatory-sync-model.ts'
-export { isSyncableDatasetCode } from './domain/regulatory-sync-source.ts'
+/**
+ * 有解析器的資料集清單，**排程器直接用這一份**。
+ *
+ * 原本排程器裡有第二份（`SCHEDULED_DATASETS`，一個 `satisfies Record<SyncableDatasetCode, true>`
+ * 的物件），那份副本會漂移：它與來源設定分屬兩個目錄，而「新增一個解析器」與「把它排進每日同步」
+ * 是兩次編輯。收成一份之後那個問題消失，而**「漏列會編譯不過」那道保護沒有跟著消失**——
+ * 它搬到了 `domain/regulatory-sync-source.ts`：清單與 `REGULATORY_SYNC_SOURCES` 互相釘死，
+ * 少列一個是 missing property、多列一個是 excess property，兩個方向都是編譯錯誤。
+ */
+export { isSyncableDatasetCode, SYNCABLE_DATASET_CODES } from './domain/regulatory-sync-source.ts'
 export type { SyncableDatasetCode } from './domain/regulatory-sync-source.ts'
 
 export const listSyncLogs = (

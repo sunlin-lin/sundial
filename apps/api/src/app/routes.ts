@@ -107,6 +107,34 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
 }
 
 /**
+ * 三個認證群組的具名清單。
+ *
+ * **它存在的唯一理由是端點清單快照（§1.7）**：快照必須記下每一支端點的「所屬認證群組」，
+ * 因為憑證不進 body schema、不進 `parameters`，快照不記的話，「這支端點需要什麼憑證」
+ * 在契約上完全缺席——把一支端點從已登入群組搬進公開群組，在 PR diff 上會是零行變更。
+ * 而群組成員關係只存在於下面 `registerRoutes` 的 `.use()` 順序裡：路由物件上沒有任何欄位
+ * 說得出自己屬於哪一組，唯一問得到的方法就是**分別組裝每一組、看它各自註冊了哪些路徑**。
+ *
+ * **`registerRoutes` 刻意不改成走這張表**（例如以 `reduce` 疊起來）：`.use()` 鏈的回傳型別
+ * 帶著每一支路由的型別資訊，用 `reduce` 疊會把它整包收斂成基底型別，等於為了少寫三行
+ * 把型別資訊丟掉。代價是這張表與下面的鏈**可能漂移**（新增第四組時忘了加進來），
+ * 而那個漂移由快照測試反向擋住：它會發現有路由不屬於任何一組，當場失敗並印出是哪幾支。
+ */
+export const AUTHENTICATION_GROUPS = [
+  { id: 'public', build: publicGroup },
+  { id: 'refresh', build: refreshGroup },
+  { id: 'authenticated', build: authenticatedGroup },
+] as const
+
+/**
+ * 認證群組的識別字。快照上的「所屬認證群組」那一欄就是它。
+ *
+ * 由上面那張表推導而不是另外寫一份字面量聯集：兩份各寫一次的話，新增群組時只改到其中一份
+ * 不會有任何錯誤——多出來的那一組會安靜地變成一個沒有名字、也沒人比對的群組。
+ */
+export type AuthenticationGroupId = (typeof AUTHENTICATION_GROUPS)[number]['id']
+
+/**
  * Web 前端入口群組。
  *
  * 目前不依 host 分流：只有一種入口時，加上 host 判斷等於憑空多一個部署環境要對齊的設定，

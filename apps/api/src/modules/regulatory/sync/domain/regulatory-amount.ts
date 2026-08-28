@@ -10,7 +10,7 @@
  *
  * 三種東西在多個資料集重複出現，而且**每一份都有機會被改鬆**：
  *
- * - 中文區間句型（`1501至3000`／`29501元至30300元`）：`3` 與 `1` 各一份；
+ * - 中文區間句型（`1501至3000`／`29501元至30300元`／`29501-30300`）：`3`、`1`、`2` 各一種寫法；
  * - 百分比 → 費率（`11.5%` → `0.115`）：`4` 與 `6` 各一份，而兩者的百分號位置不同；
  * - 「這是不是一個沒有經過浮點的整數金額」：四個資料集都要問。
  *
@@ -84,24 +84,19 @@ const RANGE_PATTERNS = {
 } as const satisfies Record<AmountUnit, RangePatterns>
 
 /**
- * 中文區間字串 → 上下限。
+ * 三種句型的共用比對。{@link parseAmountRange} 與 {@link parseHyphenatedAmountRange} 都走這一支，
+ * 於是「讀不懂就失敗」「上下限顛倒就失敗」「去逗號」這三條規則只有一份實作。
  *
- * @param rangeText 政府原文，例如 `29501元至30300元`（`1`）或 `1501至3000`（`3`）。
- * @param options `unit` 是期望的單位（見檔頭）；`label` 是政府那一欄的欄位名，
- *   只用來組錯誤訊息——那句話會原樣進 `regulatory_sync_logs.error_message`，
- *   而看紀錄的人要能當場知道是**哪一欄**讀不懂，光說「區間讀不懂」得回頭翻程式碼。
- *
- * 三種句型之外**一律失敗**，這是計畫 §7.2 的精神：讀不懂就停下來，不要挑一個看起來合理的解釋。
- * 一個常見的誘惑是「看不懂就把上下限都設成該級的金額」——那會產生一張每一級都只涵蓋單一金額的
- * 分級表，而它在型別、驗證、資料庫層全部合法。
+ * @param expectation 讀不懂時要告訴看紀錄的人「我們期望的是哪三種句型」——那句話會原樣進
+ *   `regulatory_sync_logs.error_message`，而它是判斷「政府改了寫法」還是「我們讀錯欄」的依據。
  */
-export const parseAmountRange = (
+const matchAmountRange = (
   rangeText: string,
-  options: { readonly unit: AmountUnit; readonly label: string },
+  patterns: RangePatterns,
+  options: { readonly label: string; readonly expectation: string },
 ): AmountRangeResult => {
   const text = rangeText.trim()
-  const patterns = RANGE_PATTERNS[options.unit]
-  const { label, unit } = options
+  const { label, expectation } = options
 
   const upTo = patterns.upTo.exec(text)
   if (upTo !== null) {
@@ -138,11 +133,53 @@ export const parseAmountRange = (
 
   return {
     ok: false,
-    reason:
-      `${label}的區間句型無法辨識（期望「N${unit}以下」「N${unit}至N${unit}」「N${unit}以上」）：` +
-      JSON.stringify(rangeText),
+    reason: `${label}的區間句型無法辨識（期望${expectation}）：${JSON.stringify(rangeText)}`,
   }
 }
+
+/**
+ * 中文區間字串 → 上下限。
+ *
+ * @param rangeText 政府原文，例如 `29501元至30300元`（`1`）或 `1501至3000`（`3`）。
+ * @param options `unit` 是期望的單位（見檔頭）；`label` 是政府那一欄的欄位名，
+ *   只用來組錯誤訊息——那句話會原樣進 `regulatory_sync_logs.error_message`，
+ *   而看紀錄的人要能當場知道是**哪一欄**讀不懂，光說「區間讀不懂」得回頭翻程式碼。
+ *
+ * 三種句型之外**一律失敗**，這是計畫 §7.2 的精神：讀不懂就停下來，不要挑一個看起來合理的解釋。
+ * 一個常見的誘惑是「看不懂就把上下限都設成該級的金額」——那會產生一張每一級都只涵蓋單一金額的
+ * 分級表，而它在型別、驗證、資料庫層全部合法。
+ */
+export const parseAmountRange = (
+  rangeText: string,
+  options: { readonly unit: AmountUnit; readonly label: string },
+): AmountRangeResult =>
+  matchAmountRange(rangeText, RANGE_PATTERNS[options.unit], {
+    label: options.label,
+    expectation: `「N${options.unit}以下」「N${options.unit}至N${options.unit}」「N${options.unit}以上」`,
+  })
+
+/**
+ * 健保署那兩份的區間句型：**分隔符號是半形連字號**（`29501-30300`），不是「至」。
+ *
+ * `dataset_code=2` 的 `實際薪資月額（元）` 就是這一種（2026-08 實測 16 個資源皆然）。
+ *
+ * **為什麼是另一支函式，而不是給 {@link parseAmountRange} 多一種「單位」**：
+ * 差別不在單位（兩邊都不帶「元」），在分隔符號。硬塞進 `unit` 參數會讓 `unit: '-'` 讀起來像
+ * 「金額後面接一個連字號」，而那是另一件事。兩支共用下面的 {@link matchAmountRange}，
+ * 因此「讀不懂就失敗」「上下限顛倒就失敗」「去逗號」這三條規則仍然只有一份實作。
+ */
+const HYPHEN_RANGE_PATTERNS: RangePatterns = {
+  upTo: /^(\d[\d,]*)以下$/,
+  between: /^(\d[\d,]*)-(\d[\d,]*)$/,
+  from: /^(\d[\d,]*)以上$/,
+}
+
+/** 連字號分隔的中文區間字串 → 上下限。參數與回傳的語意同 {@link parseAmountRange}。 */
+export const parseHyphenatedAmountRange = (
+  rangeText: string,
+  options: { readonly label: string },
+): AmountRangeResult =>
+  matchAmountRange(rangeText, HYPHEN_RANGE_PATTERNS, { label: options.label, expectation: '「N以下」「N-N」「N以上」' })
 
 /** 百分比字串後面接不接百分號。封閉聯集，理由與 {@link AmountUnit} 相同。 */
 export type PercentSuffix = '%' | ''

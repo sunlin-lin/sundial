@@ -58,12 +58,7 @@
  * 寫成**必填**相依而不是「呼叫端記得自己接」，是因為忘了接的症狀是「部署時同步被砍在半路」，
  * 那筆紀錄要等三分鐘後的下一次同步才會被判死——而現在它是一個編譯錯誤。
  */
-import {
-  isSyncableDatasetCode,
-  RegulatorySyncErrorCode,
-  type SyncableDatasetCode,
-  type SyncOutcome,
-} from '../modules/regulatory/index.ts'
+import { RegulatorySyncErrorCode, type SyncableDatasetCode, type SyncOutcome } from '../modules/regulatory/index.ts'
 import type { Clock } from '../shared/clock.ts'
 import { LogCategory, logger } from '../shared/logger.ts'
 import type { DomainError, ServiceResult } from '../shared/service-result.ts'
@@ -87,29 +82,19 @@ export const SCHEDULER_TICK_INTERVAL_MS = 60_000
  */
 export const DAILY_SYNC_MINUTE_OF_DAY = 3 * 60
 
-/**
- * 排程要掃的資料集：**每一個有解析器的資料集都必須在這裡出現一次**。
+/*
+ * **這裡刻意沒有「排程要掃哪些資料集」的清單。**
  *
- * `satisfies Record<SyncableDatasetCode, true>` 是這一行的重點：日後有人在
- * `sync/domain/regulatory-sync-source.ts` 加上第二個解析器時，這一行**當場編譯不過**。
- * 寫成 `[1]` 這種陣列的話，聯集變大不會讓任何地方變紅——新資料集會安靜地永遠不被同步，
- * 而症狀（「那個資料集怎麼沒有版本」）要幾個月後才有人問。
+ * 原本有一個 `SCHEDULED_DATASETS`（`satisfies Record<SyncableDatasetCode, true>`），它解的問題是
+ * 「新增解析器卻忘了排程」——但代價是同一份清單有兩份，而兩份的維護動作分屬兩個目錄。
+ * 現在唯一的一份在 `modules/regulatory/sync/domain/regulatory-sync-source.ts`
+ * （`SYNCABLE_DATASET_CODES`），排程器透過相依 {@link RegulatorySyncSchedulerDependencies.datasetCodes}
+ * 收下它，接線在 `index.ts`。
  *
- * 值是 `true` 而不是別的東西：這裡要表達的只有「有沒有列到」，任何額外欄位都會變成
- * 「排程器自己也有一份資料集設定」，而那份設定與 `REGULATORY_SYNC_SOURCES` 必然分岔。
+ * **那道「漏列會編譯不過」的保護沒有消失，只是搬家了**：那個清單與 `REGULATORY_SYNC_SOURCES`
+ * 互相釘死（少列一個是 missing property、多列一個是 excess property），因此
+ * 「加了解析器卻沒有進排程」仍然是一個編譯錯誤，只是它現在紅在來源設定那一行，而不是這裡。
  */
-const SCHEDULED_DATASETS = { 1: true, 3: true, 4: true, 6: true } as const satisfies Record<SyncableDatasetCode, true>
-
-/**
- * {@link SCHEDULED_DATASETS} 的代碼清單。
- *
- * 用 `isSyncableDatasetCode`（`sync/domain` 匯出的執行期收斂）過濾而不是 `as` 斷言：
- * `Object.keys` 回的是 `string[]`，型別斷言會讓「key 寫錯一個數字」變成執行期才發現的事，
- * 而那個判定函式存在的理由正是這一條路（見該檔對它的說明）。
- */
-export const SCHEDULED_DATASET_CODES: readonly SyncableDatasetCode[] = Object.keys(SCHEDULED_DATASETS)
-  .map(Number)
-  .filter(isSyncableDatasetCode)
 
 /**
  * 對一個資料集跑一次同步。
@@ -153,7 +138,10 @@ export type RegulatorySyncSchedulerDependencies = {
   readonly enabled: boolean
   /** 「今天是幾號、現在是第幾分鐘」的唯一來源（§6.2）。台北牆鐘。 */
   readonly clock: Clock
-  /** 這一輪要掃哪些資料集。production 傳 {@link SCHEDULED_DATASET_CODES}。 */
+  /**
+   * 這一輪要掃哪些資料集。production 傳 `modules/regulatory` 匯出的 `SYNCABLE_DATASET_CODES`
+   * （＝有解析器的全部資料集），接線在 `index.ts`。本檔不自己維護第二份，理由見上面那段註解。
+   */
   readonly datasetCodes: readonly SyncableDatasetCode[]
   readonly runDatasetSync: RunDatasetSync
   readonly startTimer: StartSchedulerTimer
@@ -196,11 +184,11 @@ const logFailedDataset = (datasetCode: SyncableDatasetCode, errors: readonly Dom
 
   const onlyAlreadyRunning = errors.every((error) => error.code === RegulatorySyncErrorCode.AlreadyRunning)
   if (onlyAlreadyRunning) {
-    logger.warn(LogCategory.UnhandledException, '法規同步略過：同一個資料集已有活著的同步在跑', fields)
+    logger.warn(LogCategory.ScheduledJob, '法規同步略過：同一個資料集已有活著的同步在跑', fields)
     return
   }
 
-  logger.error(LogCategory.UnhandledException, '法規同步失敗', fields)
+  logger.error(LogCategory.ScheduledJob, '法規同步失敗', fields)
 }
 
 /**
@@ -231,7 +219,7 @@ export const startRegulatorySyncScheduler = (dependencies: RegulatorySyncSchedul
       // 關機時**在資料集之間停下**，不是在某個資料集的中途停下：後者會留下一筆停在「執行中」的紀錄，
       // 而那是心跳要花三分鐘才收拾得了的事（計畫 §3.4）。
       if (stopping) {
-        logger.info(LogCategory.Startup, '排程器關機中，略過本輪剩餘的資料集', { skippedFrom: datasetCode })
+        logger.info(LogCategory.ScheduledJob, '排程器關機中，略過本輪剩餘的資料集', { skippedFrom: datasetCode })
         return
       }
 
@@ -261,7 +249,7 @@ export const startRegulatorySyncScheduler = (dependencies: RegulatorySyncSchedul
       // 上一輪還沒跑完（政府端點慢、或資料集變多）。**跳過，不排隊、不平行跑**：
       // 平行跑的話兩輪會對同一個資料集同時呼叫 `runSync`，於是第二輪整批拿到 `already-running`
       // ——log 上看起來像「有另一台機器在跑」，實際上是自己絆自己，而且查不出來。
-      logger.warn(LogCategory.UnhandledException, '上一輪法規同步尚未結束，略過這次排程')
+      logger.warn(LogCategory.ScheduledJob, '上一輪法規同步尚未結束，略過這次排程')
       return
     }
 
@@ -272,7 +260,7 @@ export const startRegulatorySyncScheduler = (dependencies: RegulatorySyncSchedul
     //（`inFlight` 擋得住同時跑，擋不住它跑完之後緊接著再跑一輪）。
     lastRunDate = today
 
-    logger.info(LogCategory.Startup, '法規同步排程開始', { datasetCount: datasetCodes.length, date: today })
+    logger.info(LogCategory.ScheduledJob, '法規同步排程開始', { datasetCount: datasetCodes.length, date: today })
     const round = runRound()
     inFlight = round
     try {
@@ -280,7 +268,7 @@ export const startRegulatorySyncScheduler = (dependencies: RegulatorySyncSchedul
     } finally {
       inFlight = null
     }
-    logger.info(LogCategory.Startup, '法規同步排程結束', { date: today })
+    logger.info(LogCategory.ScheduledJob, '法規同步排程結束', { date: today })
   }
 
   const stopTimer = startTimer(SCHEDULER_TICK_INTERVAL_MS, tick)

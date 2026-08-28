@@ -17,6 +17,7 @@
     "mysql2": "^3.14.0"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.31.0"
+    "drizzle-kit": "^0.31.0",
+    "@elysiajs/openapi": "^1.4.0"
   }
 }

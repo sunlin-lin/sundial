@@ -152,6 +152,146 @@ const LABOR_INSURANCE_SALARY_GRADE_SHAPE = Type.Object({
 })
 
 /**
+ * `dataset_code = 2` 全民健康保險投保金額分級表的 `data`（data.gov.tw `20251` 的 **CSV** 資源）。
+ *
+ * 政府那一份的表頭與資料列長這樣（2026-08 實測，115年1月那一份 58 列）：
+ *
+ * ```csv
+ * 組別級距,投保等級,月投保金額（元）,實際薪資月額（元）
+ * 第一組級距1200元,1,29500,29500以下
+ * 第二組級距1500元,2,30300,29501-30300
+ * ```
+ *
+ * | 政府欄位 | 去哪裡 |
+ * |---|---|
+ * | `組別級距` | {@link groupRangeText} |
+ * | `投保等級` | {@link grade} ＋ `records.code` ＋ `records.sort_order` |
+ * | `月投保金額（元）` | {@link monthlyInsuredAmount} ＋ `records.amount` |
+ * | `實際薪資月額（元）` | {@link actualSalaryRangeText} ＋ `range_from`／`range_to` |
+ *
+ * ## 這個資料集是 **CSV**，而且**一個資源就是一個年度版本**
+ *
+ * 前四個資料集都是「一個當期資源 → 一個版本」，這一個不同：`20251` 的 `distribution[]` 有
+ * **16 筆 CSV**，每一筆是一個歷史版本，生效日寫在各自的資源說明裡（`115年1月全民健康保險投保金額分級表`）。
+ * 因此它走的是同步流程的多版本那一條（見 `sync/impl/regulatory-sync.run.service.ts`）。
+ *
+ * ⚠️ **其中九筆的說明只有年份、沒有月份**（`100年全民健康保險投保金額分級表`…`109年…`），
+ * 那九個版本依計畫 §7.2 一律失敗、不得猜（同一年可能有兩次調整），因此本資料集實際回補得到的
+ * 最早版本是**民國 110 年 1 月**。理由與失敗訊息見 `sync/domain/regulatory-roc-date.ts` 的
+ * `parseRocYearMonthFromText`。
+ *
+ * ## 沒有任何一欄是封閉代碼，因此沒有字面值聯集
+ *
+ * `組別級距`（`第一組級距1200元`）看起來很像一個代碼，**但它每次調整都會變**：實測 16 個版本裡，
+ * 同一個組序的級距金額改過（`第十組級距5400元` → `第十組級距6400元` 在同一份檔案裡同時出現），
+ * 組數也從 9 變到 12。把它收成字面值聯集會讓每一次例行調整都變成編譯錯誤，
+ * 而那正是 `dataset_code=3` 的說明裡講的「過期的檢查會被放寬掉」。
+ * 完整性由解析器的**級距連續性**守（見 `sync/domain/regulatory-health-insurance-salary-grade.ts`），
+ * 不是由型別守。
+ *
+ * ## 級距上下限允許 `null`，理由與 `dataset_code=1`、`3` 逐字相同
+ *
+ * 最低一級是「29500以下」、最高一級是「303001以上」，各缺一邊。`null` 的意思是「這一邊沒有界線」，
+ * 刻意不填 `0` 或某個很大的數——填了之後，一支寫錯的級距查詢會回一個看起來正常的級距。
+ */
+const HEALTH_INSURANCE_SALARY_GRADE_SHAPE = Type.Object({
+  /**
+   * 政府原文的組別級距（`第一組級距1200元`）。**是原文不是代碼**，理由見上。
+   *
+   * 保留它的理由與 `dataset_code=3` 的 `備註` 同一條：它是政府特地寫在表上的內容
+   *（同一組之內每升一級加多少錢），丟掉的那一刻不會有任何症狀。
+   */
+  groupRangeText: Type.String({ minLength: 1 }),
+  /**
+   * 投保等級（級數）。**是字串不是數字**：它是代碼不是量，不參與任何運算。
+   *
+   * 這張表只有一套級距（不像 `dataset_code=1` 的級數在四種身分別內各自從 1 起算），
+   * 因此級數在版本內唯一——但它**不是** `record_key`，理由見解析器（基本工資一調，低薪的幾級被刪掉，
+   * 後面每一級的級數整批往前位移）。
+   */
+  grade: Type.String({ pattern: '^\\d+$' }),
+  /** 這一級的月投保金額：健保保費的計算基數，也是 `record_key` 的來源。decimal 字串（§4.7）。 */
+  monthlyInsuredAmount: DecimalString,
+  /** 政府原文的實際薪資月額區間（`29501-30300`）。**分隔符號是半形連字號**，不是「至」。 */
+  actualSalaryRangeText: Type.String({ minLength: 1 }),
+  /** 實際薪資月額下限（含）。最低一級是「N以下」，沒有下限，因此為 `null`。 */
+  actualSalaryFrom: Type.Union([DecimalString, Type.Null()]),
+  /** 實際薪資月額上限（含）。最高一級是「N以上」，沒有上限，因此為 `null`。 */
+  actualSalaryTo: Type.Union([DecimalString, Type.Null()]),
+})
+
+/**
+ * `dataset_code = 5` 健保費負擔金額表（有一定雇主之受僱者）的 `data`
+ * （data.gov.tw `20246` 的 **CSV** 資源）。
+ *
+ * 政府那一份的表頭與資料列長這樣（2026-08 實測，115年1月那一份 58 列）：
+ *
+ * ```csv
+ * 投保金額等級,月投保金額,本人負擔金額（負擔比率30%）,本人+1眷口負擔金額,本人+2眷口負擔金額,本人+3眷口負擔金額,投保單位負擔金額（負擔比率60%）,政府補助金額（補助比率10%）
+ * 1,29500,458,916,1374,1832,1428,238
+ * ```
+ *
+ * ## 這是「金額表」不是「費率表」，與 `dataset_code=4` 同一個理由（計畫 §3.1）
+ *
+ * 政府把每一級、每一種眷口數要繳多少錢都算好了，Payroll **查表**即可。
+ * 自己乘費率再取捨會在邊界上與政府的公告值差一塊錢，而那一塊錢在薪資單上是對不起來的實發金額。
+ *
+ * ## 八欄與政府的八個欄位**一對一**，這一點被 `satisfies` 釘住
+ *
+ * 見解析器裡的 `FIELD`：它是 `Record<keyof 本形狀, 政府欄位名>` 的**總對總**對照，
+ * 而 CSV 的表頭清單由它推導。於是「形狀多一欄卻沒有對應的來源欄位」與「政府多一欄卻沒有進形狀」
+ * 兩個方向都當場編譯不過，不需要在兩個地方各維護一份欄位清單。
+ *
+ * ## 負擔比率寫在**表頭**裡，因此表頭比對同時是「比率有沒有變」的檢查
+ *
+ * `（負擔比率30%）`、`（負擔比率60%）`、`（補助比率10%）` 是政府欄位名的一部分。
+ * 比率改了 → 表頭對不上 → 同步失敗。這是要的：分擔比率調整是法規變更，
+ * 而它在資料列上完全看不出來——每一格都還是一個合法的金額。
+ *
+ * **因此本形狀刻意不另外存一份比率欄位**：存了就會有兩份真相（表頭一份、`data` 一份），
+ * 而它們不一致時沒有任何地方會報錯。要知道當期比率，看的是版本的 `raw_data` 表頭。
+ *
+ * ## 一到三眷口的金額是「本人 × 2／3／4」，這件事由解析器驗算
+ *
+ * 實測 19 個版本、全部列都成立。這個檢查**不需要引進任何法規知識**——四個數字都在同一列裡，
+ * 對不起來就是欄位換了位置或我們讀錯了欄，而換位置之後每一個值單獨看都完全合法。
+ */
+const HEALTH_INSURANCE_PREMIUM_SHARE_SHAPE = Type.Object({
+  /**
+   * 投保金額等級（級數）。**是字串不是數字**：它是代碼不是量。
+   *
+   * ⚠️ **不是 `record_key`，而且政府那一份真的打錯過**：107年1月那一份的第 28 列寫成 `8`
+   *（2026-08 實測）。識別這一列的是月投保金額，不是這一欄，理由見解析器。
+   */
+  grade: Type.String({ pattern: '^\\d+$' }),
+  /**
+   * 月投保金額：這一級的計算基數，也是 `record_key` 的來源。
+   *
+   * 與 `dataset_code=2` 的 {@link HEALTH_INSURANCE_SALARY_GRADE_SHAPE} 的 `monthlyInsuredAmount`
+   * 是**同一個概念的同一個值**——兩張表是同一組級距的兩面（一面是「薪資落在第幾級」，
+   * 一面是「這一級要繳多少」），因此兩邊的 `record_key` 刻意用同一種寫法。
+   */
+  monthlyInsuredAmount: DecimalString,
+  /** 本人（被保險人）負擔金額，無眷口。政府已經算好並取捨過，不要再自己乘比率。 */
+  insuredShareAmount: DecimalString,
+  /** 本人 ＋ 1 眷口負擔金額（實測恆為本人金額的 2 倍）。 */
+  insuredWithOneDependentAmount: DecimalString,
+  /** 本人 ＋ 2 眷口負擔金額（實測恆為本人金額的 3 倍）。 */
+  insuredWithTwoDependentsAmount: DecimalString,
+  /**
+   * 本人 ＋ 3 眷口負擔金額（實測恆為本人金額的 4 倍）。
+   *
+   * **健保的眷口負擔以 3 口為上限**（第 4 口起不再計收），因此這一欄同時是「3 口以上」的金額；
+   * 政府那一份就只給到這裡，我們不替它補第 4 欄。
+   */
+  insuredWithThreeDependentsAmount: DecimalString,
+  /** 投保單位負擔金額。 */
+  employerShareAmount: DecimalString,
+  /** 政府補助金額。 */
+  governmentSubsidyAmount: DecimalString,
+})
+
+/**
  * `dataset_code = 3` 勞工退休金月提繳工資分級表的 `data`（data.gov.tw `6274` 的 JSON 資源）。
  *
  * 政府那一份每一列長這樣（2026-08 實測，62 列）：
@@ -363,13 +503,13 @@ const SHAPE_NOT_YET_DEFINED = Type.Never({
  * 刻意不寫 `as const`：`as const` 會把 TypeBox 的內部結構一起變成唯讀，`Static<>` 就算不出型別了。
  */
 export const REGULATORY_RECORD_SHAPES = {
-  // `1`、`3`、`4`、`6` 已經有解析器（`sync` 次目錄）。其餘四項維持 `Type.Never()`
+  // `1`–`6` 已經有解析器（`sync` 次目錄）。其餘兩項（`8`、`9`）維持 `Type.Never()`
   // ——它們的形狀要跟著各自的解析器一起定，先寫一個「看起來合理」的寬鬆形狀會**通過**驗證。
   1: LABOR_INSURANCE_SALARY_GRADE_SHAPE,
-  2: SHAPE_NOT_YET_DEFINED,
+  2: HEALTH_INSURANCE_SALARY_GRADE_SHAPE,
   3: LABOR_PENSION_CONTRIBUTION_WAGE_SHAPE,
   4: LABOR_EMPLOYMENT_INSURANCE_PREMIUM_SHARE_SHAPE,
-  5: SHAPE_NOT_YET_DEFINED,
+  5: HEALTH_INSURANCE_PREMIUM_SHARE_SHAPE,
   6: OCCUPATIONAL_ACCIDENT_INSURANCE_RATE_SHAPE,
   // `7` 是永久空號（見 `regulatory-dataset-code.ts`），因此這裡也沒有它——
   // 補一個進來就等於讓那個空號變成「一個沒有形狀的資料集」。

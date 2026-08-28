@@ -301,6 +301,10 @@ export const useRecordStore = defineStore('record', () => ({ list: ref<Record[]>
 
 **產生的 API client 必須注入統一 client ✅**　OpenAPI 產生器的 fetcher／httpClient **必須注入本專案的統一 client**：產生的函式只負責型別、路徑與序列化，**實際傳輸一律交給統一 client**。**禁止使用產生器的預設 fetcher。**
 
+**檢查的對象是「產生出來的 client」，不是「產生器的設定檔」。** 原文寫的是後者，那是假設用第三方產生器（`openapi-fetch` 之類）、而它有一個設定檔可以掃。本專案沒有：型別由 `openapi-typescript` 產（純轉譯、無執行期行為），client 由 `gen:api` 自己的樣板產，統一 client 的注入點是那支腳本裡寫死的一行——沒有設定檔可掃。
+
+改成掃**產物**反而更強：設定檔對不對是間接證據，產物裡有沒有 `fetch(` 是直接證據。判準三條：產生的 client 必須 import 統一 client；不得出現 `fetch(`／`axios`／`XMLHttpRequest`／`sendBeacon`；**端點函式的數量必須等於統一 client 呼叫的次數**（兩個數字用兩種方式數，避免一起寫錯一起變綠）。 ✅（自製掃描腳本，含自我檢查）
+
 **理由**　本節規定所有 HTTP 呼叫必須經過統一 client——token 附加、401 refresh 的 single-flight 收斂、envelope 拆解、依 `code` 分支（3.6）、`deadline` 覆寫（3.7）全部做在那裡。用預設 fetcher 的請求會**繞過這一整套**，而且**在本機開發時完全看不出來**：access token 在有效期內不會過期，所以 refresh 那條路徑要等兩、三個小時後才會被走到——那時候通常已經上線了，症狀是「某幾個畫面隔一段時間就會莫名其妙被登出或整片空白」，而那幾個畫面的程式碼看起來跟其他畫面沒有兩樣。§3.2 禁止手寫 DTO、§0.10 禁止手寫包裝層之後，產生器設定是唯一還能決定「請求實際怎麼送出去」的地方，它必須被寫死。
 
 **token 的存放（後端規範 §5.4.3 是唯一定義處）**　本系統採 access token + refresh token 雙票：
@@ -315,7 +319,7 @@ export const useRecordStore = defineStore('record', () => ({ list: ref<Record[]>
 
 **理由**　後端的 refresh token 是一次性輪替＋偷用偵測（後端規範 §5.4.2），規則本身是對的，但**這是少數「規則正確卻極容易實作錯」的地方**：一個頁面初始化時同時打三支查詢很常見，三支同時撞到 access token 過期也很常見，各自去 refresh 的話第二、第三支拿的是**已經被第一支換掉的舊票**，後端依規定判定為外洩 → 全鏈作廢 → 使用者在一次完全正常的開頁動作中被踢回登入頁。而且**錯誤現場當場消失**：使用者重登之後一切正常，log 上只看得到一次「偷用偵測」，沒有人重現得出來。
 
-**檢查**　ESLint `no-restricted-imports` 禁止 `axios`，僅 client 檔案本身例外；**產生器設定檔掃描：`gen:api` 的設定必須指定自訂 client／fetcher，未指定或指向預設 fetcher 即失敗**（掃描器須自我檢查確實讀到該設定檔，見 general 規範 §7.2）；掃描測試禁止全站出現 `localStorage` / `sessionStorage` 存取 token 的程式碼（key 含 `token` / `auth` 者一律失敗），並禁止 client 以外的檔案出現 `sessions.refresh` / `/sessions/refresh`。**single-flight 用單元測試證明**：對統一 client 寫測試，mock 底層請求，同時發出三支都會遇到 access token 過期的請求，斷言 (a) 底層實際只被打出**一次** `/sessions/refresh`，(b) 三支請求最終都拿到成功結果。這是全文少數不靠靜態掃描、而是靠行為斷言的檢查——因為「有沒有收斂」看程式碼形狀看不出來，只看得出跑起來發了幾次。
+**檢查**　ESLint `no-restricted-imports` 禁止 `axios`，僅 client 檔案本身例外；**掃描產生出來的 client**（見下）；掃描測試禁止全站出現 `localStorage` / `sessionStorage` 存取 token 的程式碼（key 含 `token` / `auth` 者一律失敗），並禁止 client 以外的檔案出現 `sessions.refresh` / `/sessions/refresh`。**single-flight 用單元測試證明**：對統一 client 寫測試，mock 底層請求，同時發出三支都會遇到 access token 過期的請求，斷言 (a) 底層實際只被打出**一次** `/sessions/refresh`，(b) 三支請求最終都拿到成功結果。這是全文少數不靠靜態掃描、而是靠行為斷言的檢查——因為「有沒有收斂」看程式碼形狀看不出來，只看得出跑起來發了幾次。
 
 ```ts
 // ✅ 共用同一個 in-flight promise，完成後才清掉
@@ -791,7 +795,7 @@ rows.value = (await api.recordList(query)).data
 | 1.5 頁面私有的邏輯與元件放頁面目錄下；共用區的模組必須有兩個以上使用者（**去重鍵為頁面根目錄**，見 0.9） | dependency-cruiser + 掃描測試（含掃描器自我檢查） |
 | 2.2 store 命名與 `reset()` | ESLint + 掃描測試 |
 | 3.1 禁止直接 import axios | `no-restricted-imports` |
-| 3.1 OpenAPI 產生器必須注入統一 client，禁止使用預設 fetcher | 產生器設定檔掃描 + 掃描測試 |
+| 3.1 OpenAPI 產生器必須注入統一 client，禁止使用預設 fetcher | 掃描**產生出來的 client** + 掃描測試 |
 | 3.1 access token 只存記憶體（禁止 `localStorage`／`sessionStorage`），refresh 只在統一 client 內做 | 掃描測試 |
 | 3.1 並行的 refresh 必須收斂成單一 promise（single-flight） | 單元測試（三支併發過期請求，斷言只打出一次 `/sessions/refresh` 且三支皆成功） |
 | 3.2 API 型別一律由 OpenAPI 產生、禁止手寫 DTO | `vue-tsc` + 掃描測試 |

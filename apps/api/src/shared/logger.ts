@@ -17,6 +17,20 @@ export const LogCategory = {
   PermissionDenied: 'permission_denied',
   Startup: 'startup',
   /**
+   * 排程／背景工作的執行事件（法規同步排程的每一輪、每一個資料集的結果）。
+   *
+   * **必須與 `unhandled_exception` 分開，不能借用。** 「某個資料集同步失敗」不是未處理的例外
+   * ——它是一件**預期得到、而且已經被處理**的事（`runSync` 已經把 `status_code=3` 與
+   * `error_message` 寫進 `regulatory_sync_logs`），只是需要有人去看。而分類是給告警分流用的：
+   * 混進 `unhandled_exception` 之後，「程式有 bug」與「政府那一份今天壞了」會走同一條告警路徑，
+   * 於是每天幾筆背景工作的雜訊會把真正的例外埋掉。
+   *
+   * **邊界**：程序生命週期（排程器啟動、停用、停止）仍然是 {@link Startup}；
+   * 一輪的開始與結束、單一資料集的結果、略過與跳過屬於這一類；
+   * 真的從工作裡冒出來的未預期例外（帶堆疊）仍然是 `unhandled_exception`。
+   */
+  ScheduledJob: 'scheduled_job',
+  /**
    * 系統自己偵測到的安全事件（§5.4.2 的 refresh token 偷用偵測，日後的帳號鎖定亦同）。
    *
    * **必須與 `unhandled_exception` 分開，不能借用。** 兩者的告警處置完全不同：例外要找 bug，

@@ -18,9 +18,21 @@
   用預設 fetcher 的請求會繞過 token 附加、single-flight refresh、envelope 拆解與 `code` 分支，
   而且在本機開發時完全看不出來——refresh 那條路徑要等兩、三個小時後才走得到。
 
-## 目前狀態
+## 產出什麼
 
-**`gen:api` 尚不存在**：後端的路由還沒掛上組裝點，因此還產不出 `openapi.json`。
+`bun run gen:api` 會在這個目錄寫下三個檔案：
 
-在那之前，登入／登出／換票的請求與回應形狀**就地寫在 `src/shared/api/sessions.ts`
-與 `src/shared/api/client.ts` 內**，並在該處標記為暫時。要換掉的清單列在 `sessions.ts` 檔頭。
+| 檔案 | 內容 |
+|---|---|
+| `api-types.ts` | 由 `openapi.json` 轉譯出來的 TypeScript 型別（`openapi-typescript`，純轉譯，沒有執行期行為）。 |
+| `api-guard.ts` | 執行期形狀檢查。回應是外部邊界，型別保證不了對面實際回什麼（通用規範 §2.2）。 |
+| `api-client.ts` | 每支端點一個函式，**簽章只有一個參數**（那包業務欄位）；傳輸交給 `shared/api/client.ts`。 |
+
+同時會在 repo 根目錄寫下 `openapi.json`（同樣不進版控）。
+
+## 產生物不存在時
+
+`bun run typecheck:web` 會先跑 `bun run check:api-artifacts`，印出一句
+「請先執行：`bun run gen:api`」然後停下來——而不是一整片「找不到模組」的紅字。
+
+該指令**不需要啟動後端、也不需要資料庫**（後端規範 §1.7）。

@@ -10,8 +10,8 @@ import { createDatabase } from './db/client.ts'
 import { assertFieldEncryptionKeys, createFieldCipher, createKeyRing } from './db/field-encryption.ts'
 import { RegulatorySyncTriggerType } from './db/schema/index.ts'
 import { assertDatabaseTimeZone } from './db/time-zone-guard.ts'
-import { runSync, type RegulatorySyncContext } from './modules/regulatory/index.ts'
-import { SCHEDULED_DATASET_CODES, startRegulatorySyncScheduler } from './scheduler/regulatory-sync-scheduler.ts'
+import { runSync, SYNCABLE_DATASET_CODES, type RegulatorySyncContext } from './modules/regulatory/index.ts'
+import { startRegulatorySyncScheduler } from './scheduler/regulatory-sync-scheduler.ts'
 import { systemClock } from './shared/clock.ts'
 import { loadConfig } from './shared/config.ts'
 import { LogCategory, logger } from './shared/logger.ts'
@@ -101,7 +101,9 @@ const regulatorySyncContext: RegulatorySyncContext = {
 startRegulatorySyncScheduler({
   enabled: config.regulatorySyncScheduler.enabled,
   clock: systemClock,
-  datasetCodes: SCHEDULED_DATASET_CODES,
+  // 「有解析器的資料集」那份清單的唯一來源在 `modules/regulatory`，排程器不自己維護第二份
+  //（原本它有一份 `SCHEDULED_DATASETS`，理由與搬家後的保護見那兩個檔案的註解）。
+  datasetCodes: SYNCABLE_DATASET_CODES,
   // 排程觸發的同步一律 `triggerTypeCode = Scheduled`：排程失敗要進告警，人工觸發失敗是操作者
   // 當場就看得到的事（見 `db/schema/regulatory-sync-logs.ts`）。分不出來的話，
   // 「昨晚的排程有沒有跑」與「誰在伺服器上手動跑了一次」在歷程上是同一件事。

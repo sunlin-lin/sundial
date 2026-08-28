@@ -3,44 +3,92 @@
  *
  * ## 「這個資料集能不能自動同步」是型別問題，不是執行期問題
  *
- * {@link REGULATORY_SYNC_SOURCES} 是 `Partial<Record<RegulatoryDatasetCode, …>>`，
- * 而 {@link SyncableDatasetCode} 由它的 key 推導。於是 `runSync(context, { datasetCode: 2 })`
- * **編譯不過**——不需要一個「這個資料集還沒有解析器」的業務錯誤碼，也不需要在執行期回一句話。
+ * {@link SYNCABLE_DATASET_CODES} 是這件事的唯一來源，{@link SyncableDatasetCode} 由它推導。
+ * 於是 `runSync(context, { datasetCode: 8 })` **編譯不過**——不需要一個「這個資料集還沒有解析器」
+ * 的業務錯誤碼，也不需要在執行期回一句話。
  *
  * 這與 `datasets/domain/regulatory-dataset-code.ts` 那個 `maintenance` 欄位是**同一件事的兩面**：
  * 那裡記的是「這個資料集打算怎麼維護」（給人看的意圖），這裡是「現在真的有沒有那支程式」
  * （編譯期的事實）。兩者刻意不合併：意圖先於實作存在，`1`–`9` 全部標著 `sync`，
- * 但目前只有其中四項真的做出來了。
+ * 但目前只有其中六項真的做出來了。
  *
- * ## 目前有 `1`、`3`、`4`、`6`
+ * ## 清單與來源設定**互相釘死**，兩個方向都是編譯錯誤
  *
- * 四項的共同點是「單一當期資源、一次同步產生一個版本」（計畫 §7.1）。
- * 生效日的來源分兩種，這個差別決定了解析器要不要用 `RegulatoryParseContext`：
+ * 清單（{@link SYNCABLE_DATASET_CODES}）在前、來源設定（{@link REGULATORY_SYNC_SOURCES}）
+ * `satisfies Record<SyncableDatasetCode, …>` 在後：
  *
- * | 代碼 | 資料集 | 生效日在哪 |
- * |---|---|---|
- * | `1` | 勞工保險投保薪資分級表 | 資料欄位 `適用起日` |
- * | `3` | 勞工退休金月提繳工資分級表 | 資料欄位 `生效日` |
- * | `4` | 勞就保保險費分擔金額表 | **資源說明**（資源內容沒有日期欄位） |
- * | `6` | 職業災害保險行業別費率 | **資源說明**（同上） |
+ * - 加了解析器卻沒列進清單 → 來源設定多出一個 key → **excess property，編譯不過**；
+ * - 列進清單卻沒有解析器 → 來源設定少一個 key → **missing property，編譯不過**。
  *
- * 其餘四項（`2`、`5`、`8`、`9`）的解析器與形狀要一起定（計畫 §6：形狀是跟著解析器被確定的），
+ * 這是把「排程要掃哪些資料集」那份清單收掉之後仍然保有的那道保護
+ * （原本在 `scheduler/regulatory-sync-scheduler.ts` 裡有第二份 `satisfies Record<…, true>`）。
+ * 排程器現在直接用這裡的清單，於是那份會漂移的副本消失了，而「漏列會編譯不過」還在。
+ *
+ * ## 目前有 `1`–`6`，分成兩種形態
+ *
+ * | 代碼 | 資料集 | 形態 | 生效日在哪 |
+ * |---|---|---|---|
+ * | `1` | 勞工保險投保薪資分級表 | 單資源 JSON | 資料欄位 `適用起日` |
+ * | `2` | 全民健康保險投保金額分級表 | **多資源 CSV（16 個年度版本）** | **各自的資源說明**（`115年1月…`） |
+ * | `3` | 勞工退休金月提繳工資分級表 | 單資源 JSON | 資料欄位 `生效日` |
+ * | `4` | 勞就保保險費分擔金額表 | 單資源 JSON | 資源說明（內容沒有日期欄位） |
+ * | `5` | 健保費負擔金額表（有一定雇主之受僱者） | **多資源 CSV（19 個年度版本）** | **各自的資源說明** |
+ * | `6` | 職業災害保險行業別費率 | 單資源 JSON | 資源說明（同上） |
+ *
+ * 兩種形態的差別與它為什麼不能合成一條路，見 `regulatory-sync-model.ts` 的 `RegulatorySyncSource`。
+ *
+ * 其餘兩項（`8`、`9`）的解析器與形狀要一起定（計畫 §6：形狀是跟著解析器被確定的），
  * 而 `datasets/domain/regulatory-record-shape.ts` 裡它們仍是 `Type.Never()`
  * ——就算有人在這裡偷偷加一項，寫入前的形狀驗證也會擋下來。兩道門是刻意的。
  */
 import { RegulatoryRawFormat } from '../../../../db/schema/index.ts'
 import type { RegulatoryDatasetCode } from '../../datasets/regulatory-datasets.service.ts'
+import { parseHealthInsurancePremiumShares } from './regulatory-health-insurance-premium-share.ts'
+import { parseHealthInsuranceSalaryGrades } from './regulatory-health-insurance-salary-grade.ts'
 import { parseLaborEmploymentInsurancePremiumShares } from './regulatory-labor-employment-insurance-premium.ts'
 import { parseLaborInsuranceSalaryGrades } from './regulatory-labor-insurance-salary.ts'
 import { parseLaborPensionContributionWageGrades } from './regulatory-labor-pension-contribution-wage.ts'
 import { parseOccupationalAccidentInsuranceRates } from './regulatory-occupational-accident-insurance-rate.ts'
-import type { RegulatorySyncSource } from './regulatory-sync-model.ts'
+import { parseRocYearMonthFromText } from './regulatory-roc-date.ts'
+import type { RegulatoryEffectiveFromResult, RegulatorySyncSource } from './regulatory-sync-model.ts'
+
+/**
+ * 目前真的同步得了的資料集代碼，**這是那份清單唯一的一份**。
+ *
+ * `satisfies readonly RegulatoryDatasetCode[]` 擋掉不存在的代碼（例如永久空號 `7`）：
+ * 寫錯是編譯錯誤，不是同步時查不到資料集。與 {@link REGULATORY_SYNC_SOURCES} 的互釘見檔頭。
+ *
+ * 順序即排程掃描的順序（`scheduler/` 直接用這個陣列）：由小到大，沒有別的意義
+ * ——資料集之間沒有相依，誰先誰後不影響結果，而數字順序是唯一不需要解釋的順序。
+ */
+export const SYNCABLE_DATASET_CODES = [1, 2, 3, 4, 5, 6] as const satisfies readonly RegulatoryDatasetCode[]
+
+/** 目前真的同步得了的資料集代碼。`runSync` 只收這個聯集。 */
+export type SyncableDatasetCode = (typeof SYNCABLE_DATASET_CODES)[number]
+
+/**
+ * `dataset_code=2`、`5` 的生效日推導：從**資源說明**讀「N年M月」（計畫 §7.2 的落點）。
+ *
+ * 兩個資料集共用同一支，因為它們的資源說明出自同一個機關、同一種措辭
+ * （`115年1月全民健康保險投保金額分級表`／`115年1月有一定雇主受僱者健保費負擔金額表`）。
+ * 各寫一份的話，其中一份哪天為了讓某個新寫法通過而放寬，另一份不會跟著鬆。
+ *
+ * **政府沒給說明時 `null`**，而 `null` 走的是「找不到年月」那條失敗分支——不是拋錯，
+ * 也不是回一個預設日期。訊息會講明是哪一種（沒寫、只有年份、還是讀不懂），見 `regulatory-roc-date.ts`。
+ */
+const deriveNhiEffectiveFrom = (resourceDescription: string | null): RegulatoryEffectiveFromResult =>
+  resourceDescription === null
+    ? {
+        ok: false,
+        reason: 'metadata 沒有給資源說明，而本資料集的生效日只寫在資源說明裡（資源內容沒有任何日期欄位）',
+      }
+    : parseRocYearMonthFromText(resourceDescription, '資源說明')
 
 /**
  * 有解析器的資料集 → 它的來源設定。
  *
- * `satisfies` 把 key 釘在 {@link RegulatoryDatasetCode} 上：寫一個不存在的代碼（例如永久空號 `7`）
- * 當場編譯不過，而不是同步時查不到資料集。
+ * `satisfies Record<SyncableDatasetCode, …>` 是**總的**：與 {@link SYNCABLE_DATASET_CODES}
+ * 互相釘死，兩個方向都是編譯錯誤（見檔頭）。
  */
 export const REGULATORY_SYNC_SOURCES = {
   /**
@@ -53,10 +101,35 @@ export const REGULATORY_SYNC_SOURCES = {
    * CSV 則要另外處理標頭列、編碼與引號跳脫——同樣一份資料，少一整類會靜靜出錯的地方。
    */
   1: {
+    kind: 'single-version',
     datasetId: 6258,
     resourceFormat: 'JSON',
     rawFormatCode: RegulatoryRawFormat.Json,
     parse: parseLaborInsuranceSalaryGrades,
+  },
+
+  /**
+   * 全民健康保險投保金額分級表。
+   *
+   * **這是第一個「一次同步 → N 個版本」的資料集**：`20251` 的 `distribution[]` 有 **16 筆 CSV**，
+   * 每一筆是一個年度版本，生效日各自寫在自己的資源說明裡（`115年1月全民健康保險投保金額分級表`）。
+   * 一次同步會把所有還沒有的版本補進來，於是歷史一次回補。
+   *
+   * 取 CSV 不是選擇：健保署把資源託管在自己那裡（`info.nhi.gov.tw/api/iode0000s01/Dataset?rId=…`），
+   * 實測 16 個資源**全部只有 CSV** 一種格式，沒有 JSON 可選（與勞動部那四個相反）。
+   *
+   * ⚠️ **其中 9 筆的說明只有年份、沒有月份**（`100年…`～`109年…`），那 9 個版本依計畫 §7.2
+   * 一律失敗、不得猜，因此這個資料集實際回補得到的最早版本是**民國 110 年 1 月**，
+   * 而穩定狀態下這個資料集的同步結果是 `status=3`（有 9 個版本進不來）。
+   * 完整的理由與「要讓它變綠有哪兩條路」寫在 `regulatory-multi-version-plan.ts` 的檔頭。
+   */
+  2: {
+    kind: 'multi-version',
+    datasetId: 20251,
+    resourceFormat: 'CSV',
+    rawFormatCode: RegulatoryRawFormat.Csv,
+    deriveEffectiveFrom: deriveNhiEffectiveFrom,
+    parse: parseHealthInsuranceSalaryGrades,
   },
 
   /**
@@ -68,6 +141,7 @@ export const REGULATORY_SYNC_SOURCES = {
    * `effective_from`。要回補歷史是另一件事（一次把十幾個版本建起來），不是這條路。
    */
   3: {
+    kind: 'single-version',
     datasetId: 6274,
     resourceFormat: 'JSON',
     rawFormatCode: RegulatoryRawFormat.Json,
@@ -83,10 +157,29 @@ export const REGULATORY_SYNC_SOURCES = {
    * 這個資料集另有 XML 格式，仍然取 JSON：理由與 `1` 相同（欄位名在內容裡，不必處理標頭與跳脫）。
    */
   4: {
+    kind: 'single-version',
     datasetId: 6259,
     resourceFormat: 'JSON',
     rawFormatCode: RegulatoryRawFormat.Json,
     parse: parseLaborEmploymentInsurancePremiumShares,
+  },
+
+  /**
+   * 健保費負擔金額表（有一定雇主之受僱者）。
+   *
+   * 形態與 `2` 相同（多資源 CSV），但**19 筆的說明全部都有年月**（實測），
+   * 因此一次同步就能把民國 100 年 1 月以來的每一版補齊——計畫 §7.0 特別點名的那個好處，
+   * 在這個資料集上是完整成立的。
+   *
+   * 與 `2` 共用同一支 {@link deriveNhiEffectiveFrom}：同一個機關、同一種措辭。
+   */
+  5: {
+    kind: 'multi-version',
+    datasetId: 20246,
+    resourceFormat: 'CSV',
+    rawFormatCode: RegulatoryRawFormat.Csv,
+    deriveEffectiveFrom: deriveNhiEffectiveFrom,
+    parse: parseHealthInsurancePremiumShares,
   },
 
   /**
@@ -96,15 +189,13 @@ export const REGULATORY_SYNC_SOURCES = {
    * （`status=4 無異動`）——生效日那條路要等到三年後政府換資料時才會被真正檢驗。
    */
   6: {
+    kind: 'single-version',
     datasetId: 6262,
     resourceFormat: 'JSON',
     rawFormatCode: RegulatoryRawFormat.Json,
     parse: parseOccupationalAccidentInsuranceRates,
   },
-} as const satisfies Partial<Record<RegulatoryDatasetCode, RegulatorySyncSource>>
-
-/** 目前真的同步得了的資料集代碼。`runSync` 只收這個聯集。 */
-export type SyncableDatasetCode = keyof typeof REGULATORY_SYNC_SOURCES
+} as const satisfies Record<SyncableDatasetCode, RegulatorySyncSource>
 
 /**
  * 執行期的收斂，給「拿一個 `number` 決定要不要同步」的呼叫端用（例如日後的排程器逐一掃描）。

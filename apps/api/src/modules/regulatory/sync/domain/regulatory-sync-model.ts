@@ -178,6 +178,15 @@ export type RegulatoryParseResult =
   | { readonly ok: false; readonly reason: string }
 
 /**
+ * 只解析內容、不負責生效日的解析結果（多版本資料集用，見 {@link RegulatoryVersionRecordsParser}）。
+ *
+ * 失敗分支同樣只有一個 `reason`、同樣沒有部分成功，理由與 {@link RegulatoryParseResult} 逐字相同。
+ */
+export type RegulatoryRecordsResult =
+  | { readonly ok: true; readonly records: readonly ParsedRegulatoryRecord[] }
+  | { readonly ok: false; readonly reason: string }
+
+/**
  * 解析器除了資源內容之外，還看得到什麼。
  *
  * ## 為什麼需要它：`4` 與 `6` 的生效日不在資源內容裡
@@ -216,21 +225,89 @@ export type RegulatoryParseContext = {
 export type RegulatoryDatasetParser = (rawText: string, context: RegulatoryParseContext) => RegulatoryParseResult
 
 /**
- * 一個資料集的同步來源設定。
+ * 多版本資料集的解析器：**只解析內容，不回生效日**。
+ *
+ * 這是與 {@link RegulatoryDatasetParser} 唯一的差別，而它不是為了少寫一個欄位：
+ * `dataset_code=2`、`5` 的生效日**只在 metadata 的資源說明裡**，而同步流程必須在**下載之前**
+ * 就知道這一個資源對應哪一個 `version_code`（否則每天晚上都要把十幾份歷史資源重抓一次才知道
+ * 它們早就進來了）。因此生效日的推導被抽成 {@link DeriveEffectiveFrom} 放在來源設定上，
+ * 解析器就不再需要、也不再有資格回答那個問題——**同一個答案只有一個出處**。
+ */
+export type RegulatoryVersionRecordsParser = (rawText: string, context: RegulatoryParseContext) => RegulatoryRecordsResult
+
+/**
+ * 生效日推導的結果。形狀與 `regulatory-roc-date.ts` 的 `RocDateResult` 相同（結構相容，可直接回傳）。
+ */
+export type RegulatoryEffectiveFromResult =
+  | { readonly ok: true; readonly value: string }
+  | { readonly ok: false; readonly reason: string }
+
+/**
+ * 從**一個資源的說明**推導它的版本生效日 `YYYY-MM-DD`（多版本資料集專用）。
+ *
+ * **這是計畫 §7.2 在多版本流程上的落點**：推導不出來時回失敗分支，那個資源就不會產生版本，
+ * 也不會被任何 fallback 補上一個日期。簽章裡只有資源說明——沒有 clock、沒有 `sourceModifiedAt`、
+ * 沒有上一版的生效日，於是那幾個「看起來完全合理」的推測值一行都寫不出來
+ * （理由與 {@link RegulatoryParseContext} 刻意只有一欄逐字相同）。
+ */
+export type DeriveEffectiveFrom = (resourceDescription: string | null) => RegulatoryEffectiveFromResult
+
+/**
+ * 同步來源設定的共同部分。
  *
  * **只硬編 `datasetId`（一個穩定的數字），資源網址每次同步重新探索**（計畫 §7.0）：
  * 實測勞動部的資源網址帶隨機尾碼（`A17000000J-020014-Uy8`），硬編一定會壞，
  * 而壞掉的形式是 404——政府改版的那一天，同步從此失敗，沒有人知道原因在哪一行。
  */
-export type RegulatorySyncSource = {
+type RegulatorySyncSourceBase = {
   /** data.gov.tw 的資料集 id。這是本模組唯一可以寫死的政府識別碼。 */
   readonly datasetId: number
   /** 要挑 `distribution[]` 裡哪一種格式的資源（`JSON`／`CSV`／`XML`）。 */
   readonly resourceFormat: string
   /** 對應 `regulatory_dataset_versions.raw_format_code`：Snapshot 那串位元組原本是什麼格式。 */
   readonly rawFormatCode: RegulatoryRawFormatValue
+}
+
+/**
+ * **一個資源 → 一個版本**的資料集（`1`、`3`、`4`、`6`）。
+ *
+ * 這一類的版本代碼**只有下載並解析之後才知道**：`1`、`3` 的生效日在資料列裡（`適用起日`／`生效日`），
+ * `4`、`6` 雖然寫在資源說明上，但它們的資料集只有一個當期資源，沒有「該不該下載」這個問題。
+ * 因此它們的流程維持原樣（下載 → checksum 比對最新版 → 相同即 `status=4 無異動`），
+ * 一行都不必為了多版本而改。
+ */
+export type RegulatorySingleVersionSource = RegulatorySyncSourceBase & {
+  /** 判別欄位。寫成字面值而不是「有沒有 `deriveEffectiveFrom`」，是為了讓兩條路在 `switch` 上是總的。 */
+  readonly kind: 'single-version'
   readonly parse: RegulatoryDatasetParser
 }
+
+/**
+ * **一個資源 → 一個版本，而同一個資料集底下有十幾個資源**的資料集（`2`、`5`）。
+ *
+ * `20251` 有 16 個 CSV 資源、`20246` 有 19 個（實測 2026-08），每一個是一個歷史版本，
+ * 生效日各自寫在自己的資源說明裡。一次同步會把**所有還沒有的版本**補進來，
+ * 於是歷史一次回補（`5` 回補到民國 100 年 1 月）。
+ *
+ * 兩個欄位分工：{@link deriveEffectiveFrom} 只看 metadata（因此可以在下載之前決定要不要下載），
+ * {@link parse} 只看內容。詳見 {@link RegulatoryVersionRecordsParser}。
+ */
+export type RegulatoryMultiVersionSource = RegulatorySyncSourceBase & {
+  readonly kind: 'multi-version'
+  readonly deriveEffectiveFrom: DeriveEffectiveFrom
+  readonly parse: RegulatoryVersionRecordsParser
+}
+
+/**
+ * 一個資料集的同步來源設定。
+ *
+ * **刻意是兩種而不是「單資源是 N=1 的特例」**：兩條路在一件事上有本質差異——
+ * 單資源的版本代碼要下載並解析之後才知道，多資源的則從 metadata 就知道。
+ * 硬要合成一條的話，多資源那一邊每天晚上都得把十幾份歷史資源重新下載一次才能發現「它們早就進來了」
+ *（一年七千多次請求換零個新版本），否則就要在單資源那條路上加一堆「這一次要不要下載」的分支
+ * ——而那條路現在的讀法是一條直線。
+ */
+export type RegulatorySyncSource = RegulatorySingleVersionSource | RegulatoryMultiVersionSource
 
 /** `runSync` 的輸入。 */
 export type RunSyncInput<TCode extends RegulatoryDatasetCode = RegulatoryDatasetCode> = {

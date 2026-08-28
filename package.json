@@ -8,24 +8,29 @@
     "dev:web": "bun run --filter @sundial/web dev",
     "build:web": "bun run --filter @sundial/web build",
     "typecheck": "tsc --build --force",
-    "typecheck:web": "bun run --filter @sundial/web typecheck",
+    "//typecheck:web": "產生物檢查排在型別檢查**之前**：產生物不進版控（§1.7），剛 clone 下來的 repo 一定沒有它們，而少了這一步，第一次執行看到的會是一整片「找不到 api/generated/api-client.ts」，真正該做的事（跑一次 `bun run gen:api`）一個字都不會出現。理由完整寫在 apps/api/scripts/check-api-artifacts.ts 檔頭。",
+    "typecheck:web": "bun run check:api-artifacts && bun run --filter @sundial/web typecheck",
     "test": "bun test",
     "test:web": "bun test apps/web/src",
     "test:integration": "bun test --test-name-pattern integration",
     "check": "eslint . && prettier --check .",
     "check:layers": "depcruise --config .dependency-cruiser.cjs apps/api/src",
+    "check:api-artifacts": "bun run apps/api/scripts/check-api-artifacts.ts",
     "check:i18n": "bun run apps/api/scripts/check-message-params.ts",
     "check:audit-policy": "bun run apps/api/scripts/check-audit-policy.ts",
     "check:dataset-code": "bun run apps/api/scripts/check-dataset-code.ts",
     "//check:live-sources": "刻意不在 `ci` 裡：它會真的打政府端點，而 CI 環境未必有外網——串進去之後第一次紅燈的原因會與那次 PR 無關，處置幾乎必然是「先關掉」，然後永遠關著。該由有外網的環境跑：一支排程（與同步排程錯開）或一個標明「需要外網」的專屬 job。它沒有寬容模式（連不上就失敗）。真正的防線是排程同步本身（政府改格式時同步會 status=3 並留下 error_message），這支只是讓人在排程跑之前先知道；停掉它失去的是提前量，不是偵測能力。理由完整寫在 apps/api/scripts/check-live-sources.ts 檔頭。",
     "check:live-sources": "bun run apps/api/scripts/check-live-sources.ts",
+    "//gen:api": "API 契約的產生鏈（§1.7）：載入 app 定義 → 輸出 openapi.json → 由它產生前端型別與 API client。**必須能在後端未啟動、資料庫未連線的情況下執行**——它只 import app 定義，不 listen、不連 DB、不讀 .env。理由完整寫在 apps/api/scripts/generate-api.ts 檔頭。產生物一律不進版控，禁止手動修改。",
+    "gen:api": "bun run apps/api/scripts/generate-api.ts",
     "db:up": "docker compose -f docker-compose.dev.yml up -d --wait",
     "db:down": "docker compose -f docker-compose.dev.yml down",
     "db:generate": "bun run --filter @sundial/api db:generate",
     "db:migrate": "bun run --filter @sundial/api db:migrate",
     "db:migrate:test": "bun run --filter @sundial/api db:migrate:test",
     "seed:dev": "bun run --filter @sundial/api seed:dev",
-    "ci": "bun run check && bun run typecheck && bun run typecheck:web && bun run check:layers && bun run check:i18n && bun run check:audit-policy && bun run check:dataset-code && bun run test"
+    "//ci": "`gen:api` 排在 `typecheck:web` 之前，而且刻意排在**不需要 DB service 的位置**（§1.7 明文要求它在沒有 DB service 的 job 中執行）：這一輪跑得過，就等於證明了「只要有原始碼就產得出契約」。反過來若它被挪到需要 DB 的 job 裡，那個要求會在沒有任何人察覺的情況下失效——指令照樣是綠的，只是不再證明任何事。",
+    "ci": "bun run check && bun run typecheck && bun run gen:api && bun run typecheck:web && bun run check:layers && bun run check:i18n && bun run check:audit-policy && bun run check:dataset-code && bun run test"
   },
   "devDependencies": {
     "typescript": "^5.9.0",
@@ -34,7 +39,8 @@
     "prettier": "^3.6.0",
     "eslint-config-prettier": "^10.1.0",
     "typescript-eslint": "^8.45.0",
-    "dependency-cruiser": "^16.10.0"
+    "dependency-cruiser": "^16.10.0",
+    "openapi-typescript": "^7.13.0"
   },
   "engines": {
     "bun": ">=1.2.0"

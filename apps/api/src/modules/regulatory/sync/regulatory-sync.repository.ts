@@ -5,8 +5,9 @@
  * 各自收什麼、回什麼，一頁看完；實作在 `impl/` 底下，一個動作一個檔。
  *
  * 這裡的「動作」是**資料存取動作，不是端點動作**（§0.4）：本次目錄只有一支端點，
- * 底下卻有八個資料存取動作——同步流程本身就是一連串對資料庫的獨立操作
- * （登記、判死、比 checksum、寫版本、寫內容、結案），而它們各自也被不同的分支用到。
+ * 底下卻有九個資料存取動作——同步流程本身就是一連串對資料庫的獨立操作
+ * （登記、判死、比 checksum、列出已有的版本代碼、寫版本、寫內容、結案），
+ * 而它們各自也被不同的分支用到。
  *
  * 本檔（含 `impl/`）是本次目錄唯一可以碰資料庫的一層；`*.repository.ts` 也不得被本次目錄以外的
  * 任何檔案 import（§0.3）。
@@ -56,6 +57,7 @@ import {
   type InsertDatasetVersionInput,
 } from './impl/regulatory-sync.insert-version.repository.ts'
 import { listSyncLogPage as listSyncLogPageImpl } from './impl/regulatory-sync.list-logs.repository.ts'
+import { listDatasetVersionCodes as listDatasetVersionCodesImpl } from './impl/regulatory-sync.list-version-codes.repository.ts'
 import { listRunningSyncLogs as listRunningSyncLogsImpl } from './impl/regulatory-sync.list-running-logs.repository.ts'
 import { touchSyncLogHeartbeat as touchSyncLogHeartbeatImpl } from './impl/regulatory-sync.touch-heartbeat.repository.ts'
 
@@ -97,6 +99,9 @@ export const findLatestDatasetVersion = (
   runner: QueryRunner,
   datasetCode: number,
 ): Promise<LatestDatasetVersion | null> => findLatestDatasetVersionImpl(runner, datasetCode)
+
+export const listDatasetVersionCodes = (runner: QueryRunner, datasetCode: number): Promise<readonly string[]> =>
+  listDatasetVersionCodesImpl(runner, datasetCode)
 
 export const findDatasetVersionByCode = (
   runner: QueryRunner,

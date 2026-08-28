@@ -22,13 +22,13 @@ import { RegulatorySyncStatus } from '../../db/schema/index.ts'
 import {
   regulatorySyncAlreadyRunning,
   regulatorySyncFailed,
+  SYNCABLE_DATASET_CODES,
   type SyncableDatasetCode,
   type SyncOutcome,
 } from '../../modules/regulatory/index.ts'
 import { clockFrom } from '../../shared/clock.ts'
 import { fail, succeed, type ServiceResult } from '../../shared/service-result.ts'
 import {
-  SCHEDULED_DATASET_CODES,
   SCHEDULER_TICK_INTERVAL_MS,
   startRegulatorySyncScheduler,
   type RunDatasetSync,
@@ -104,7 +104,7 @@ const startHarness = (options: HarnessOptions = {}): Harness => {
   startRegulatorySyncScheduler({
     enabled: options.enabled ?? true,
     clock,
-    datasetCodes: options.datasetCodes ?? SCHEDULED_DATASET_CODES,
+    datasetCodes: options.datasetCodes ?? SYNCABLE_DATASET_CODES,
     runDatasetSync,
     startTimer: (requestedIntervalMs, tick) => {
       intervalMs = requestedIntervalMs
@@ -165,17 +165,17 @@ describe('排程的觸發時機', () => {
 
     instant = AFTER_DAILY_TIME
     await harness.fireTick()
-    expect(harness.calls).toEqual([...SCHEDULED_DATASET_CODES])
+    expect(harness.calls).toEqual([...SYNCABLE_DATASET_CODES])
 
     // 同一天再醒來幾次都不該再跑：一天一次是排程的定義，不是巧合。
     await harness.fireTick()
     await harness.fireTick()
-    expect(harness.calls).toEqual([...SCHEDULED_DATASET_CODES])
+    expect(harness.calls).toEqual([...SYNCABLE_DATASET_CODES])
 
     // 換一天就再跑一輪。
     instant = NEXT_DAY
     await harness.fireTick()
-    expect(harness.calls).toEqual([...SCHEDULED_DATASET_CODES, ...SCHEDULED_DATASET_CODES])
+    expect(harness.calls).toEqual([...SYNCABLE_DATASET_CODES, ...SYNCABLE_DATASET_CODES])
   })
 
   test('一輪會對每一個有解析器的資料集各呼叫一次', async () => {
@@ -184,8 +184,8 @@ describe('排程的觸發時機', () => {
     await harness.fireTick()
 
     // 逐一比對而不是只比數量：漏掉一個資料集與多跑一次同一個資料集，數量上可能一樣。
-    expect(harness.calls).toEqual([...SCHEDULED_DATASET_CODES])
-    expect(new Set(harness.calls).size).toBe(SCHEDULED_DATASET_CODES.length)
+    expect(harness.calls).toEqual([...SYNCABLE_DATASET_CODES])
+    expect(new Set(harness.calls).size).toBe(SYNCABLE_DATASET_CODES.length)
   })
 
   test('計時器的週期是 60 秒，而且啟動當下不跑（第一次擊發在一分鐘後）', () => {
