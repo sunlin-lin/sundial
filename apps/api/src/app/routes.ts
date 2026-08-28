@@ -29,6 +29,7 @@ import { refreshGuard } from '../http/refresh-guard.ts'
 import { companyUsersRolesRoutes } from '../modules/company-users/routes.ts'
 import { employeesMainRoutes } from '../modules/employees/routes.ts'
 import { permissionsMainRoutes } from '../modules/permissions/routes.ts'
+import { regulatoryDatasetsRoutes } from '../modules/regulatory/routes.ts'
 import { rolesMainRoutes } from '../modules/roles/routes.ts'
 import {
   sessionsMainAuthenticatedRoutes,
@@ -83,7 +84,7 @@ const refreshGroup = (dependencies: AppDependencies) =>
  * 認證方式寫在群組上、端點自己不宣告（§1.9.1）：認證方式是橫切的，
  * 寫在每支端點上就是把同一件事抄 N 遍，而漏抄的那一支只是靜靜地變成不驗證身分。
  *
- * 掛進來的五組端點各自只是一個 plugin，**它們沒有辦法宣告自己要不要驗身分**——
+ * 掛進來的六組端點各自只是一個 plugin，**它們沒有辦法宣告自己要不要驗身分**——
  * 掛在哪一組是這裡的一行程式碼，掛錯就是掛不上。
  */
 const authenticatedGroup = (dependencies: AppDependencies) => {
@@ -95,6 +96,10 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
     .use(permissionsMainRoutes({ database }))
     .use(companyUsersRolesRoutes({ database, clock }))
     .use(employeesMainRoutes({ db: database, cipher, clock }))
+    // 法規資料集：**刻意不注入 clock**（實作計畫 §4.2）。這三支端點的時間維度只有呼叫端送來的
+    // `asOfDate`，拿得到 clock 就寫得出「沒帶就用今天」，而那會讓補算去年 12 月的薪資
+    // 抓到今年的費率，算出一個完全合理的數字。也沒有公司範圍——法規三表是平台全域資料。
+    .use(regulatoryDatasetsRoutes({ db: database }))
 }
 
 /**

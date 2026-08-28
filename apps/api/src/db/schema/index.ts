@@ -24,6 +24,19 @@ export {
   TOKEN_HASH_BYTE_LENGTH,
 } from './refresh-tokens.ts'
 export { auditLogs, AuditActorType, type AuditActorTypeValue } from './audit-logs.ts'
+export {
+  regulatoryDatasetVersions,
+  RegulatoryRawFormat,
+  type RegulatoryRawFormatValue,
+} from './regulatory-dataset-versions.ts'
+export { regulatoryRecords } from './regulatory-records.ts'
+export {
+  regulatorySyncLogs,
+  RegulatorySyncTriggerType,
+  type RegulatorySyncTriggerTypeValue,
+  RegulatorySyncStatus,
+  type RegulatorySyncStatusValue,
+} from './regulatory-sync-logs.ts'
 
 import { auditLogs } from './audit-logs.ts'
 import { companyUserRoles } from './company-user-roles.ts'
@@ -64,3 +77,20 @@ export type CompanyScopedTable =
    * 而不是靠結構型別自動納入。
    */
   | typeof auditLogs
+/*
+ * **法規三表（`regulatory_dataset_versions`、`regulatory_records`、`regulatory_sync_logs`）
+ * 刻意不在這個聯集裡，這不是漏加**（實作計畫 `plans/01-regulatory-dataset-versioning.md` §3.2 (b)）。
+ *
+ * 三張表都**沒有 `company_id` 欄位**：它們存的是勞保、健保、勞退、職災的費率與分級表，
+ * 那是全國法定值，全平台共用同一份。硬把它們納進來會變成「用 company_id 過濾一張沒有 company_id
+ * 的表」，型別上就寫不出來——與 `companies` 不在此列是同一類理由（見上方段落）。
+ *
+ * 它們走的是**裸 db client** 那條路（§4.2），和 `users`、`permissions` 同一類。
+ *
+ * 這段話寫在這裡，是因為這裡才是下一個人會誤判的位置：他會看到「新增一張表就要改 index.ts」
+ * 這條規則，然後發現法規三表沒被列進來，第一個念頭是補上去。補上去的後果不是錯誤而是**改不動**
+ * ——`TenantDatabase` 會要求每一支法規查詢都帶公司條件，而那個條件在資料上根本不存在。
+ *
+ * 公司層真正的「選擇」（這家公司用哪一個職災行業別）在 `company_regulatory_settings`，
+ * 那張表有 `company_id`，屆時要加進上面的聯集；本輪不做那張表。
+ */

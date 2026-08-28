@@ -12,6 +12,7 @@ import { COMPANY_USERS } from './company-users.ts'
 import { EMPLOYEES } from './employees.ts'
 import { PERMISSIONS } from './permissions.ts'
 import { PLATFORM } from './platform.ts'
+import { REGULATORY } from './regulatory.ts'
 import { ROLES } from './roles.ts'
 import { SESSIONS } from './sessions.ts'
 
@@ -28,6 +29,7 @@ export const ZH_TW_ERRORS = {
   permissions: PERMISSIONS,
   employees: EMPLOYEES,
   'company-users': COMPANY_USERS,
+  regulatory: REGULATORY,
 } as const
 
 /** 平台層訊息樹（envelope 頂層 `msg` 在非 `300` 路徑上用的那幾句）。理由見 `platform.ts` 檔頭。 */
