@@ -253,6 +253,20 @@
       "when": 1787998469115,
       "tag": "0035_real_titanium_man",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1788011461147,
+      "tag": "0036_create_attendance_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "5",
+      "when": 1788011517466,
+      "tag": "0037_seed_permission_codes_attendance_settings",
+      "breakpoints": true
     }
   ]
 }

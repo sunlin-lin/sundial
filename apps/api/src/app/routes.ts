@@ -26,6 +26,7 @@ import { Elysia } from 'elysia'
 import { identityGuard } from '../http/identity-guard.ts'
 import { publicGuard } from '../http/public-guard.ts'
 import { refreshGuard } from '../http/refresh-guard.ts'
+import { attendanceSettingsRoutes } from '../modules/attendance/routes.ts'
 import { companyUsersMainRoutes, companyUsersRolesRoutes } from '../modules/company-users/routes.ts'
 import { departmentsMainRoutes } from '../modules/departments/routes.ts'
 import { dependentsMainRoutes } from '../modules/dependents/routes.ts'
@@ -144,6 +145,8 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
       // 而它們刻意不在這裡——一支 HTTP 查詢不該有能力去打政府端點並寫入版本。人工觸發同步的端點
       // 依計畫 D3 不開放（一家公司的管理者按一個鈕，平台上每一家公司的 Payroll 都跟著換版本）。
       .use(regulatorySyncRoutes({ db: database }))
+      // 出勤設定：不需要 cipher（沒有個資欄位）。實作計畫 06-attendance.md §5 Stage 2。
+      .use(attendanceSettingsRoutes({ db: database, clock }))
   )
 }
 

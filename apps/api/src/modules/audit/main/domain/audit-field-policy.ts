@@ -312,6 +312,28 @@ export const AUDIT_FIELD_POLICY = {
       effectiveTo: AuditFieldLevel.Value,
     },
   },
+  /**
+   * 公司打卡規則異動（實作計畫 `plans/06-attendance.md` §4.6、§5 Stage 2）。落在「金額設定異動」
+   * 的鄰近類別——雖然不是金額，但 `gpsRequired`／`allowEmployeeCancellation` 這類開關直接決定
+   * 出勤規則怎麼跑，比照既有對「規則設定類」一律記值的做法，全部欄位 `value` 級：沒有一欄是
+   * 個資或加密欄位，六個布林開關記值不擴大任何外洩面，而且正是「這間公司的打卡規則什麼時候
+   * 從哪個值改成哪個值」這種需要前後值才回答得出來的問題。
+   *
+   * `update` 端點在公司從未存過設定時等同「建立」（見 `impl/attendance-settings.update.
+   * service.ts` 檔頭），此時 `before` 傳 `null`——與 `employee_labor_pension_settings.create`
+   * 是同一種形狀，不需要為「這是第一次還是後續修改」分開兩種政策。
+   */
+  attendance_settings: {
+    source: 'modules/attendance/settings/domain/attendance-settings-model.ts#AttendanceSettingsAuditSnapshot',
+    fields: {
+      requireClockInBeforeClockOut: AuditFieldLevel.Value,
+      allowEmployeeCancellation: AuditFieldLevel.Value,
+      allowCorrectionRequest: AuditFieldLevel.Value,
+      correctionRequiresApproval: AuditFieldLevel.Value,
+      gpsEnabled: AuditFieldLevel.Value,
+      gpsRequired: AuditFieldLevel.Value,
+    },
+  },
 } as const satisfies Readonly<Record<string, AuditTablePolicy>>
 
 /**

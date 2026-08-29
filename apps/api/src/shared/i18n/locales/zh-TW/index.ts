@@ -8,6 +8,7 @@
  * 頂層的每一個 key 就是訊息 key 的第一段，而它**必須等於 `modules/` 底下的目錄名**
  * ——這是「key 由路徑機械推導」這條規則唯一需要人維護的接點，其餘三段都在各語系檔裡跟著目錄長。
  */
+import { ATTENDANCE } from './attendance.ts'
 import { COMPANY_USERS } from './company-users.ts'
 import { DEPARTMENTS } from './departments.ts'
 import { DEPENDENTS } from './dependents.ts'
@@ -46,6 +47,7 @@ export const ZH_TW_ERRORS = {
   'job-positions': JOB_POSITIONS,
   dependents: DEPENDENTS,
   'labor-pension': LABOR_PENSION,
+  attendance: ATTENDANCE,
 } as const
 
 /** 平台層訊息樹（envelope 頂層 `msg` 在非 `300` 路徑上用的那幾句）。理由見 `platform.ts` 檔頭。 */

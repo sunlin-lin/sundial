@@ -66,7 +66,9 @@ export {
   type DependentRelationshipCodeValue,
 } from './employee-dependents.ts'
 export { employeeLaborPensionSettings } from './employee-labor-pension-settings.ts'
+export { attendanceSettings } from './attendance-settings.ts'
 
+import { attendanceSettings } from './attendance-settings.ts'
 import { auditLogs } from './audit-logs.ts'
 import { companyUserRoles } from './company-user-roles.ts'
 import { companyUsers } from './company-users.ts'
@@ -196,6 +198,13 @@ export type CompanyScopedTable =
    */
   | typeof employeeDependents
   | typeof employeeLaborPensionSettings
+  /**
+   * `attendance_settings` 有 `company_id`，因此屬於這個聯集（實作計畫 `plans/06-attendance.md`
+   * §5 Stage 2）。**這張表沒有任何其他表以外鍵指向它**（本階段只做這一張表，出勤層其餘四張表
+   * 尚未動工），因此排序上與 `employees`／`shiftDefinitions`／`departments` 同一類：只以外鍵
+   * 指向 `companies`，放在依賴鏈中段即可（見下方陣列）。
+   */
+  | typeof attendanceSettings
 
 /**
  * 對「窮舉一個聯集的所有成員」做編譯期檢查的小工具，供下方 {@link companyScopedTablesInDeleteOrder} 使用。
@@ -280,6 +289,8 @@ export const companyScopedTablesInDeleteOrder = exhaustiveCompanyScopedTables<Co
   employees,
   shiftDefinitions,
   departments,
+  // 出勤設定：只以外鍵指向 companies，沒有其他表指向它，放在同一類的最後（順序無關）。
+  attendanceSettings,
   jobTitles,
   jobPositions,
   companyUsers,
