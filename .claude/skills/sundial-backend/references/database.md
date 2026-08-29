@@ -174,6 +174,83 @@ const rows = await tenant
 全域表（`users`、`permissions`）join 進來不加公司條件，但要靠「已帶公司條件的表」串接進來（如
 靠 `company_users` 間接鎖住），不能是唯一的 join 目標。
 
+### 2.3.1 `scopeAll` 遇到 `LEFT JOIN`：悄悄變成 `INNER JOIN`，沒有工具在擋
+
+`scopeAll` 把傳進去的每一張表的 `company_id` 條件全部塞進同一個 `WHERE`：
+
+```ts
+// apps/api/src/db/client.ts
+scopeAll(tables: readonly CompanyScopedTable[], ...conditions: readonly (SQL | undefined)[]): SQL | undefined {
+  return and(...tables.map((table) => eq(table.companyId, this.#companyId)), ...conditions)
+}
+```
+
+**這在「JOIN 清單全部是 `INNER JOIN`」時是安全的**：`INNER JOIN` 落空的列本來就不會出現在結果
+裡，公司條件放 `WHERE` 或放 `ON` 沒有差別，§2.3 的範例正是這種情況。但只要清單裡有一張是
+`LEFT JOIN`，把它的 `company_id` 條件放進 `WHERE` 就會把這個 `LEFT JOIN` 悄悄變成事實上的
+`INNER JOIN`：`LEFT JOIN` 沒配到的那一列，該表所有欄位（含 `company_id`）都是 `NULL`，
+`NULL = 公司ID` 在 SQL 裡恆為假，`WHERE` 直接把整列濾掉——**不會有任何錯誤，只是那一列從結果
+裡消失**。
+
+實際踩過的例子：`attendance/records/list-by-date`（每日全員打卡明細）要 `LEFT JOIN` 部門歷史與
+部門——查不到部門歸屬的員工，當天的打卡仍要照樣顯示（`departmentName` 給 `NULL` 即可），不能
+因為查無部門就讓這名員工那天的打卡整列從列表消失。若沿用 `selectFrom` + `scopeAll([attendanceRecords,
+employees, employeeDepartmentHistories, departments], ...)`，後兩張表的公司條件會被塞進
+`WHERE`，查不到部門的那一列就會被靜靜濾掉——症狀是「少了幾列」，不是報錯，很容易被誤判成「這名
+員工今天沒打卡」。
+
+正確寫法（實際程式碼）：改用裸 `runner`，`LEFT JOIN` 的公司條件放進該 JOIN 自己的 `ON`，
+`WHERE` 只留錨點資料表與業務篩選條件：
+
+```ts
+// apps/api/src/modules/attendance/records/impl/attendance-records.list-by-date.repository.ts
+const buildDepartmentHistoryJoinCondition = (companyId: string, workDate: string) =>
+  and(
+    eq(employeeDepartmentHistories.companyId, companyId), // 公司條件放 ON，不是 WHERE
+    eq(employeeDepartmentHistories.employmentId, attendanceRecords.employmentId),
+    lte(employeeDepartmentHistories.effectiveFrom, workDate),
+    or(isNull(employeeDepartmentHistories.effectiveTo), gte(employeeDepartmentHistories.effectiveTo, workDate)),
+  )
+
+const rows = await runner
+  .select({/* ... */})
+  .from(attendanceRecords)
+  .innerJoin(
+    employees,
+    and(eq(employees.id, attendanceRecords.employeeId), eq(employees.companyId, attendanceRecords.companyId)),
+  )
+  .leftJoin(employeeDepartmentHistories, buildDepartmentHistoryJoinCondition(companyId, query.workDate))
+  .leftJoin(
+    departments,
+    and(eq(departments.id, employeeDepartmentHistories.departmentId), eq(departments.companyId, companyId)),
+  )
+  .where(conditions) // 只有 attendanceRecords.companyId 與業務篩選條件，見下方
+```
+
+```ts
+const buildConditions = (companyId: string, query: ListAttendanceRecordsByDateQuery): SQL | undefined =>
+  and(
+    eq(attendanceRecords.companyId, companyId), // 錨點表的公司條件才放這裡
+    eq(attendanceRecords.workDate, query.workDate),
+    query.departmentId === null ? undefined : eq(employeeDepartmentHistories.departmentId, query.departmentId),
+  )
+```
+
+**判準：**
+
+- **JOIN 清單全部是 `INNER JOIN`，或單表查詢** → 用 `TenantDatabase.selectFrom` + `scopeAll`
+  （§2.3），公司條件放 `WHERE` 沒有問題。
+- **JOIN 清單裡有任何一個 `LEFT JOIN`（或 `RIGHT JOIN`／`FULL JOIN`）** → 不能用 `scopeAll`；
+  改用裸 `runner`，公司條件依 JOIN 性質分別擺放：`LEFT JOIN` 的表放進該 JOIN 自己的 `ON`
+  （落空的列不該被這個條件濾掉）；`INNER JOIN` 的表（含錨點表）放 `WHERE` 或 `ON` 結果相同，
+  上面的例子選擇除了錨點表以外都放 `ON`，只是為了讓「查詢起點」與「JOIN 帶進來的表」在程式碼
+  上一眼分清楚，不是規則要求。
+- **這個坑沒有任何工具在擋。** `check:layers`、`check:n-plus-one` 都不檢查「`LEFT JOIN` 的公司
+  條件放對地方沒有」，寫錯不是編譯錯誤、也不會讓測試變紅——查詢照樣成功執行，只是被誤放進
+  `WHERE` 的那幾張表一旦落空，對應的列就從結果裡靜靜消失。被濾掉的資料在資料庫裡好端端存在，
+  只是這一次查詢看不到；發現這個坑通常是有人回報「某某人的資料不見了」，而不是任何自動化檢查
+  先舉手。
+
 ### 2.4 `companyId` 的唯一來源
 
 - 只能來自已驗證的 token／session，禁止取自 request body 或 header。
@@ -640,7 +717,10 @@ status: varchar('status', { length: 32 }).$type<JobTitleStatusValue>().notNull()
 ### 9.3 寫一支查詢
 
 - [ ] 透過 `TenantDatabase`（或收到的 `QueryRunner`/`TransactionRunner`），不直接碰裸 `db`。
-- [ ] 單表用 `select`／`update`／`insert`；JOIN 用 `selectFrom` + `scopeAll([涉及的帶公司範圍表], ...)`。
+- [ ] 單表用 `select`／`update`／`insert`；JOIN **全部是 `INNER JOIN`** 用 `selectFrom` +
+      `scopeAll([涉及的帶公司範圍表], ...)`；JOIN 清單裡**只要有一個 `LEFT JOIN`**，改用裸
+      `runner`，`LEFT JOIN` 的公司條件放進該 JOIN 的 `ON`，不要放 `scopeAll`／`WHERE`（§2.3.1，
+      這個坑不會報錯，症狀是查詢悄悄少了幾列）。
 - [ ] 帶軟刪除欄位的表，`WHERE` 一定同時比對 `eq(deletedSeq, 0)` 與 `isNull(deletedAt)`，除非
       是刻意的稽核歷程查詢（要寫註解）。
 - [ ] 狀態變更用條件式 `UPDATE`（預期狀態放進 `WHERE`），用 `readAffectedRows` 檢查影響列數，
