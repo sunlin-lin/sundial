@@ -24,6 +24,8 @@
     "check:audit-transaction": "bun run apps/api/scripts/check-audit-transaction.ts",
     "//check:migration-journal": "drizzle-kit 的 `migrate` 讀的是 `drizzle/meta/_journal.json` 的 entries，不是 `drizzle/*.sql` 的檔案清單。手寫 migration SQL 卻忘了同步補 journal（與對應的 snapshot）時，`db:migrate` 照樣印出成功，實際上零個動作、表沒有建立——而且沒有任何錯誤訊息。這支腳本做雙向比對（SQL 有 journal 沒有 → 永遠不會被執行；journal 有 SQL 沒有 → db:migrate 執行到那裡會找不到檔案，分開報，修法不同），外加 idx 是否連續不跳號、每筆 entry 是否有對應的 snapshot。排在 `check:audit-transaction` 之後，理由與它相同：都是純靜態掃描，放在一起讓「規範掃描」這一段在 ci 裡連續。理由與判準完整寫在 apps/api/scripts/check-migration-journal.ts 檔頭。",
     "check:migration-journal": "bun run apps/api/scripts/check-migration-journal.ts",
+    "//check:n-plus-one": "後端規範 §4.5：禁止在迴圈中逐筆查詢資料庫（含 `Promise.all(arr.map(async ...))` 這種偽裝成平行處理的寫法——它一樣是 N 次資料庫往返、N 個連線池 slot，資料量大時會讓連線池被吃光、其他請求跟著逾時）。用 AST 判斷「這個 await 在不在迴圈體內」，正則做不到；判準的三層邏輯（repository import、drizzle 查詢建構子鏈、命名慣例）與每一層已知抓不到什麼，完整寫在 apps/api/scripts/check-n-plus-one.ts 檔頭。排在 `check:migration-journal` 之後，理由與其餘 check:* 相同：都是純靜態掃描，放在一起讓「規範掃描」這一段在 ci 裡連續。",
+    "check:n-plus-one": "bun run apps/api/scripts/check-n-plus-one.ts",
     "check:dataset-code": "bun run apps/api/scripts/check-dataset-code.ts",
     "//check:number-cast": "頁面與共用元件禁止 `Number(`／`parseFloat(`／`parseInt(`／一元 `+`（計畫 03 §5.2）。它不需要產生物、不需要 DB，掃的是手寫的前端原始碼，所以排在 `typecheck:web` 之前或之後都可以；放在其他 check:* 旁邊是為了讓「規範掃描」這一段在 ci 裡是連續的一塊。「怎麼機械判定這是金額欄位」的決定與它的偽陽性代價，完整寫在 apps/api/scripts/check-number-cast.ts 檔頭。",
     "check:number-cast": "bun run apps/api/scripts/check-number-cast.ts",
@@ -42,7 +44,7 @@
     "db:migrate:test": "bun run --filter @sundial/api db:migrate:test",
     "seed:dev": "bun run --filter @sundial/api seed:dev",
     "//ci": "`gen:api` 排在 `typecheck:web` 之前，而且刻意排在**不需要 DB service 的位置**（§1.7 明文要求它在沒有 DB service 的 job 中執行）：這一輪跑得過，就等於證明了「只要有原始碼就產得出契約」。反過來若它被挪到需要 DB 的 job 裡，那個要求會在沒有任何人察覺的情況下失效——指令照樣是綠的，只是不再證明任何事。",
-    "ci": "bun run check && bun run typecheck && bun run gen:api && bun run typecheck:web && bun run check:layers && bun run check:i18n && bun run check:audit-policy && bun run check:audit-transaction && bun run check:migration-journal && bun run check:dataset-code && bun run check:number-cast && bun run check:tz-leak && bun run test"
+    "ci": "bun run check && bun run typecheck && bun run gen:api && bun run typecheck:web && bun run check:layers && bun run check:i18n && bun run check:audit-policy && bun run check:audit-transaction && bun run check:migration-journal && bun run check:n-plus-one && bun run check:dataset-code && bun run check:number-cast && bun run check:tz-leak && bun run test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

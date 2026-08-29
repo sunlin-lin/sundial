@@ -1097,18 +1097,33 @@ if (row.status === EXPECTED_STATUS) await update(id, { status: NEXT_STATUS })
 
 - 每一張帶 `company_id` 的表，其索引**必須以 `company_id` 開頭**（如 `(company_id, created_at)`、`(company_id, <關聯>_id, status)`）。缺少會讓每次列表查詢退化成全表掃描，資料量成長後同時拖垮所有租戶。
 - 新增列表查詢或篩選條件時，**必須在同一個 PR 補上支撐索引**，並在 PR 描述附 `EXPLAIN` 結果。
-- **禁止在迴圈中逐筆查詢。** 一頁 20 筆資料各查一次兩張關聯主檔＝41 次往返，看起來只是慢，實際上會在尖峰時段耗盡連線池，讓其他端點一起失敗。 ✅（lint：禁止 `for`／`map` 內出現 await 的 db 呼叫；測試：關鍵列表端點加上查詢次數上限斷言）
+- **禁止在迴圈中逐筆查詢。** 一頁 20 筆資料各查一次兩張關聯主檔＝41 次往返，看起來只是慢，實際上會在尖峰時段耗盡連線池，讓其他端點一起失敗。正確作法一律是**先把要查的鍵蒐集成陣列，用單一 `WHERE ... IN (...)` 查詢一次撈完，再用 `Map` 在記憶體中對應回去**——迴圈裡不得出現資料庫呼叫的 `await`。 ✅（自製掃描腳本 `check:n-plus-one`：以 AST 判斷 await 是否落在迴圈體內，判準與已知的偽陽性／偽陰性完整寫在 `apps/api/scripts/check-n-plus-one.ts` 檔頭；測試：關鍵列表端點加上查詢次數上限斷言）
 
 ```ts
-// ✅ 正確：一次撈完再組裝
-const rows = await db
+// ✅ 正確：先蒐集鍵，一次查完再組裝
+const ownerIds = list.map((row) => row.ownerId)
+const owners = await db
   .select()
-  .from(owners)
-  .where(and(eq(owners.companyId, cid), inArray(owners.id, ids)))
-const byId = new Map(rows.map((r) => [r.id, r]))
-// ❌ 錯誤：N+1
+  .from(ownersTable)
+  .where(and(eq(ownersTable.companyId, cid), inArray(ownersTable.id, ownerIds)))
+const ownerById = new Map(owners.map((r) => [r.id, r]))
+for (const row of list) row.owner = ownerById.get(row.ownerId) ?? null
+// ❌ 錯誤：N+1（迴圈內逐筆查詢）
 for (const row of list) row.owner = await findOwner(row.ownerId)
 ```
+
+**`Promise.all(arr.map(async ...))` 不是解法，是同一個問題換了一件外衣。** 把上面那個 `for` 迴圈改寫成 `await Promise.all(list.map(async (row) => { row.owner = await findOwner(row.ownerId) }))` 確實讓 N 個查詢**並行**送出，比循序快；但它仍然是 **N 次資料庫往返、N 個連線池 slot**。資料量一大，症狀不再是「這支端點比較慢」，而是「連線池被這一支端點的 N 個查詢瞬間佔滿，其他完全無關的端點開始逾時」——受害的是別人，而且錯誤訊息只會是「連線逾時」，查不出源頭是哪一支端點的迴圈。這比循序 N+1 更危險，因為它更難查，因此本規則把它與循序迴圈視為**同一條規則的兩種寫法**，不是「已經平行化、可以放行」的例外。
+
+```ts
+// ❌ 錯誤：看起來是平行處理，實際上仍是 N 次往返、N 個連線池 slot
+await Promise.all(
+  list.map(async (row) => {
+    row.owner = await findOwner(row.ownerId)
+  }),
+)
+```
+
+**豁免必須留下痕跡，且理由不可省略。** 少數情況迴圈確實與資料量無關（例如固定次數的獨立工作，像是「對固定的九個資料集各同步一次」——次數不隨資料成長，也不是同一批資料的逐筆查詢），這種迴圈可以豁免，寫法是在觸發違規的那一行或正上方一行加上 `// n-plus-one-ok: <理由>`。**冒號後面沒有理由的豁免視為違規**——`check:n-plus-one` 會把它當成一般違規報出來，不會靜靜放行。掃描器同時統計整個掃描範圍內豁免標記的出現次數並印在通過訊息裡，讓豁免的數量本身是看得見的，不會無聲無息地增加。
 
 ### 4.6 禁止 ORM 關聯查詢，一律顯式 `select` ＋ `join`
 
@@ -1394,7 +1409,7 @@ await api.post('/credentials/main/update', { currentPassword, newPassword })
 | 39  | **身分解析查詢的三項邊界**：必須以公司代號＋帳號為條件、只能位於認證模組的 repository、回傳欄位只能是公司範圍（§4.2）                                                                                                                                                                                      | 自製掃描腳本                                         |
 | 40  | **access token 的 claims 中 `companyId` 不得為 `null`**（§4.2）                                                                                                                                                                                                                                            | TypeScript 型別 ＋ 測試                              |
 | 41  | 軟刪除表查詢必須處理 `deleted_at`（§4.3）                                                                                                                                                                                                                                                                  | 自製掃描腳本                                         |
-| 42  | 禁止迴圈內 await db 查詢（§4.5）                                                                                                                                                                                                                                                                           | ESLint ＋ 查詢次數斷言                               |
+| 42  | 禁止迴圈內 await db 查詢，含 `Promise.all(arr.map(async ...))` 這種偽裝成平行處理的寫法（§4.5）                                                                                                                                                                                                            | 自製掃描腳本（含掃描器自我檢查）＋查詢次數斷言       |
 | 43  | **禁止 Drizzle relational query API（`db.query.*` 搭配 `with`），一律顯式 `select` ＋ `join`**（§4.6）                                                                                                                                                                                                     | 自製掃描腳本                                         |
 | 44  | 金額不得退化為 number（§4.7）                                                                                                                                                                                                                                                                              | branded type ＋ ESLint                               |
 | 45  | response 不得含未遮罩敏感欄位（§5.1）                                                                                                                                                                                                                                                                      | 自製掃描腳本                                         |
