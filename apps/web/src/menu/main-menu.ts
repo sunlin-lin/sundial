@@ -85,6 +85,16 @@ export const MAIN_MENU: readonly MenuGroup[] = [
         routeName: 'shifts-main',
         permissionCode: 'shifts.main.list',
       },
+      /**
+       * 員工清單（計畫 05 Stage 6 第一段，UI 定案 `docs/ui/20-employee-list.md` §1）。
+       * 新增員工頁（`employees/onboarding`）刻意不在選單上：它只透過清單頁的「新增員工」按鈕進入，
+       * 沒有獨立入口——理由與 `regulatory/datasets` 的版本內容頁相同（不是每一個路由都要有選單項）。
+       */
+      {
+        labelKey: 'menu.employees-main',
+        routeName: 'employees-main',
+        permissionCode: 'employees.main.list',
+      },
     ],
   },
 ]

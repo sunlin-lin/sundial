@@ -51,6 +51,7 @@ export const ZH_TW = {
   'menu.regulatory-sync': '法規資料同步歷程',
   'menu.hr-operations': '人事作業',
   'menu.shifts-main': '班別設定',
+  'menu.employees-main': '員工清單',
 
   /**
    * 四種同步狀態，值取自後端的 `RegulatorySyncStatus`（1/2/3/4）。
@@ -326,6 +327,79 @@ export const ZH_TW = {
 
   /** 前端唯一的表單驗證文案：只做「必填」（§6.1，格式與長度一律交給後端的 300 錯誤）。 */
   'shifts-main.validation.required': '必填',
+
+  /**
+   * 性別。`employees.` 中性前綴（不是 `employees-main.`）：這是 `employees/main`（員工清單）與
+   * `employees/onboarding`（新增員工）共用的呈現，理由與 `regulatory.` 的 sync-status 共用前綴
+   * 同構（見 `shared/employees/gender.ts` 檔頭）。
+   */
+  'employees.gender.male': '男',
+  'employees.gender.female': '女',
+
+  // --- 員工清單（`pages/employees/main/`，UI 定案 `docs/ui/20-employee-list.md` §1） --------
+  'employees-main.heading': '員工清單',
+  'employees-main.description': '公司內的員工主檔，預設顯示目前在職員工。',
+  'employees-main.action.create': '新增員工',
+  'employees-main.filter.keyword': '員工編號或姓名',
+  'employees-main.filter.keyword-placeholder': '輸入員工編號或姓名',
+  'employees-main.retry': '重新載入',
+  'employees-main.empty': '目前沒有員工資料。',
+  'employees-main.empty-filtered': '沒有符合條件的員工，可以試著清除篩選條件。',
+  'employees-main.column.employee-code': '員工編號',
+  'employees-main.column.name': '姓名',
+  'employees-main.column.gender': '性別',
+  'employees-main.column.job-title': '職稱',
+
+  // --- 新增員工（`pages/employees/onboarding/`，UI 定案 §2） ------------------------------
+  'employees-onboarding.heading': '新增員工',
+  'employees-onboarding.description': '單頁輸入，一次建立員工、任職、部門、扣繳、登入帳號及角色；任一步失敗整筆取消。',
+  'employees-onboarding.retry': '重新載入',
+  'employees-onboarding.action.cancel': '取消',
+  'employees-onboarding.action.submit': '建立員工',
+  'employees-onboarding.toast.created': '員工已建立。',
+
+  'employees-onboarding.section.basic': '基本資料',
+  'employees-onboarding.section.employment': '任職與組織',
+  'employees-onboarding.section.withholding': '扣繳',
+  'employees-onboarding.section.account': '登入帳號與角色',
+
+  'employees-onboarding.field.employee-code': '員工編號',
+  'employees-onboarding.field.name': '姓名',
+  'employees-onboarding.field.gender': '性別',
+  'employees-onboarding.field.identity-number': '身分證字號',
+  'employees-onboarding.field.birthday': '出生日期',
+  'employees-onboarding.field.phone': '手機',
+  'employees-onboarding.field.email': 'Email',
+  'employees-onboarding.field.address': '地址',
+
+  'employees-onboarding.field.employment-type': '僱用類型',
+  'employees-onboarding.field.employment-nature': '任職性質',
+  'employees-onboarding.field.employment-nature-hint': '選填，依公司內部代碼設定；未設定代碼可留白。',
+  'employees-onboarding.field.hire-date': '到職日期',
+  'employees-onboarding.field.department': '部門',
+  'employees-onboarding.field.job-title': '職稱',
+  'employees-onboarding.field.job-positions': '職務',
+
+  'employees-onboarding.field.withholding-method': '薪資扣繳方式',
+
+  'employees-onboarding.field.username': '帳號',
+  'employees-onboarding.field.initial-password': '初始密碼',
+  'employees-onboarding.field.roles': '角色',
+  'employees-onboarding.field.roles-hint': '至少指派一個角色；員工第一次登入必須強制變更密碼。',
+
+  /** 僱用類型代碼（1–8，值域對齊後端 `employments-main.routes.ts` 的 `EmploymentTypeCodeSchema`）。 */
+  'employees-onboarding.employment-type.1': '正職',
+  'employees-onboarding.employment-type.2': '兼職',
+  'employees-onboarding.employment-type.3': '約聘',
+  'employees-onboarding.employment-type.4': '派遣',
+  'employees-onboarding.employment-type.5': '工讀',
+  'employees-onboarding.employment-type.6': '臨時',
+  'employees-onboarding.employment-type.7': '顧問',
+  'employees-onboarding.employment-type.8': '實習',
+
+  /** 扣繳方式代碼（值域對齊後端 `employee-withholding-settings.ts` 的 `WithholdingMethodCode`）。 */
+  'employees-onboarding.withholding-method.1': '薪資所得扣繳稅額表',
+  'employees-onboarding.withholding-method.2': '固定 5%',
 
   /** 前端自己要說的話，見檔頭的「唯一的例外」。 */
   'error.system': '系統發生錯誤，請稍後再試。',

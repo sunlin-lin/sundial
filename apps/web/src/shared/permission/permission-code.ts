@@ -75,6 +75,11 @@ const PERMISSION_CODES = [
   'shifts.main.update',
   'shifts.main.copy',
   'shifts.main.delete',
+  // 員工清單與新增員工（計畫 05 Stage 6 第一段，UI 定案 `docs/ui/20-employee-list.md` §1、§2）。
+  // 兩碼逐一比對過 `apps/api/drizzle/0009_seed_permission_codes_employees.sql`（`employees.main.list`）
+  // 與 `0027_onboarding_permission_codes.sql`（`employees.onboarding.create`）。
+  'employees.main.list',
+  'employees.onboarding.create',
 ] as const satisfies readonly ApiCommand[]
 
 /** 權限碼。全站判斷權限一律用這個型別，不用 `string`。 */
