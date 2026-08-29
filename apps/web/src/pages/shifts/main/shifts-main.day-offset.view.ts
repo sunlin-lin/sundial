@@ -5,18 +5,19 @@
  * 休息的起訖各有日偏移（計畫 §4.2 的唯一增補），因此本檔的函式同時服務工作時段與休息時段——
  * 兩者都是「一個時刻 + 一個日偏移」，呈現規則完全相同，不必各寫一份。
  *
- * **`offset` 的型別是 `string | number`**：後端的 `t.Integer()` 在 OpenAPI 上留下 `anyOf` 的影子
- * （同 `regulatory-sync.view.ts` 檔頭提過的那個問題），值只會是 `0` 或 `1`（`ShiftDayOffset` 的
- * `minimum`／`maximum`），因此**不需要解析成數字**——直接比對字面文字就能判斷是不是隔日，
- * 比呼叫任何數值轉型函式都直接（也順帶避開 `check:number-cast` 完全不需要的一次轉型）。
+ * `offset` 過去曾經需要防禦字串輸入：後端回應方向誤用了可強制轉型的 `t.Integer`，OpenAPI 上
+ * 留了 `string | number` 的影子。`check:response-coercion` 掃出並修正這一批誤用後，
+ * `endDayOffset`／`startDayOffset` 在回應方向都已經是乾淨的 `number`（值只會是 `0` 或 `1`，
+ * 見 `ShiftDayOffset` 的 `minimum`／`maximum`），字串分支因此拿掉——不要因為
+ * 「看起來像防禦性寫法」就加回來。
  */
 import type { TranslateMessage } from '../../../shared/i18n/messages.ts'
 
-/** 後端 `ShiftDayOffset` 的合法值只有 `0`／`1`（含字串或數字兩種型態）。 */
-export type DayOffsetValue = string | number
+/** 後端 `ShiftDayOffset` 的合法值只有 `0`／`1`。 */
+export type DayOffsetValue = number
 
-/** 是否為隔日。`String(...)` 是顯示方向的型別收斂，不是數值轉型，不受 `check:number-cast` 規範。 */
-export const isNextDay = (offset: DayOffsetValue): boolean => String(offset) === '1'
+/** 是否為隔日。 */
+export const isNextDay = (offset: DayOffsetValue): boolean => offset === 1
 
 /** 隔日前綴，含後面的空白；當日時是空字串（呼叫端不必再處理有無空白的差異）。 */
 export const dayOffsetPrefix = (offset: DayOffsetValue, translate: TranslateMessage): string =>

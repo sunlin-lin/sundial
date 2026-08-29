@@ -52,6 +52,7 @@
  * 「有權限看」的分支，見 `attendance-records.handler.ts` 檔頭。
  */
 import { Elysia, t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import { requestContext } from '../../../http/request-context.ts'
 import { envelope } from '../../../shared/envelope.ts'
 import {
@@ -82,11 +83,29 @@ const AttendanceTypeCodeSchema = t.Union([t.Literal(1), t.Literal(2)])
 /** 打卡來源類型。值必須與 `db/schema/attendance-records.ts` 的 `AttendanceSourceTypeCode` 相同。 */
 const AttendanceSourceTypeCodeSchema = t.Union([t.Literal(1), t.Literal(2)])
 
-/** 座標。API 回應為 JSON number，不維持 decimal 字串——理由見計畫 §4.2、`db/schema/
- * attendance-records.ts` 檔頭。 */
+/**
+ * 座標。API 回應為 JSON number，不維持 decimal 字串——理由見計畫 §4.2、`db/schema/
+ * attendance-records.ts` 檔頭。
+ *
+ * **這一組是 request 方向**：Elysia 把 `t.Number`／`t.Integer` 重新定義成可強制轉型版本
+ * （`anyOf [string, number/integer]`），只用在 `create` 的 body（見下方）——使用者送來的座標，
+ * 對「看起來像數字的字串」寬容是合理的。**回應方向要用下面的 `*Response` 版本**，見那一組的檔頭。
+ */
 const Latitude = t.Number({ minimum: -90, maximum: 90 })
 const Longitude = t.Number({ minimum: -180, maximum: 180 })
 const AccuracyMeters = t.Integer({ minimum: 0 })
+
+/**
+ * 座標／定位精準度──response 方向。TypeBox 原生的 `Type.Number`／`Type.Integer`，不是上面
+ * Elysia 的 `t.Number`／`t.Integer`：`latitude`／`longitude`／`accuracyMeters` 在回應裡是後端
+ * 讀出資料庫、直接輸出的欄位，不是需要對字串輸入寬容的使用者輸入。留著可強制轉型的版本，OpenAPI
+ * 上這幾欄會變成 `string | number`，前端 `gen:api` 產生的型別跟著混進 `string`，而前端規範禁止
+ * 對 API 欄位用 `Number(`（`check:number-cast`）——這正是 `accuracyMeters` 曾經踩到的坑，完整推論
+ * 見 `shared/field-schemas.ts` 的 `Pagination` 檔頭，機械檢查見 `check:response-coercion`。
+ */
+const LatitudeResponse = Type.Number({ minimum: -90, maximum: 90 })
+const LongitudeResponse = Type.Number({ minimum: -180, maximum: 180 })
+const AccuracyMetersResponse = Type.Integer({ minimum: 0 })
 
 /** `create`／`revoke`／`revoke-other` 共用的明細形狀：**恆含座標**（見檔頭）。 */
 const AttendanceRecordDetailSchema = t.Object({
@@ -97,19 +116,23 @@ const AttendanceRecordDetailSchema = t.Object({
   attendanceTypeCode: AttendanceTypeCodeSchema,
   sourceTypeCode: AttendanceSourceTypeCodeSchema,
   clockedAt: TaipeiDateTime,
-  latitude: Nullable(Latitude),
-  longitude: Nullable(Longitude),
-  accuracyMeters: Nullable(AccuracyMeters),
+  latitude: Nullable(LatitudeResponse),
+  longitude: Nullable(LongitudeResponse),
+  accuracyMeters: Nullable(AccuracyMetersResponse),
   address: Nullable(t.String({ maxLength: 255 })),
   revokedAt: Nullable(TaipeiDateTime),
   revokedBy: Nullable(Uuid),
+  /** 撤銷人姓名。比照 `company-users/roles` 的 `assignedByName`／`revokedByName` 既有作法，由
+   * repository JOIN 帶出（`revoked_by` → `company_users` → `users`），不是逐列另外查一次。
+   * 未撤銷時 `revokedBy` 為 `null`，這一欄跟著為 `null`（同一個 LEFT JOIN 的自然結果）。 */
+  revokedByName: Nullable(t.String()),
   revokeReason: Nullable(t.String({ maxLength: 500 })),
   createdAt: TaipeiDateTime,
   updatedAt: TaipeiDateTime,
 })
 
 /**
- * `get` 專用形狀：`latitude`／`longitude` 用 `t.Optional(t.Union([t.Number(), t.Null()]))`
+ * `get` 專用形狀：`latitude`／`longitude` 用 `t.Optional(t.Union([Type.Number(), t.Null()]))`
  * ——對應到生成型別 `latitude?: number | null`（計畫 §4.2 原文）。
  */
 const AttendanceRecordGetDetailSchema = t.Object({
@@ -120,12 +143,14 @@ const AttendanceRecordGetDetailSchema = t.Object({
   attendanceTypeCode: AttendanceTypeCodeSchema,
   sourceTypeCode: AttendanceSourceTypeCodeSchema,
   clockedAt: TaipeiDateTime,
-  latitude: t.Optional(t.Union([Latitude, t.Null()])),
-  longitude: t.Optional(t.Union([Longitude, t.Null()])),
-  accuracyMeters: Nullable(AccuracyMeters),
+  latitude: t.Optional(t.Union([LatitudeResponse, t.Null()])),
+  longitude: t.Optional(t.Union([LongitudeResponse, t.Null()])),
+  accuracyMeters: Nullable(AccuracyMetersResponse),
   address: Nullable(t.String({ maxLength: 255 })),
   revokedAt: Nullable(TaipeiDateTime),
   revokedBy: Nullable(Uuid),
+  /** 撤銷人姓名。UI 23「撤銷資訊」要顯示撤銷人，見 `AttendanceRecordDetailSchema` 的同名欄位註解。 */
+  revokedByName: Nullable(t.String()),
   revokeReason: Nullable(t.String({ maxLength: 500 })),
   createdAt: TaipeiDateTime,
   updatedAt: TaipeiDateTime,
@@ -149,10 +174,19 @@ const AttendanceRecordListItemSchema = t.Object({
   revokeReason: Nullable(t.String({ maxLength: 500 })),
 })
 
+/**
+ * `list-by-date` 的狀態篩選（UI 23「查詢條件」）：全部（預設）／只看有效／只看已撤銷。
+ * 依 `attendance_records.revoked_at IS NULL` 判斷（同文件「狀態」欄規則），不是另外一個獨立欄位。
+ */
+const AttendanceRecordListStatusSchema = t.Union([t.Literal('all'), t.Literal('revoked'), t.Literal('active')])
+
 const AttendanceRecordListSearchSchema = t.Object({
   date: IsoDate,
   departmentId: t.Optional(Uuid),
   employeeId: t.Optional(Uuid),
+  /** 一律回聲解析後的值（沒送等同 `all`），比照 `date`——不像 `departmentId`／`employeeId`
+   * 用條件展開，因為這一欄永遠有一個生效值，沒有「沒篩選」與「篩了但送 undefined」的分別。 */
+  status: AttendanceRecordListStatusSchema,
 })
 
 /** `list-own-by-date` 單筆：**恆不含座標**，也不含員工姓名／工號／部門（查的必然是自己，見
@@ -174,9 +208,20 @@ const OwnAttendanceRecordListItemSchema = t.Object({
 /** `list-own-by-date` 的搜尋回聲：只有 `date`——範圍固定是呼叫者本人，沒有其他可篩選欄位。 */
 const OwnAttendanceRecordListSearchSchema = t.Object({ date: IsoDate })
 
-/** `list-by-date`／`list-own-by-date` 都只支援依打卡時刻排序——這一頁服務的是「當天逐筆事件」，
- * 不需要更多排序欄位。 */
-const ATTENDANCE_RECORD_LIST_SORT_FIELDS = ['clockedAt'] as const
+/**
+ * `list-by-date` 支援的排序欄位（UI 23「排序」節，已定案）：預設先依員工（工號）排序，
+ * 同一員工當天的多筆打卡再依打卡時間由早到晚——審核者要在同一個人一天內的多筆打卡之間來回比對
+ * 前後關係，依員工分組比純粹依時間排列更符合這個操作方式。`employeeCode` 是主要排序鍵，
+ * `clockedAt` 保留給日後「今天全公司發生了哪些事件」的時間軸瀏覽需求（UI 23「本輪明確延後」）。
+ * 不管選哪一欄當主鍵，repository 一律用另一欄與 `id` 補足次序，確保分頁邊界穩定
+ * （見 `impl/attendance-records.list-by-date.repository.ts`）。
+ */
+const ATTENDANCE_RECORD_LIST_BY_DATE_SORT_FIELDS = ['employeeCode', 'clockedAt'] as const
+
+/** `list-own-by-date` 只支援依打卡時刻排序——查的必然是同一位員工自己的紀錄，沒有「先依員工排序」
+ * 這個需求（範圍固定是本人，不會有第二個員工可以分組），因此不跟著 `list-by-date` 開放
+ * `employeeCode`，維持獨立的白名單。 */
+const ATTENDANCE_RECORD_LIST_OWN_SORT_FIELDS = ['clockedAt'] as const
 
 /**
  * 每支端點都可能出現的非業務回應。
@@ -278,8 +323,12 @@ export const attendanceRecordsRoutes = (dependencies: AttendanceRecordsDependenc
         date: IsoDate,
         departmentId: t.Optional(Uuid),
         employeeId: t.Optional(Uuid),
+        /** 全部（預設）／只看有效／只看已撤銷（UI 23「查詢條件」）。選填＋預設 `all`：
+         * 沒帶這個條件時查詢語意是「全部」，與「明確篩選『全部』」得到相同結果，沒有理由強迫
+         * 呼叫端每次都要送這一欄。 */
+        status: t.Optional(AttendanceRecordListStatusSchema),
         ...PageRequest,
-        sort: t.Optional(sortRequest(ATTENDANCE_RECORD_LIST_SORT_FIELDS)),
+        sort: t.Optional(sortRequest(ATTENDANCE_RECORD_LIST_BY_DATE_SORT_FIELDS)),
       }),
       response: {
         200: envelope(paginationResponse(AttendanceRecordListSearchSchema, AttendanceRecordListItemSchema)),
@@ -287,7 +336,7 @@ export const attendanceRecordsRoutes = (dependencies: AttendanceRecordsDependenc
       },
       detail: {
         summary: '依日期查全公司打卡（分頁，含已撤銷，供每日全員打卡明細使用）',
-        description: `${describeAttendanceRecordErrors(ATTENDANCE_RECORDS_ENDPOINT_ERRORS.listByDate)} 列表恆不含座標，只顯示反查地址；departmentId／employeeId 比對的都是查詢當天的資料。`,
+        description: `${describeAttendanceRecordErrors(ATTENDANCE_RECORDS_ENDPOINT_ERRORS.listByDate)} 列表恆不含座標，只顯示反查地址；departmentId／employeeId 比對的都是查詢當天的資料；status 未帶時等同 all。預設排序先依員工工號、同一員工再依打卡時間由早到晚（UI 23）。`,
       },
     })
     .post(
@@ -299,7 +348,7 @@ export const attendanceRecordsRoutes = (dependencies: AttendanceRecordsDependenc
           cmd: t.Literal('attendance.records.list-own-by-date'),
           date: IsoDate,
           ...PageRequest,
-          sort: t.Optional(sortRequest(ATTENDANCE_RECORD_LIST_SORT_FIELDS)),
+          sort: t.Optional(sortRequest(ATTENDANCE_RECORD_LIST_OWN_SORT_FIELDS)),
         }),
         response: {
           200: envelope(paginationResponse(OwnAttendanceRecordListSearchSchema, OwnAttendanceRecordListItemSchema)),

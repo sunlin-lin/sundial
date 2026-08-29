@@ -57,18 +57,6 @@ describe('適用版本', () => {
     expect(row?.effectiveFrom).toBe('—')
     expect(row?.recordCount).toBe('—')
   })
-
-  test('筆數是字串形式時同樣走千分位，中間不經過數值轉型', () => {
-    const [row] = toOverviewDisplayRows(
-      [
-        buildRow({
-          effectiveVersion: { versionCode: 'v', effectiveFrom: '2026-01-01', recordCount: '840' },
-        }),
-      ],
-      echoTranslate,
-    )
-    expect(row?.recordCount).toBe('840')
-  })
 })
 
 describe('最後同步（計畫 §4.1：「不適用」不能用空白表達）', () => {

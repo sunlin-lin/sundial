@@ -91,6 +91,7 @@ const toAttendanceRecordDetailData = (detail: AttendanceRecordDetail) => ({
   address: detail.address,
   revokedAt: detail.revokedAt,
   revokedBy: detail.revokedBy,
+  revokedByName: detail.revokedByName,
   revokeReason: detail.revokeReason,
   createdAt: detail.createdAt,
   updatedAt: detail.updatedAt,
@@ -116,6 +117,7 @@ const toAttendanceRecordGetDetailData = (view: AttendanceRecordView) => {
     address: detail.address,
     revokedAt: detail.revokedAt,
     revokedBy: detail.revokedBy,
+    revokedByName: detail.revokedByName,
     revokeReason: detail.revokeReason,
     createdAt: detail.createdAt,
     updatedAt: detail.updatedAt,
@@ -182,9 +184,11 @@ type ListByDateBody = {
   readonly date: string
   readonly departmentId?: string
   readonly employeeId?: string
+  /** 全部／只看有效／只看已撤銷（UI 23）。未帶時 handler 補上 `'all'`。 */
+  readonly status?: 'all' | 'active' | 'revoked'
   readonly perPage: number
   readonly currentPage: number
-  readonly sort?: { readonly field: 'clockedAt'; readonly order: 'asc' | 'desc' }
+  readonly sort?: { readonly field: 'employeeCode' | 'clockedAt'; readonly order: 'asc' | 'desc' }
 }
 
 /** `list-own-by-date` 的 body：**沒有 `employeeId`／`departmentId`**——範圍固定是呼叫者本人，
@@ -196,7 +200,11 @@ type ListOwnByDateBody = {
   readonly sort?: { readonly field: 'clockedAt'; readonly order: 'asc' | 'desc' }
 }
 
-const DEFAULT_LIST_BY_DATE_SORT = { field: 'clockedAt', order: 'asc' } as const
+/** `list-by-date` 未帶 `sort` 時的預設值（UI 23 定案）：先依員工工號，同一員工再依打卡時間。 */
+const DEFAULT_LIST_BY_DATE_SORT = { field: 'employeeCode', order: 'asc' } as const
+
+/** `list-own-by-date` 未帶 `sort` 時的預設值——範圍固定是本人，沒有「先依員工分組」的需求。 */
+const DEFAULT_LIST_OWN_BY_DATE_SORT = { field: 'clockedAt', order: 'asc' } as const
 
 export const handleAttendanceRecordCreate = async (
   dependencies: AttendanceRecordsDependencies,
@@ -265,6 +273,9 @@ const toListByDateSearchEcho = (body: ListByDateBody) => ({
   date: body.date,
   ...(body.departmentId === undefined ? {} : { departmentId: body.departmentId }),
   ...(body.employeeId === undefined ? {} : { employeeId: body.employeeId }),
+  // `status` 一律回聲解析後的值（比照 `date`），不像 departmentId／employeeId 用條件展開——
+  // 這一欄永遠有一個生效值（未帶時等同 'all'），沒有「沒篩選」與「篩了但送 undefined」的分別。
+  status: body.status ?? 'all',
 })
 
 export const handleAttendanceRecordListByDate = async (
@@ -278,6 +289,7 @@ export const handleAttendanceRecordListByDate = async (
     workDate: context.body.date,
     departmentId: context.body.departmentId ?? null,
     employeeId: context.body.employeeId ?? null,
+    status: context.body.status ?? 'all',
     perPage: context.body.perPage,
     currentPage: context.body.currentPage,
     sort: context.body.sort ?? DEFAULT_LIST_BY_DATE_SORT,
@@ -312,7 +324,7 @@ export const handleAttendanceRecordListOwnByDate = async (
     workDate: context.body.date,
     perPage: context.body.perPage,
     currentPage: context.body.currentPage,
-    sort: context.body.sort ?? DEFAULT_LIST_BY_DATE_SORT,
+    sort: context.body.sort ?? DEFAULT_LIST_OWN_BY_DATE_SORT,
   }
 
   const result = await listOwnAttendanceRecordsByDate(toAttendanceRecordsContext(dependencies, identity), query)

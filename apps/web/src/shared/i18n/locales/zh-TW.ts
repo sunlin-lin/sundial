@@ -613,6 +613,10 @@ export const ZH_TW = {
   'attendance-daily-records.filter.department': '部門',
   'attendance-daily-records.filter.employee': '人員',
   'attendance-daily-records.filter.employee-keyword-placeholder': '輸入員工編號或姓名',
+  'attendance-daily-records.filter.status': '狀態',
+  'attendance-daily-records.filter.status-all': '全部',
+  'attendance-daily-records.filter.status-active': '只看有效',
+  'attendance-daily-records.filter.status-revoked': '只看已撤銷',
 
   'attendance-daily-records.column.employee-code': '員工編號',
   'attendance-daily-records.column.employee-name': '姓名',

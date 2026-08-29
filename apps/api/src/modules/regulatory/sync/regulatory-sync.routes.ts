@@ -19,6 +19,7 @@
  * 同步由伺服器端的程序呼叫 `runSync`（見 `regulatory-sync.service.ts` 檔頭）。
  */
 import { Elysia, t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import { requestContext } from '../../../http/request-context.ts'
 import { envelope } from '../../../shared/envelope.ts'
 import {
@@ -51,8 +52,12 @@ const DatasetCodeSchema = t.Union(REGULATORY_DATASET_CODES.map((code) => t.Liter
  *
  * 上限用 `Number.MAX_SAFE_INTEGER`：schema 欄位在 TypeScript 端是 `number`（`mode: 'number'`），
  * 超過 2^53 的值在 JSON 解析的當下就已經失真了。
+ *
+ * **這是 response 方向**（只用在 `SyncLogSummarySchema`，本檔沒有任何 body 收 id）：一律用
+ * TypeBox 原生的 `Type.Integer`，不是 Elysia 可強制轉型的 `t.Integer`（見
+ * `check-response-coercion.ts` 檔頭）。
  */
-const BigIntId = t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })
+const BigIntId = Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })
 
 /**
  * 同步狀態代碼，聯集字面值（§2）。
@@ -86,7 +91,8 @@ const SyncLogSummarySchema = t.Object({
   datasetVersionId: Nullable(BigIntId),
   /** 本次 resource discovery 抓到的資源網址。**不是永久固定 URL**（計畫 §7.0）。 */
   governmentResourceId: Nullable(t.String({ maxLength: 150 })),
-  recordsReceived: Nullable(t.Integer({ minimum: 0 })),
+  // 回應方向欄位，一律用 TypeBox 原生的 Type.Integer（見 check-response-coercion.ts 檔頭）。
+  recordsReceived: Nullable(Type.Integer({ minimum: 0 })),
   /** 失敗原因。`status_code=3` 時必有值——這一欄就是這張表存在的理由（計畫 §3.4）。 */
   errorMessage: Nullable(t.String()),
   /** 同步程序存活訊號（計畫 §3.4，決策 D2）。 */

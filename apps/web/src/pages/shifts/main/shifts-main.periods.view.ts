@@ -30,8 +30,13 @@ export const newWorkPeriod = (): LocalWorkPeriod => ({ startTime: '', endTime: '
 /**
  * 一段時段 → 一行看得懂的文字，例如 `'22:00–隔日 06:00'`。
  *
- * 同時吃得下 API 列（`endDayOffset: string | number`）與本地編輯列（`endDayOffset: 0 | 1`）：
- * 兩者在這裡要做的事完全相同，型別上 `0 | 1` 本來就是 `string | number` 的子集，不需要轉換。
+ * 同時吃得下 API 列（`endDayOffset: number`）與本地編輯列（`endDayOffset: 0 | 1`）：
+ * 兩者在這裡要做的事完全相同，型別上 `0 | 1` 本來就是 `number` 的子集，不需要轉換。
+ *
+ * `endDayOffset` 過去曾經需要防禦字串輸入：後端回應方向誤用了可強制轉型的 `t.Integer`，
+ * OpenAPI 上留了 `string | number` 的影子。`check:response-coercion` 掃出並修正這一批誤用後，
+ * 回應方向的 `endDayOffset` 已經是乾淨的 `number`，這裡不再需要接受字串——不要因為
+ * 「看起來像防禦性寫法」就加回來。
  */
 export const periodRangeDisplay = (
   period: Pick<ApiWorkPeriod, 'startTime' | 'endTime' | 'endDayOffset'>,

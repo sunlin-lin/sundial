@@ -37,8 +37,6 @@ describe('版本清單的列怎麼組', () => {
   test('筆數加千分位，中間不經過數值轉型', () => {
     const [row] = toVersionDisplayRows([buildRow({ recordCount: 840 })], null)
     expect(row?.recordCount).toBe('840')
-    const [big] = toVersionDisplayRows([buildRow({ recordCount: '12345' })], null)
-    expect(big?.recordCount).toBe('12,345')
   })
 
   test('沒有筆數時顯示「沒有值」', () => {
@@ -48,9 +46,7 @@ describe('版本清單的列怎麼組', () => {
 
   test('id 一律收成字串，表格的 row-key 才不會因為型別而對不上', () => {
     const [numeric] = toVersionDisplayRows([buildRow({ id: 12 })], null)
-    const [text] = toVersionDisplayRows([buildRow({ id: '12' })], null)
     expect(numeric?.id).toBe('12')
-    expect(text?.id).toBe('12')
   })
 })
 

@@ -5,6 +5,7 @@
  * 沒有「切頁會弄斷樹狀結構」那個問題。
  */
 import { Elysia, t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import { requestContext } from '../../../http/request-context.ts'
 import { envelope } from '../../../shared/envelope.ts'
 import {
@@ -42,8 +43,9 @@ const JobTitleKeyword = t.String({ maxLength: 128 })
 
 const JobTitleDetailSchema = t.Object({
   id: Uuid,
-  /** `true`＝系統預設（全平台共用，不能被本公司修改／刪除，見 `db/schema/job-titles.ts` 檔頭）。 */
-  isSystem: t.Boolean(),
+  /** `true`＝系統預設（全平台共用，不能被本公司修改／刪除，見 `db/schema/job-titles.ts` 檔頭）。
+   * 回應方向欄位，一律用 TypeBox 原生的 Type.Boolean（見 check-response-coercion.ts 檔頭）。 */
+  isSystem: Type.Boolean(),
   code: JobTitleCode,
   name: JobTitleName,
   description: Nullable(JobTitleDescription),

@@ -22,12 +22,6 @@ describe('一段時段的呈現', () => {
       '22:00–shifts-main.day-offset.next 06:00',
     )
   })
-
-  test('endDayOffset 是 API 的 string|number 也吃得下，不需要先轉型', () => {
-    expect(periodRangeDisplay({ startTime: '22:00', endTime: '06:00', endDayOffset: '1' }, echoTranslate)).toBe(
-      '22:00–shifts-main.day-offset.next 06:00',
-    )
-  })
 })
 
 describe('清單那一格：多段時段', () => {

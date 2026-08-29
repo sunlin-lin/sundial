@@ -9,6 +9,7 @@
  * 一旦它來自客戶端，任何人改一個字串就能操作別家公司的帳號。
  */
 import { Elysia, t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import { requestContext, type RequestSession } from '../../../http/request-context.ts'
 import type { VerifiedIdentity } from '../../../shared/access-control.ts'
 import { envelope } from '../../../shared/envelope.ts'
@@ -45,15 +46,30 @@ const MAX_ROLE_IDS = 50
 /**
  * 清單的搜尋條件。
  *
- * 同一個 schema 同時用於 request（展開進 body）與 response 的回聲（§1.4），
- * 兩者因此不可能漂移。分成兩份寫的時候，回聲會在某次加篩選條件後靜靜少一欄，
- * 而前端的 race condition 防護（比對「這包回應是不是我現在畫面上這組條件的結果」）跟著失效。
+ * `companyUserId`／`roleId` 兩個欄位同時用於 request（展開進 body）與 response 的回聲（§1.4），
+ * 兩者因此不可能漂移。**`includeRevoked` 拆成 request／response 兩個版本**：Elysia 的
+ * `t.Boolean` 是可強制轉型版本，用在 request 方向（`update` 之類 body 對「看起來像布林值的
+ * 字串」寬容）合理，但回應方向要用 TypeBox 原生的 `Type.Boolean`——這一欄是後端原樣回聲使用者
+ * 送來的條件，不是需要對字串輸入寬容的地方（理由完整見 `check-response-coercion.ts` 檔頭與
+ * `shared/field-schemas.ts` 的 `Pagination` 檔頭）。兩個版本共用 `companyUserId`／`roleId`，
+ * 避免同一組欄位在兩處各自維護一份、日後改一邊忘了改另一邊。
  */
-const ListSearch = t.Object({
+const ListSearchIdentifierFields = {
   companyUserId: t.Optional(Uuid),
   roleId: t.Optional(Uuid),
+}
+
+/** request 方向：`...ListSearch.properties` 展開進 `list` 的 body。 */
+const ListSearch = t.Object({
+  ...ListSearchIdentifierFields,
   /** 帶預設值而不是選填：撤銷紀錄預設不顯示，但「有沒有帶這個條件」不該讓回聲的形狀改變。 */
   includeRevoked: t.Boolean({ default: false }),
+})
+
+/** response 方向：`search` 回聲用，見上方檔頭。 */
+const ListSearchResponse = t.Object({
+  ...ListSearchIdentifierFields,
+  includeRevoked: Type.Boolean({ default: false }),
 })
 
 const ListItem = t.Object({
@@ -74,7 +90,7 @@ const ListItem = t.Object({
   revokedByName: Nullable(t.String()),
 })
 
-const ListData = paginationResponse(ListSearch, ListItem)
+const ListData = paginationResponse(ListSearchResponse, ListItem)
 
 const AssignedRole = t.Object({
   assignmentId: Uuid,

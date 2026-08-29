@@ -13,6 +13,7 @@
  * 而漂移不會有任何地方變紅——結果是那個權限實際上授不出去，或者授到了不該授的東西。
  */
 import { Elysia, t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import { requestContext } from '../../../http/request-context.ts'
 import { envelope } from '../../../shared/envelope.ts'
 import {
@@ -72,9 +73,10 @@ const RoleSummarySchema = t.Object({
   /**
    * 系統預設角色的保護旗標。UI **不以它顯示「預設／自訂」分類**
    * （`docs/ui/07-ui-role-permission.md`），回傳它是為了讓前端能停用「刪除」與「編輯」按鈕
-   * ——後端一定會擋（§5.2），前端的停用只是體驗優化。
+   * ——後端一定會擋（§5.2），前端的停用只是體驗優化。回應方向欄位，一律用 TypeBox 原生的
+   * Type.Boolean（見 check-response-coercion.ts 檔頭）。
    */
-  isSystem: t.Boolean(),
+  isSystem: Type.Boolean(),
 })
 
 const RoleDetailSchema = t.Object({
@@ -83,10 +85,11 @@ const RoleDetailSchema = t.Object({
   name: RoleName,
   description: Nullable(RoleDescription),
   status: RoleStatusSchema,
-  isSystem: t.Boolean(),
+  isSystem: Type.Boolean(),
   permissionIds: t.Array(Uuid),
-  /** 目前仍有效指派給幾位公司成員。前端據此在刪除前提示「仍有 N 位成員使用」。 */
-  assignedUserCount: t.Integer({ minimum: 0 }),
+  /** 目前仍有效指派給幾位公司成員。前端據此在刪除前提示「仍有 N 位成員使用」。回應方向欄位，
+   * 一律用 TypeBox 原生的 Type.Integer（見 check-response-coercion.ts 檔頭）。 */
+  assignedUserCount: Type.Integer({ minimum: 0 }),
   /** 業務時間，台北牆鐘、不帶時區標記（§6.1）：帶了標記前端會依瀏覽器時區再換算一次。 */
   createdAt: TaipeiDateTime,
   updatedAt: TaipeiDateTime,

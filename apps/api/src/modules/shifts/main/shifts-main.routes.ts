@@ -25,6 +25,7 @@
  * `errors[]` 可用的通用錯誤，改完送出才會撞見第二種格式的錯誤——同一張表單卻要用兩種方式呈現。
  */
 import { Elysia, t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import { requestContext } from '../../../http/request-context.ts'
 import { envelope } from '../../../shared/envelope.ts'
 import {
@@ -87,11 +88,26 @@ const ShiftClockTime = t.String({ pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' })
 /**
  * 日偏移。`0` 或 `1`——本計畫的班別以「一天怎麼上班」為框架（計畫 §1），時段最長跨到隔天，
  * 不支援跨兩個以上日曆日的單一時段或休息。
+ *
+ * **這是 request 方向**：用在 `*InputSchema`（`create`／`update` 的 body）。**回應方向要用
+ * 下面的 `ShiftDayOffsetResponse`**——`*DataSchema` 是後端輸出的欄位，不該可強制轉型
+ * （理由見 `check-response-coercion.ts` 檔頭）。
  */
 const ShiftDayOffset = t.Integer({ minimum: 0, maximum: 1 })
 
-/** 時段／休息在同一班別內的順序，從 1 起算（由呼叫端指定，不是資料庫自動編號）。 */
+/** {@link ShiftDayOffset} 的 response 方向版本，TypeBox 原生的 `Type.Integer`。 */
+const ShiftDayOffsetResponse = Type.Integer({ minimum: 0, maximum: 1 })
+
+/**
+ * 時段／休息在同一班別內的順序，從 1 起算（由呼叫端指定，不是資料庫自動編號）。
+ *
+ * **這是 request 方向**，理由與 {@link ShiftDayOffset} 相同；**回應方向用下面的
+ * `ShiftSequenceNoResponse`**。
+ */
 const ShiftSequenceNo = t.Integer({ minimum: 1 })
+
+/** {@link ShiftSequenceNo} 的 response 方向版本，TypeBox 原生的 `Type.Integer`。 */
+const ShiftSequenceNoResponse = Type.Integer({ minimum: 1 })
 
 /**
  * 工作時段（輸入方向）。**沒有 `workMinutes`**——推導值，見本檔檔頭。
@@ -128,24 +144,26 @@ const ShiftProfileFields = {
   breaks: t.Array(ShiftBreakInputSchema),
 } as const
 
-/** 工作時段（輸出方向）：多了推導出的 `workMinutes`。 */
+/** 工作時段（輸出方向）：多了推導出的 `workMinutes`。全部欄位一律用 response 方向的 TypeBox
+ * 原生型別（見 `ShiftDayOffset`／`ShiftSequenceNo` 檔頭）。 */
 const ShiftWorkPeriodDataSchema = t.Object({
-  sequenceNo: ShiftSequenceNo,
+  sequenceNo: ShiftSequenceNoResponse,
   startTime: ShiftClockTime,
   endTime: ShiftClockTime,
-  endDayOffset: ShiftDayOffset,
-  workMinutes: t.Integer({ minimum: 0 }),
+  endDayOffset: ShiftDayOffsetResponse,
+  workMinutes: Type.Integer({ minimum: 0 }),
 })
 
-/** 休息時段（輸出方向）：多了推導出的 `breakMinutes`。 */
+/** 休息時段（輸出方向）：多了推導出的 `breakMinutes`。全部欄位一律用 response 方向的 TypeBox
+ * 原生型別；`isPaid` 是本檔獨立的一份宣告（不是 {@link ShiftBreakInputSchema} 的 `isPaid`）。 */
 const ShiftBreakDataSchema = t.Object({
-  sequenceNo: ShiftSequenceNo,
+  sequenceNo: ShiftSequenceNoResponse,
   startTime: ShiftClockTime,
   endTime: ShiftClockTime,
-  startDayOffset: ShiftDayOffset,
-  endDayOffset: ShiftDayOffset,
-  breakMinutes: t.Integer({ minimum: 0 }),
-  isPaid: t.Boolean(),
+  startDayOffset: ShiftDayOffsetResponse,
+  endDayOffset: ShiftDayOffsetResponse,
+  breakMinutes: Type.Integer({ minimum: 0 }),
+  isPaid: Type.Boolean(),
 })
 
 /**
@@ -157,12 +175,13 @@ const ShiftSummarySchema = t.Object({
   code: ShiftCode,
   name: ShiftName,
   workTypeCode: ShiftWorkTypeSchema,
-  /** 推導值（計畫 §4.1）：任一工作時段的 `endDayOffset > 0`。 */
-  isOvernight: t.Boolean(),
-  isFlexible: t.Boolean(),
+  /** 推導值（計畫 §4.1）：任一工作時段的 `endDayOffset > 0`。回應方向欄位，一律用 TypeBox 原生
+   * 的 Type.Boolean／Type.Integer（見 check-response-coercion.ts 檔頭）。 */
+  isOvernight: Type.Boolean(),
+  isFlexible: Type.Boolean(),
   /** 推導值（計畫 §4.1）：工作時段分鐘總和 － 無薪休息分鐘總和；可能為 0，理論上也可能為負。 */
-  requiredWorkMinutes: t.Integer(),
-  isActive: t.Boolean(),
+  requiredWorkMinutes: Type.Integer(),
+  isActive: Type.Boolean(),
   workPeriods: t.Array(ShiftWorkPeriodDataSchema),
   breaks: t.Array(ShiftBreakDataSchema),
 })
@@ -172,10 +191,11 @@ const ShiftDetailSchema = t.Object({
   code: ShiftCode,
   name: ShiftName,
   workTypeCode: ShiftWorkTypeSchema,
-  isOvernight: t.Boolean(),
-  isFlexible: t.Boolean(),
-  requiredWorkMinutes: t.Integer(),
-  isActive: t.Boolean(),
+  // 回應方向欄位，一律用 TypeBox 原生的 Type.Boolean／Type.Integer（見 ShiftSummarySchema 註解）。
+  isOvernight: Type.Boolean(),
+  isFlexible: Type.Boolean(),
+  requiredWorkMinutes: Type.Integer(),
+  isActive: Type.Boolean(),
   workPeriods: t.Array(ShiftWorkPeriodDataSchema),
   breaks: t.Array(ShiftBreakDataSchema),
   description: ShiftDescription,
@@ -184,13 +204,15 @@ const ShiftDetailSchema = t.Object({
   updatedAt: TaipeiDateTime,
 })
 
-/** 列表的搜尋條件回聲（§1.4）。使用者沒送的條件就不出現，前端才比對得出這包是不是自己要的。 */
+/** 列表的搜尋條件回聲（§1.4）。使用者沒送的條件就不出現，前端才比對得出這包是不是自己要的。
+ * 三個布林旗標是回聲值，一律用 TypeBox 原生的 Type.Boolean（見 check-response-coercion.ts 檔頭）
+ * ——與 `list` body 底下同名的 `t.Optional(t.Boolean())` 是各自獨立的宣告，不是同一個常數。 */
 const ShiftSearchSchema = t.Object({
   keyword: t.Optional(t.String({ maxLength: 128 })),
   workTypeCode: t.Optional(ShiftWorkTypeSchema),
-  isOvernight: t.Optional(t.Boolean()),
-  isFlexible: t.Optional(t.Boolean()),
-  isActive: t.Optional(t.Boolean()),
+  isOvernight: t.Optional(Type.Boolean()),
+  isFlexible: t.Optional(Type.Boolean()),
+  isActive: t.Optional(Type.Boolean()),
 })
 
 /**

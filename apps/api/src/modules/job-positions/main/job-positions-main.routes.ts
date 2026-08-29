@@ -3,6 +3,7 @@
  * `job-titles/main/job-titles-main.routes.ts`；扁平列表，一律分頁（§1.4）。
  */
 import { Elysia, t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import { requestContext } from '../../../http/request-context.ts'
 import { envelope } from '../../../shared/envelope.ts'
 import {
@@ -36,7 +37,9 @@ const JobPositionKeyword = t.String({ maxLength: 128 })
 
 const JobPositionDetailSchema = t.Object({
   id: Uuid,
-  isSystem: t.Boolean(),
+  // 回應方向欄位，不是使用者輸入（沒有任何 body 收 isSystem），一律用 TypeBox 原生的
+  // Type.Boolean，不是 Elysia 可強制轉型的 t.Boolean（見 check-response-coercion.ts 檔頭）。
+  isSystem: Type.Boolean(),
   code: JobPositionCode,
   name: JobPositionName,
   description: Nullable(JobPositionDescription),

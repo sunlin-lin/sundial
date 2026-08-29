@@ -17,6 +17,7 @@
  * 效果是平台上每一家公司的 Payroll 都跟著換版本。
  */
 import { Elysia, t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import { requestContext } from '../../../http/request-context.ts'
 import { envelope } from '../../../shared/envelope.ts'
 import {
@@ -61,8 +62,15 @@ const DatasetCodeSchema = t.Union(REGULATORY_DATASET_CODES.map((code) => t.Liter
  *
  * 上限用 `Number.MAX_SAFE_INTEGER`：schema 欄位在 TypeScript 端是 `number`（`mode: 'number'`），
  * 超過 2^53 的值在 JSON 解析的當下就已經失真了，讓它通過驗證只是把問題往後推一層。
+ *
+ * **這是 request 方向**：只用在 `get` 的 body（`id: DatasetVersionId`）。**回應方向要用下面的
+ * `DatasetVersionIdResponse`**——版本清單／記錄的 `id` 是後端輸出的欄位，不該可強制轉型
+ * （理由見 `check-response-coercion.ts` 檔頭）。
  */
 const DatasetVersionId = t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })
+
+/** {@link DatasetVersionId} 的 response 方向版本，TypeBox 原生的 `Type.Integer`。 */
+const DatasetVersionIdResponse = Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })
 
 /**
  * 原始資料格式代碼，聯集字面值（§2）。
@@ -96,15 +104,15 @@ const DecimalRate = t.String({ pattern: '^-?\\d{1,10}(?:\\.\\d{1,8})?$' })
  * 這裡沒有它，不是因為「暫時不需要」，而是看原始 Snapshot 的端點刻意不開（計畫 D3）。
  */
 const DatasetVersionSummarySchema = t.Object({
-  id: DatasetVersionId,
+  id: DatasetVersionIdResponse,
   datasetCode: DatasetCodeSchema,
   versionCode: t.String({ minLength: 1, maxLength: 30 }),
   /** 生效日，台北的日曆日，不帶時區標記（§6.1）。 */
   effectiveFrom: IsoDate,
   /** 失效日。`null` 是常態——只在政府明示失效日時才寫入（計畫 §3.2 (d)）。 */
   effectiveTo: Nullable(IsoDate),
-  /** 解析後筆數；`null` = 同步失敗或尚未解析。 */
-  recordCount: Nullable(t.Integer({ minimum: 0 })),
+  /** 解析後筆數；`null` = 同步失敗或尚未解析。回應方向欄位，一律用 TypeBox 原生的 Type.Integer。 */
+  recordCount: Nullable(Type.Integer({ minimum: 0 })),
   /** 業務時間，台北牆鐘、不帶時區標記（§6.1）。 */
   syncedAt: TaipeiDateTime,
   createdAt: TaipeiDateTime,
@@ -134,7 +142,7 @@ const DatasetVersionDetailSchema = t.Composite([
  * schema 物件本身原樣帶過去，執行期的驗證一個字都沒放寬（同 `shared/envelope.ts` 的作法）。
  */
 const RegulatoryRecordSchema = t.Object({
-  id: DatasetVersionId,
+  id: DatasetVersionIdResponse,
   recordKey: t.String({ minLength: 1, maxLength: 150 }),
   code: Nullable(t.String({ maxLength: 100 })),
   name: Nullable(t.String({ maxLength: 250 })),
@@ -143,7 +151,8 @@ const RegulatoryRecordSchema = t.Object({
   amount: Nullable(DecimalAmount),
   rate: Nullable(DecimalRate),
   data: t.Unsafe<RegulatoryRecordData>(RegulatoryRecordDataSchema),
-  sortOrder: Nullable(t.Integer()),
+  // 回應方向欄位，一律用 TypeBox 原生的 Type.Integer（見 check-response-coercion.ts 檔頭）。
+  sortOrder: Nullable(Type.Integer()),
 })
 
 const ResolvedDatasetSchema = t.Object({
@@ -171,7 +180,8 @@ const SyncStatusCodeSchema = t.Union([t.Literal(1), t.Literal(2), t.Literal(3), 
 const DatasetOverviewVersionSchema = t.Object({
   versionCode: t.String({ minLength: 1, maxLength: 30 }),
   effectiveFrom: IsoDate,
-  recordCount: Nullable(t.Integer({ minimum: 0 })),
+  // 回應方向欄位，一律用 TypeBox 原生的 Type.Integer（見 check-response-coercion.ts 檔頭）。
+  recordCount: Nullable(Type.Integer({ minimum: 0 })),
 })
 
 /**

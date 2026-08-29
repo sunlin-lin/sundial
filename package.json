@@ -35,6 +35,8 @@
     "check:menu-permission": "bun run apps/api/scripts/check-menu-permission.ts",
     "//check:attendance-recalc": "剛真的發生過的靜默失敗：Stage 4 把 `attendance_results` 的重算接上了 `revoke`／`revoke-other`，漏了 `create`——正常打卡上下班寫入成功，但判定結果永遠不會出現，唯一讓它出現的方法是去撤銷一筆打卡，畫面一片空白、`bun run ci` 全綠，沒有任何一層會報錯。這支腳本擋的是任何寫入 `attendance_records` 的呼叫都必須在同一個函式、同一個交易 handle 底下呼叫 `recalculateAttendanceResultForWorkDay`：先掃 `*.repository.ts` 找出真正寫這張表的函式名單（不是寫死函式名，理由與抓不到什麼見腳本檔頭），再掃全部呼叫點比對兩者的交易 handle 是不是同一個識別字，判準與 `check-audit-transaction.ts` 的「兩個不同 handle」同一套思路。排在 `check:menu-permission` 之後，理由與其餘 check:* 相同：純靜態掃描，放在一起讓「規範掃描」這一段在 ci 裡連續。理由與判準完整寫在 apps/api/scripts/check-attendance-recalc.ts 檔頭。",
     "check:attendance-recalc": "bun run apps/api/scripts/check-attendance-recalc.ts",
+    "//check:response-coercion": "Elysia 把 `t.Integer`／`t.Number`／`t.Boolean` 重新定義成可強制轉型版本（`anyOf [string, integer]` 之類），是為了讓 request 方向容忍看起來像數字的字串——這個容錯回應方向不需要、也不該有。`attendance-records.routes.ts` 的 `accuracyMeters` 真的踩到這個坑：拿 Elysia 的 `t.Integer` 當回應欄位，OpenAPI 契約上這一欄變成 `string | integer`，前端 `gen:api` 產生的型別跟著混進 `string`，逼前端另開一支繞過 `check:number-cast` 禁令的怪函式。這支腳本用 AST 找每一支 `.post(...)` 的 `response:`，對它引用到的 schema 做識別字追蹤（含展開本檔其他 `const` 常數），確認裡面沒有 `t.Integer`／`t.Number`／`t.Boolean`；`body:` 底下完全不受限制，那正是這三個型別存在的理由。排在 `check:attendance-recalc` 之後，理由與其餘 check:* 相同：純靜態掃描，放在一起讓「規範掃描」這一段在 ci 裡連續。理由與判準完整寫在 apps/api/scripts/check-response-coercion.ts 檔頭。",
+    "check:response-coercion": "bun run apps/api/scripts/check-response-coercion.ts",
     "//check:live-sources": "刻意不在 `ci` 裡：它會真的打政府端點，而 CI 環境未必有外網——串進去之後第一次紅燈的原因會與那次 PR 無關，處置幾乎必然是「先關掉」，然後永遠關著。該由有外網的環境跑：一支排程（與同步排程錯開）或一個標明「需要外網」的專屬 job。它沒有寬容模式（連不上就失敗）。真正的防線是排程同步本身（政府改格式時同步會 status=3 並留下 error_message），這支只是讓人在排程跑之前先知道；停掉它失去的是提前量，不是偵測能力。理由完整寫在 apps/api/scripts/check-live-sources.ts 檔頭。",
     "check:live-sources": "bun run apps/api/scripts/check-live-sources.ts",
     "//gen:api": "API 契約的產生鏈（§1.7）：載入 app 定義 → 輸出 openapi.json → 由它產生前端型別與 API client。**必須能在後端未啟動、資料庫未連線的情況下執行**——它只 import app 定義，不 listen、不連 DB、不讀 .env。理由完整寫在 apps/api/scripts/generate-api.ts 檔頭。產生物一律不進版控，禁止手動修改。",
@@ -49,7 +51,7 @@
     "seed:dev": "bun run --filter @sundial/api seed:dev",
     "backfill:plaintext": "bun run --filter @sundial/api backfill:plaintext",
     "//ci": "`gen:api` 排在 `typecheck:web` 之前，而且刻意排在**不需要 DB service 的位置**（§1.7 明文要求它在沒有 DB service 的 job 中執行）：這一輪跑得過，就等於證明了「只要有原始碼就產得出契約」。反過來若它被挪到需要 DB 的 job 裡，那個要求會在沒有任何人察覺的情況下失效——指令照樣是綠的，只是不再證明任何事。",
-    "ci": "bun run check && bun run typecheck && bun run gen:api && bun run typecheck:web && bun run check:layers && bun run check:i18n && bun run check:audit-policy && bun run check:audit-transaction && bun run check:migration-journal && bun run check:n-plus-one && bun run check:dataset-code && bun run check:number-cast && bun run check:tz-leak && bun run check:menu-permission && bun run check:attendance-recalc && bun run test"
+    "ci": "bun run check && bun run typecheck && bun run gen:api && bun run typecheck:web && bun run check:layers && bun run check:i18n && bun run check:audit-policy && bun run check:audit-transaction && bun run check:migration-journal && bun run check:n-plus-one && bun run check:dataset-code && bun run check:number-cast && bun run check:tz-leak && bun run check:menu-permission && bun run check:attendance-recalc && bun run check:response-coercion && bun run test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

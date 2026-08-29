@@ -113,15 +113,14 @@ export const deriveCoordinateDisplayState = (detail: AttendanceRecordGetDetail):
 }
 
 /**
- * `accuracyMeters` 的產生型別是 `(string | number) | null`，不是單純的 `number | null`。
+ * `accuracyMeters` 的產生型別現在是單純的 `number | null`——先前 `attendance-records.routes.ts`
+ * 的 `AccuracyMeters` 回應欄位誤用 Elysia 的 `t.Integer`（可強制轉型版本），讓 OpenAPI 上這一欄
+ * 變成 `string | integer`；`check:response-coercion` 已把回應方向的座標／定位精準度欄位換成
+ * TypeBox 原生的 `Type.Number`／`Type.Integer`，這個後端形狀缺口已修正。
  *
- * 這不是本檔的判斷寫錯：後端 `attendance-records.routes.ts` 的 `AccuracyMeters` 欄位用了 Elysia
- * 的 `t.Integer`（可強制轉型版本），而 `field-schemas.ts` 檔頭明講**回應方向的欄位一律要用
- * TypeBox 原生的 `Type.Integer`**，理由正是「避免回應方向的整數在 OpenAPI 上變成
- * `string | integer`」——這一欄踩到了那條規則要防的情況（已在交付報告回報這個後端形狀缺口）。
- *
- * 這裡刻意不用 `Number(...)` 轉型（`check:number-cast` 禁止，且轉型後也不需要拿去計算）：
- * `string` 與 `number` 都能直接嵌進樣板字面值顯示，轉型只是多一個不必要的步驟。
+ * 參數型別仍保留 `string | number`：這裡不因為產生型別收緊就跟著收窄，多一種輸入型別的容忍
+ * 沒有額外成本（`string` 與 `number` 都能直接嵌進樣板字面值顯示），刻意不用 `Number(...)` 轉型
+ * （`check:number-cast` 禁止，且轉型後也不需要拿去計算）。
  */
 export const accuracyMetersDisplay = (accuracyMeters: string | number | null): string =>
   accuracyMeters === null ? EMPTY_DISPLAY : `${accuracyMeters}`
@@ -137,9 +136,9 @@ export type AttendanceDailyRecordDetailDisplay = {
   readonly accuracyMetersDisplay: string
   readonly isRevoked: boolean
   readonly revokedAtDisplay: string
-  /** 撤銷操作者的識別碼，不是姓名——`get` 回應的 `revokedBy` 只是 `company_users` 的 UUID，
-   * 沒有對應的姓名欄位可以 JOIN（不像 `company-users.roles.list` 的 `assignedByName` 那樣
-   * 已經回了姓名）。已在交付報告回報這個後端形狀缺口，這裡先如實顯示原始值，不假裝有姓名可顯示。 */
+  /** 撤銷操作者的姓名（`get` 回應的 `revokedByName`，比照 `company-users.roles.list` 的
+   * `assignedByName` 既有作法），不是 `revokedBy`（那是 `company_users` 的 UUID，只用來稽核追蹤，
+   * 不適合顯示給使用者看）。 */
   readonly revokedByDisplay: string
   readonly revokeReasonDisplay: string
 }
@@ -164,7 +163,7 @@ export const toDetailDisplay = (
   accuracyMetersDisplay: accuracyMetersDisplay(detail.accuracyMeters),
   isRevoked: detail.revokedAt !== null,
   revokedAtDisplay: formatDateTime(detail.revokedAt),
-  revokedByDisplay: detail.revokedBy ?? EMPTY_DISPLAY,
+  revokedByDisplay: detail.revokedByName ?? EMPTY_DISPLAY,
   revokeReasonDisplay: detail.revokeReason ?? EMPTY_DISPLAY,
 })
 

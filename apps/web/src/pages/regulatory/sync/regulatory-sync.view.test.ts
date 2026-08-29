@@ -56,10 +56,6 @@ describe('收到筆數', () => {
     expect(recordsReceivedDisplay(1234)).toBe('1,234')
   })
 
-  test('字串形式同樣走千分位，中間不經過數值轉型', () => {
-    expect(recordsReceivedDisplay('1234')).toBe('1,234')
-  })
-
   test('還沒解析就失敗、或還在執行中的列沒有筆數', () => {
     expect(recordsReceivedDisplay(null)).toBe('—')
   })
@@ -94,9 +90,7 @@ describe('表格的列怎麼組', () => {
 
   test('id 一律收成字串，表格的 row-key 才不會因為型別而對不上', () => {
     const [numeric] = toDisplayRows([buildRow({ id: 12 })], echoTranslate, '勞工保險投保薪資分級表')
-    const [text] = toDisplayRows([buildRow({ id: '12' })], echoTranslate, '勞工保險投保薪資分級表')
     expect(numeric?.id).toBe('12')
-    expect(text?.id).toBe('12')
   })
 
   test('空清單組出空清單，不是一列空白', () => {

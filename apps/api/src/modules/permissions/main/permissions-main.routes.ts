@@ -8,6 +8,7 @@
  * 權限碼同樣不在這裡宣告：它由路徑機械推導（§5.2.2），身分驗證 middleware 自己算得出來。
  */
 import { Elysia, t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import { envelope } from '../../../shared/envelope.ts'
 import { BaseRequest, Nullable, Uuid } from '../../../shared/field-schemas.ts'
 import { treePermissionsHandler, type PermissionsMainDependencies } from './permissions-main.handler.ts'
@@ -27,8 +28,10 @@ const PermissionNodeSchema = t.Recursive(
       code: t.String(),
       name: t.String(),
       description: Nullable(t.String()),
-      isAssignable: t.Boolean(),
-      sortOrder: t.Integer(),
+      // 兩者都是回應方向欄位（沒有任何 body 收它們），一律用 TypeBox 原生的 Type.Boolean／
+      // Type.Integer，不是 Elysia 可強制轉型的版本（見 check-response-coercion.ts 檔頭）。
+      isAssignable: Type.Boolean(),
+      sortOrder: Type.Integer(),
       children: t.Array(self),
     }),
   { $id: 'PermissionNode' },

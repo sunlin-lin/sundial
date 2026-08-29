@@ -103,6 +103,7 @@ describe('deriveCoordinateDisplayState：座標三種狀態（計畫 §4.2、UI 
     address: null,
     revokedAt: null,
     revokedBy: null,
+    revokedByName: null,
     revokeReason: null,
     createdAt: '2026-08-28 09:00:00',
     updatedAt: '2026-08-28 09:00:00',
@@ -148,7 +149,7 @@ describe('accuracyMetersDisplay：不用 Number(...) 轉型', () => {
     expect(accuracyMetersDisplay(10)).toBe('10')
   })
 
-  test('string（後端形狀缺口造成的型別）也能直接顯示', () => {
+  test('string 也能直接顯示（後端形狀缺口已修正，這裡保留參數容忍度不做嚴格收窄）', () => {
     expect(accuracyMetersDisplay('10')).toBe('10')
   })
 })
@@ -170,6 +171,7 @@ describe('toDetailDisplay：get 回應 → 明細顯示', () => {
     address: '台北市信義區',
     revokedAt: '2026-08-28 19:00:00',
     revokedBy: 'operator-1',
+    revokedByName: '陳經理',
     revokeReason: '打錯卡',
     createdAt: '2026-08-28 18:00:00',
     updatedAt: '2026-08-28 19:00:00',
@@ -191,12 +193,12 @@ describe('toDetailDisplay：get 回應 → 明細顯示', () => {
     const result = toDetailDisplay(detail, row, $t)
     expect(result.isRevoked).toBe(true)
     expect(result.revokedAtDisplay).toBe('2026-08-28 19:00')
-    expect(result.revokedByDisplay).toBe('operator-1')
+    expect(result.revokedByDisplay).toBe('陳經理')
     expect(result.revokeReasonDisplay).toBe('打錯卡')
   })
 
   test('有效紀錄的撤銷欄位顯示 EMPTY_DISPLAY', () => {
-    const activeDetail = { ...detail, revokedAt: null, revokedBy: null, revokeReason: null }
+    const activeDetail = { ...detail, revokedAt: null, revokedBy: null, revokedByName: null, revokeReason: null }
     const result = toDetailDisplay(activeDetail, row, $t)
     expect(result.isRevoked).toBe(false)
     expect(result.revokedAtDisplay).toBe(EMPTY_DISPLAY)

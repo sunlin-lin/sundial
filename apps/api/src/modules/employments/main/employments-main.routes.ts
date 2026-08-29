@@ -3,6 +3,7 @@
  * 不重述。
  */
 import { Elysia, t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import { requestContext } from '../../../http/request-context.ts'
 import { envelope } from '../../../shared/envelope.ts'
 import {
@@ -32,8 +33,17 @@ import { describeEmploymentErrors, EMPLOYMENT_ENDPOINT_ERRORS } from './employme
  */
 const EmploymentTypeCodeSchema = t.Union([1, 2, 3, 4, 5, 6, 7, 8].map((value) => t.Literal(value)))
 
-/** 任職性質代碼、離職原因代碼：字典未列舉值，開放任意正整數（見 `db/schema/employee-employments.ts`）。 */
+/**
+ * 任職性質代碼、離職原因代碼：字典未列舉值，開放任意正整數（見 `db/schema/employee-employments.ts`）。
+ *
+ * **這是 request 方向**：用在 `create`／`leave` 的 body，Elysia 可強制轉型的 `t.Integer` 在這裡
+ * 是合理的。**回應方向要用下面的 `OpenCodeResponse`**——`EmploymentDetailSchema` 是後端輸出的
+ * 欄位，不該可強制轉型（理由見 `check-response-coercion.ts` 檔頭）。
+ */
 const OpenCode = t.Integer({ minimum: 1 })
+
+/** {@link OpenCode} 的 response 方向版本，TypeBox 原生的 `Type.Integer`。 */
+const OpenCodeResponse = Type.Integer({ minimum: 1 })
 
 const EmploymentStatusSchema = t.Union([t.Literal('ACTIVE'), t.Literal('LEFT')])
 
@@ -41,11 +51,11 @@ const EmploymentDetailSchema = t.Object({
   id: Uuid,
   employeeId: Uuid,
   employmentTypeCode: EmploymentTypeCodeSchema,
-  employmentNatureCode: Nullable(OpenCode),
+  employmentNatureCode: Nullable(OpenCodeResponse),
   hireDate: IsoDate,
   leaveDate: Nullable(IsoDate),
   lastWorkingDate: Nullable(IsoDate),
-  leaveReasonCode: Nullable(OpenCode),
+  leaveReasonCode: Nullable(OpenCodeResponse),
   status: EmploymentStatusSchema,
   createdAt: t.String(),
   updatedAt: t.String(),

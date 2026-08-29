@@ -25,6 +25,7 @@
  * ——「這支端點的業務輸入就是沒有輸入」與「忘了宣告輸入」在型別上必須長得不一樣。
  */
 import { Elysia, t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import { requestContext } from '../../../http/request-context.ts'
 import { envelope } from '../../../shared/envelope.ts'
 import { BaseRequest, Nullable, TaipeiDateTime, Uuid } from '../../../shared/field-schemas.ts'
@@ -35,7 +36,15 @@ import {
 } from './attendance-settings.handler.ts'
 import { ATTENDANCE_SETTINGS_ENDPOINT_ERRORS, describeAttendanceSettingsErrors } from './attendance-settings.errors.ts'
 
-/** 六個開關欄位，`update` 的 request body 與回應共用同一組名稱（僅回應多了 `id`／時間戳）。 */
+/**
+ * 六個開關欄位的名稱，`update` 的 request body 與回應共用同一組名稱（僅回應多了 `id`／時間戳）。
+ *
+ * **型別不共用**：request 方向（`update` 的 body）用 Elysia 可強制轉型的 `t.Boolean`——對「看起來
+ * 像布林值的字串」寬容是合理的；response 方向（`AttendanceSettingsDetailSchema`）要用 TypeBox
+ * 原生的 `Type.Boolean`，這六欄在回應裡是後端讀出資料庫、直接輸出的欄位，不是需要容錯的使用者
+ * 輸入（理由完整見 `check-response-coercion.ts` 檔頭與 `shared/field-schemas.ts` 的 `Pagination`
+ * 檔頭）。
+ */
 const AttendanceSettingsToggleFields = {
   requireClockInBeforeClockOut: t.Boolean(),
   allowEmployeeCancellation: t.Boolean(),
@@ -45,9 +54,19 @@ const AttendanceSettingsToggleFields = {
   gpsRequired: t.Boolean(),
 } as const
 
+/** {@link AttendanceSettingsToggleFields} 的 response 方向版本，見上方檔頭。 */
+const AttendanceSettingsToggleFieldsResponse = {
+  requireClockInBeforeClockOut: Type.Boolean(),
+  allowEmployeeCancellation: Type.Boolean(),
+  allowCorrectionRequest: Type.Boolean(),
+  correctionRequiresApproval: Type.Boolean(),
+  gpsEnabled: Type.Boolean(),
+  gpsRequired: Type.Boolean(),
+} as const
+
 const AttendanceSettingsDetailSchema = t.Object({
   id: Uuid,
-  ...AttendanceSettingsToggleFields,
+  ...AttendanceSettingsToggleFieldsResponse,
   createdAt: TaipeiDateTime,
   updatedAt: TaipeiDateTime,
 })

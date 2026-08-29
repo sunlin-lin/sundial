@@ -168,6 +168,7 @@ onMounted(() => {
       v-model:date="filters.date"
       v-model:department-id="filters.departmentId"
       v-model:employee-id="filters.employeeId"
+      v-model:status="filters.status"
       class="mt-6"
       :department-tree="departmentTree"
       :disabled="isLoading"

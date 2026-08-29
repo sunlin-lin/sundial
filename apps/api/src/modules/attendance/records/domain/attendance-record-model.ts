@@ -41,6 +41,10 @@ export type AttendanceRecordDetail = {
   readonly addressResolvedAt: string | null
   readonly revokedAt: string | null
   readonly revokedBy: string | null
+  /** 撤銷人姓名（登入帳號名稱，比照 `company-users/roles` 的 `assignedByName`／`revokedByName`
+   * 既有作法）。未撤銷（`revokedBy` 為 `null`）時同為 `null`——由 repository 的 LEFT JOIN 自然
+   * 得出，不是另外判斷出來的。 */
+  readonly revokedByName: string | null
   readonly revokeReason: string | null
   readonly revokedSeq: number
   readonly createdAt: string
@@ -88,14 +92,20 @@ export type AttendanceRecordRevokeOtherAuditSnapshot = {
   readonly revokeReason: string
 }
 
+/** `list-by-date` 的狀態篩選（UI 23）：全部／只看有效／只看已撤銷，依 `revoked_at IS NULL` 判斷。 */
+export type AttendanceRecordListStatus = 'all' | 'active' | 'revoked'
+
 /** `list-by-date` 的查詢條件。 */
 export type ListAttendanceRecordsByDateQuery = {
   readonly workDate: string
   readonly departmentId: string | null
   readonly employeeId: string | null
+  readonly status: AttendanceRecordListStatus
   readonly perPage: number
   readonly currentPage: number
-  readonly sort: { readonly field: 'clockedAt'; readonly order: 'asc' | 'desc' }
+  /** `employeeCode` 是 UI 23 定案的預設排序鍵（先依員工工號，同一員工再依打卡時間）；
+   * `clockedAt` 保留給日後的時間軸瀏覽需求，見 `attendance-records.routes.ts` 的排序常數檔頭。 */
+  readonly sort: { readonly field: 'employeeCode' | 'clockedAt'; readonly order: 'asc' | 'desc' }
 }
 
 /** `list-by-date` 單筆。**恆不含座標**（計畫 §4.2：列表一律不回座標，只有 `get` 明細才回）。 */

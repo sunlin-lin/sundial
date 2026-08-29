@@ -1,5 +1,6 @@
 /** 眷屬的端點目錄（§0.4「routes 不拆」、§1.9）。形狀比照 `employments-main.routes.ts`。 */
 import { Elysia, t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import { requestContext } from '../../../http/request-context.ts'
 import { envelope } from '../../../shared/envelope.ts'
 import { BaseRequest, IsoDate, PageRequest, paginationResponse, Uuid } from '../../../shared/field-schemas.ts'
@@ -23,10 +24,13 @@ const DependentDetailSchema = t.Object({
   identityNumberMasked: t.String(),
   birthdayMasked: t.String(),
   relationshipCode: RelationshipCodeSchema,
-  isStudent: t.Boolean(),
-  isDisabled: t.Boolean(),
-  isUnableToWork: t.Boolean(),
-  isCohabiting: t.Boolean(),
+  // 回應方向欄位，一律用 TypeBox 原生的 Type.Boolean，不是 Elysia 可強制轉型的 t.Boolean
+  // （見 check-response-coercion.ts 檔頭）。create 的 body 另有自己一組 t.Boolean()（見下方），
+  // 兩邊是各自獨立的欄位宣告，不是同一個常數，因此各自維持各自方向該有的型別。
+  isStudent: Type.Boolean(),
+  isDisabled: Type.Boolean(),
+  isUnableToWork: Type.Boolean(),
+  isCohabiting: Type.Boolean(),
   effectiveDate: IsoDate,
   endDate: t.Union([IsoDate, t.Null()]),
   status: DependentStatusSchema,

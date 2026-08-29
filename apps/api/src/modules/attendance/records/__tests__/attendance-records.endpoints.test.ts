@@ -886,6 +886,44 @@ describe('attendance/records endpoints (integration)', () => {
     expect(result.payload.data).toBeNull()
   })
 
+  test('get：撤銷後 revokedByName 帶出撤銷人姓名（比照 company-users/roles 的 assignedByName 既有作法，UI 23「撤銷資訊」）', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee({
+      permissionCodes: ['attendance.records.create', 'attendance.records.get'],
+    })
+    const reviewer = await registerEmployee({
+      permissionCodes: ['attendance.records.revoke-other', 'attendance.records.get'],
+    })
+
+    // 未撤銷時 revokedByName 隨 revokedBy 一起是 null（同一個 LEFT JOIN 的自然結果）。
+    const created = await call<{ id: string; revokedByName: string | null }>(
+      '/attendance/records/create',
+      employee.token,
+      { attendanceTypeCode: 1 },
+    )
+    expect(created.payload.data.revokedByName).toBeNull()
+
+    const [reviewerAccount] = await database
+      .select({ username: users.username })
+      .from(companyUsers)
+      .innerJoin(users, eq(users.id, companyUsers.userId))
+      .where(eq(companyUsers.id, reviewer.companyUserId))
+    if (reviewerAccount === undefined) throw new Error('撤銷者的登入帳號查不到')
+
+    await call('/attendance/records/revoke-other', reviewer.token, {
+      recordId: created.payload.data.id,
+      reason: '主管代為撤銷',
+    })
+
+    const detail = await call<{ revokedBy: string | null; revokedByName: string | null }>(
+      '/attendance/records/get',
+      employee.token,
+      { recordId: created.payload.data.id },
+    )
+    expect(detail.payload.data.revokedBy).toBe(reviewer.companyUserId)
+    expect(detail.payload.data.revokedByName).toBe(reviewerAccount.username)
+  })
+
   test('list-by-date：一次 JOIN 帶出員工姓名／工號／部門，分頁且不含座標', async () => {
     const { companyId, registerEmployee } = await registerCompany()
     const employeeWithDept = await registerEmployee({
@@ -977,6 +1015,143 @@ describe('attendance/records endpoints (integration)', () => {
     const listData = list.payload.data as { readonly data: readonly Record<string, unknown>[] }
     expect(listData.data.length).toBe(1)
     expect(listData.data[0]?.['revokedAt']).not.toBeNull()
+  })
+
+  test('list-by-date：狀態篩選——全部（預設）／只看有效／只看已撤銷（UI 23）', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee({
+      permissionCodes: ['attendance.records.create', 'attendance.records.revoke', 'attendance.records.list-by-date'],
+    })
+
+    const clockIn = await call<{ id: string }>('/attendance/records/create', employee.token, { attendanceTypeCode: 1 })
+    const clockOut = await call<{ id: string }>('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 2,
+    })
+    await call('/attendance/records/revoke', employee.token, { recordId: clockOut.payload.data.id, reason: '打錯了' })
+
+    // 未帶 status（等同 'all'）：兩筆都在。
+    const all = await callRaw('/attendance/records/list-by-date', employee.token, {
+      date: '2026-08-29',
+      perPage: 20,
+      currentPage: 1,
+    })
+    const allData = all.payload.data as {
+      readonly search: { readonly status: string }
+      readonly data: readonly Record<string, unknown>[]
+    }
+    expect(allData.data.length).toBe(2)
+    // search 回聲必須是解析後的值（§1.4），未帶時回聲 'all'，不是「這把鍵不存在」。
+    expect(allData.search.status).toBe('all')
+
+    const activeOnly = await callRaw('/attendance/records/list-by-date', employee.token, {
+      date: '2026-08-29',
+      status: 'active',
+      perPage: 20,
+      currentPage: 1,
+    })
+    const activeData = activeOnly.payload.data as { readonly data: readonly Record<string, unknown>[] }
+    expect(activeData.data.length).toBe(1)
+    expect(activeData.data[0]?.['id']).toBe(clockIn.payload.data.id)
+    expect(activeData.data[0]?.['revokedAt']).toBeNull()
+
+    const revokedOnly = await callRaw('/attendance/records/list-by-date', employee.token, {
+      date: '2026-08-29',
+      status: 'revoked',
+      perPage: 20,
+      currentPage: 1,
+    })
+    const revokedData = revokedOnly.payload.data as { readonly data: readonly Record<string, unknown>[] }
+    expect(revokedData.data.length).toBe(1)
+    expect(revokedData.data[0]?.['id']).toBe(clockOut.payload.data.id)
+    expect(revokedData.data[0]?.['revokedAt']).not.toBeNull()
+  })
+
+  test('list-by-date：預設排序先依員工工號、同一員工再依打卡時間，且分頁跨頁不重複不遺漏（UI 23）', async () => {
+    const { companyId, registerEmployee } = await registerCompany()
+    const employeeA = await registerEmployee({ permissionCodes: ['attendance.records.list-by-date'] })
+    const employeeB = await registerEmployee()
+    const employeeC = await registerEmployee()
+    const now = clock.now()
+
+    // 每位員工兩筆，clockedAt 刻意「後面的先插入」——如果排序其實是靠插入順序（或主鍵遞增）湊巧
+    // 對的，這裡會先露餡。三位員工各自的 employeeCode 由 registerEmployee 隨機產生，測試不假設
+    // 誰的代碼比較小：先用不分頁的一次查詢建立「正確順序」的基準，再用分頁查詢比對是否一致。
+    const insertPunch = (
+      employee: EmployeeFixture,
+      clockedAt: string,
+      attendanceTypeCode: (typeof AttendanceTypeCode)[keyof typeof AttendanceTypeCode],
+    ) =>
+      database.insert(attendanceRecords).values({
+        id: crypto.randomUUID(),
+        companyId,
+        employeeId: employee.employeeId,
+        employmentId: employee.employmentId,
+        employeeScheduleId: null,
+        workDate: '2026-08-29',
+        attendanceTypeCode,
+        sourceTypeCode: AttendanceSourceTypeCode.Field,
+        sourceId: null,
+        clockedAt,
+        latitude: null,
+        longitude: null,
+        accuracyMeters: null,
+        address: null,
+        addressResolvedAt: null,
+        revokedAt: null,
+        revokedBy: null,
+        revokeReason: null,
+        revokedSeq: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+
+    for (const employee of [employeeA, employeeB, employeeC]) {
+      await insertPunch(employee, '2026-08-29 18:00:00', AttendanceTypeCode.ClockOut)
+      await insertPunch(employee, '2026-08-29 08:00:00', AttendanceTypeCode.ClockIn)
+    }
+
+    const fullPage = await callRaw('/attendance/records/list-by-date', employeeA.token, {
+      date: '2026-08-29',
+      perPage: 10,
+      currentPage: 1,
+    })
+    const fullData = (
+      fullPage.payload.data as {
+        readonly data: readonly { readonly id: string; readonly employeeCode: string; readonly clockedAt: string }[]
+      }
+    ).data
+    expect(fullData.length).toBe(6)
+
+    // 同一員工的兩筆必須是 08:00 在 18:00 之前（依打卡時間由早到晚），不管插入順序。
+    const byEmployeeCode = new Map<string, string[]>()
+    for (const row of fullData) {
+      byEmployeeCode.set(row.employeeCode, [...(byEmployeeCode.get(row.employeeCode) ?? []), row.clockedAt])
+    }
+    for (const clockedAtList of byEmployeeCode.values()) {
+      expect(clockedAtList).toEqual(['2026-08-29 08:00:00', '2026-08-29 18:00:00'])
+    }
+
+    // 員工工號必須是非遞減（同一員工的兩筆相鄰出現，不同員工之間依工號排序）。
+    const employeeCodes = fullData.map((row) => row.employeeCode)
+    const sortedEmployeeCodes = [...employeeCodes].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    expect(employeeCodes).toEqual(sortedEmployeeCodes)
+
+    // 分頁正確性：perPage=2 分三頁，串起來必須逐筆、逐序等於不分頁的結果——這是排序鍵組合以 id
+    // 收尾、對每一列都唯一才能保證的事（見 impl/attendance-records.list-by-date.repository.ts
+    // 檔頭「排序」段）。
+    const pagedIds: string[] = []
+    for (let page = 1; page <= 3; page += 1) {
+      const pageResult = await callRaw('/attendance/records/list-by-date', employeeA.token, {
+        date: '2026-08-29',
+        perPage: 2,
+        currentPage: page,
+      })
+      const pageRows = (pageResult.payload.data as { readonly data: readonly { readonly id: string }[] }).data
+      expect(pageRows.length).toBe(2)
+      pagedIds.push(...pageRows.map((row) => row.id))
+    }
+    expect(new Set(pagedIds).size).toBe(6) // 沒有重複
+    expect(pagedIds).toEqual(fullData.map((row) => row.id)) // 順序與不分頁的結果逐筆相同
   })
 
   test('revoke：由核准補打卡建立的紀錄（人工補登來源）一樣能正常撤銷，不因來源被擋', async () => {

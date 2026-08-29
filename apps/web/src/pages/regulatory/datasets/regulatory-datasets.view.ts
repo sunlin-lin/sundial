@@ -25,6 +25,11 @@
  *
  * 兄弟檔（§0.7 的主題拆分）：版本清單在 `.version.view.ts`，版本內容的欄位定義在
  * `.columns.view.ts` 與 `.record.view.ts`，查詢組裝在 `.payload.ts`。
+ *
+ * `effectiveVersion.recordCount` 過去曾經需要防禦字串輸入：後端回應方向誤用了可強制轉型的
+ * `t.Integer`，OpenAPI 上留了 `string | number` 的影子。`check:response-coercion` 掃出並修正
+ * 這一批誤用後，回應方向的 `recordCount` 已經是乾淨的 `number`，字串分支因此拿掉——不要因為
+ * 「看起來像防禦性寫法」就加回來。
  */
 import { formatAmount } from '../../../shared/format/decimal.ts'
 import { formatDate, formatDateTime } from '../../../shared/format/business-date.ts'
@@ -77,12 +82,12 @@ export type OverviewDisplayRow = {
   readonly lastSyncEffect: SyncStatusPresentation['effect']
 }
 
-/** 「筆數」那一格。API 型別是 `string | number | null`，一律走千分位，中間不經過 `number`。 */
+/** 「筆數」那一格。API 型別是 `number | null`，一律走千分位，中間不經過數值轉型。 */
 const recordCountDisplay = (value: OverviewRow['effectiveVersion']): string => {
   if (value === null) return EMPTY_DISPLAY
   const count = value.recordCount
   if (count === null) return EMPTY_DISPLAY
-  return formatAmount(typeof count === 'string' ? count : String(count))
+  return formatAmount(String(count))
 }
 
 /**

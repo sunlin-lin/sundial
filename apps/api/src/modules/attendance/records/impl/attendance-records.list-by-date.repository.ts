@@ -17,8 +17,20 @@
  * **恆不 select 座標欄位**（計畫 §4.2：列表一律不回座標，只有 `get` 明細才回），因此這支查詢
  * 從語法上就寫不出「列表洩漏座標」——不是「查了但不回」，是查詢本身沒有把那兩欄列進 `select`。
  *
- * **含已撤銷紀錄**：這一頁服務的是「今天實際發生了哪些打卡事件」的審核情境，需要看到「這筆本來
- * 就已經被撤銷」，因此不加 `revoked_seq = 0` 這種只看有效紀錄的條件（計畫 §4.7）。
+ * **含已撤銷紀錄，但可用 `status` 篩選**：這一頁服務的是「今天實際發生了哪些打卡事件」的審核情境，
+ * 預設（`status='all'`）不加任何撤銷相關條件，讓「這筆本來就已經被撤銷」也顯示出來（計畫 §4.7、
+ * UI 23）；`status='active'`／`'revoked'` 才依 `revoked_at IS NULL` 篩選——與 `revoked_seq = 0`
+ * 等價（同一筆記錄只會撤銷一次，見 `impl/attendance-records.revoke.repository.ts` 的
+ * `revokedSeq` 註解），選 `revoked_at` 是因為 UI 23「狀態」欄本身就是用它判斷的，兩處判準一致。
+ *
+ * **排序：先依員工（工號），同一員工再依打卡時間由早到晚（UI 23，預設排序）**。`sort.field` 是
+ * `employeeCode` 時，次序是 `employeeCode`（依 `sort.order`）→ `clockedAt`（恆 `asc`，同一員工的
+ * 事件永遠照發生順序排，不受 `sort.order` 影響）→ `id`（恆 `asc`，分頁邊界的最終防線，見下方）；
+ * `sort.field` 是 `clockedAt` 時，次序是 `clockedAt`（依 `sort.order`）→ `id`。**兩種情況都以
+ * `id` 收尾**：`employeeCode` 或 `clockedAt` 都不保證全域唯一（工號可能重複排序值相同的情境是
+ * 同一位員工的多筆打卡；`clockedAt` 兩位不同員工可能剛好同一秒打卡），沒有唯一鍵收尾時，
+ * `LIMIT`／`OFFSET` 分頁在並列的列之間沒有穩定順序保證——同一筆資料可能同時出現在第 1 頁與
+ * 第 2 頁，或兩頁都沒有；加了 `id` 之後整個排序鍵組合對每一列都唯一，分頁結果就是確定的。
  *
  * ## 總查詢次數：固定 2 次，不隨頁面筆數或公司規模成長
  *
@@ -27,7 +39,7 @@
  *    `employee_department_histories`／`departments` 兩個 JOIN 才篩得到，兩次查詢的 JOIN 必須
  *    一致，否則分頁列與 `totalCount` 對不起來。
  */
-import { and, asc, count, desc, eq, gte, isNull, lte, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, isNotNull, isNull, lte, or, type SQL } from 'drizzle-orm'
 import type { QueryRunner } from '../../../../db/client.ts'
 import { attendanceRecords, departments, employeeDepartmentHistories, employees } from '../../../../db/schema/index.ts'
 import type {
@@ -49,11 +61,18 @@ const buildDepartmentHistoryJoinCondition = (companyId: string, workDate: string
     or(isNull(employeeDepartmentHistories.effectiveTo), gte(employeeDepartmentHistories.effectiveTo, workDate)),
   )
 
+/** `status` → 撤銷相關條件。`'all'` 時不加條件（見檔頭「含已撤銷紀錄，但可用 status 篩選」）。 */
+const buildStatusCondition = (status: ListAttendanceRecordsByDateQuery['status']): SQL | undefined => {
+  if (status === 'active') return isNull(attendanceRecords.revokedAt)
+  if (status === 'revoked') return isNotNull(attendanceRecords.revokedAt)
+  return undefined
+}
+
 /**
  * `WHERE` 只放錨點資料表（`attendance_records`，§4.2 一定要有的公司條件）與業務篩選條件。
  * `departmentId` 篩選比對的是 `LEFT JOIN` 帶出來的 `employee_department_histories.department_id`
  * ——刻意放這裡（不是 ON）：使用者主動篩選「這個部門」時，查不到部門歸屬的打卡本來就該被排除，
- * 這與「不篩選時仍要顯示查無部門的打卡」是两種不同的需求，只有後者才不能把條件放進 WHERE。
+ * 這與「不篩選時仍要顯示查無部門的打卡」是兩種不同的需求，只有後者才不能把條件放進 WHERE。
  */
 const buildConditions = (companyId: string, query: ListAttendanceRecordsByDateQuery): SQL | undefined =>
   and(
@@ -61,7 +80,17 @@ const buildConditions = (companyId: string, query: ListAttendanceRecordsByDateQu
     eq(attendanceRecords.workDate, query.workDate),
     query.employeeId === null ? undefined : eq(attendanceRecords.employeeId, query.employeeId),
     query.departmentId === null ? undefined : eq(employeeDepartmentHistories.departmentId, query.departmentId),
+    buildStatusCondition(query.status),
   )
+
+/** 排序鍵組合，見檔頭「排序」段——不管主鍵是哪一欄，一律以 `id` 收尾確保分頁穩定。 */
+const buildOrderBy = (query: ListAttendanceRecordsByDateQuery) => {
+  const direction = query.sort.order === 'desc' ? desc : asc
+  if (query.sort.field === 'employeeCode') {
+    return [direction(employees.employeeCode), asc(attendanceRecords.clockedAt), asc(attendanceRecords.id)]
+  }
+  return [direction(attendanceRecords.clockedAt), asc(attendanceRecords.id)]
+}
 
 export const listAttendanceRecordsByDate = async (
   runner: QueryRunner,
@@ -70,7 +99,7 @@ export const listAttendanceRecordsByDate = async (
 ): Promise<ListAttendanceRecordsByDatePage> => {
   const conditions = buildConditions(companyId, query)
   const departmentHistoryJoin = buildDepartmentHistoryJoinCondition(companyId, query.workDate)
-  const direction = query.sort.order === 'desc' ? desc : asc
+  const orderBy = buildOrderBy(query)
 
   const rows = await runner
     .select({
@@ -101,7 +130,7 @@ export const listAttendanceRecordsByDate = async (
       and(eq(departments.id, employeeDepartmentHistories.departmentId), eq(departments.companyId, companyId)),
     )
     .where(conditions)
-    .orderBy(direction(attendanceRecords.clockedAt), asc(attendanceRecords.id))
+    .orderBy(...orderBy)
     .limit(query.perPage)
     .offset((query.currentPage - 1) * query.perPage)
 

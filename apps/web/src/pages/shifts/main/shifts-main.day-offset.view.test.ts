@@ -9,13 +9,8 @@ describe('是否隔日', () => {
     expect(isNextDay(1)).toBe(true)
   })
 
-  test('字串 "1" 同樣是隔日——後端的 t.Integer() 在 OpenAPI 上留下 string|number 的影子', () => {
-    expect(isNextDay('1')).toBe(true)
-  })
-
   test('0 不是隔日', () => {
     expect(isNextDay(0)).toBe(false)
-    expect(isNextDay('0')).toBe(false)
   })
 })
 

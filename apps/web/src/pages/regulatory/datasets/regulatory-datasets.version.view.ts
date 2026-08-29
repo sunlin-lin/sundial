@@ -3,6 +3,11 @@
  *
  * 它與總覽的「一列怎麼組」互不相干（一個是九個資料集各一列，一個是一個資料集的歷史版本），
  * 放在同一個檔案裡只會讓兩邊都變成翻頁才找得到的東西。
+ *
+ * `id`／`recordCount` 過去曾經需要防禦字串輸入：後端回應方向誤用了可強制轉型的 `t.Integer`，
+ * OpenAPI 上留了 `string | number` 的影子。`check:response-coercion` 掃出並修正這一批誤用後，
+ * 兩者在回應方向都已經是乾淨的 `number`，字串分支因此拿掉——不要因為「看起來像防禦性寫法」
+ * 就加回來。
  */
 import { formatAmount } from '../../../shared/format/decimal.ts'
 import { formatDate, formatDateTime } from '../../../shared/format/business-date.ts'
@@ -47,14 +52,11 @@ export const toVersionDisplayRows = (
   // 回傳可變陣列（元素本身仍是 readonly）：Element Plus 的表格 `data` 收的是可變陣列。
 ): VersionDisplayRow[] =>
   rows.map((row) => ({
-    id: typeof row.id === 'string' ? row.id : String(row.id),
+    id: String(row.id),
     versionCode: row.versionCode,
     effectiveFrom: formatDate(row.effectiveFrom),
     effectiveTo: formatDate(row.effectiveTo),
-    recordCount:
-      row.recordCount === null
-        ? EMPTY_DISPLAY
-        : formatAmount(typeof row.recordCount === 'string' ? row.recordCount : String(row.recordCount)),
+    recordCount: row.recordCount === null ? EMPTY_DISPLAY : formatAmount(String(row.recordCount)),
     syncedAt: formatDateTime(row.syncedAt),
     isEffective: effectiveVersionCode !== null && row.versionCode === effectiveVersionCode,
   }))

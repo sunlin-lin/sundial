@@ -29,6 +29,11 @@
  * 兄弟檔（§0.7 的主題拆分）：查詢的組裝在 `.payload.ts`。狀態的呈現與回應的處置已經移進共用區
  *（`shared/regulatory/sync-status.ts`、`shared/api/list-echo.ts`、`shared/api/load-failure.ts`），
  * 理由都是 §1.5 的同一條：第二個頁面出現了。
+ *
+ * `id`／`recordsReceived` 過去曾經需要防禦字串輸入：後端回應方向誤用了可強制轉型的 `t.Integer`，
+ * OpenAPI 上留了 `string | number` 的影子。`check:response-coercion` 掃出並修正這一批誤用後，
+ * 兩者在回應方向都已經是乾淨的 `number`，字串分支因此拿掉——不要因為「看起來像防禦性寫法」
+ * 就加回來。
  */
 import { EMPTY_DISPLAY } from '../../../shared/format/empty-display.ts'
 import { formatAmount } from '../../../shared/format/decimal.ts'
@@ -64,14 +69,14 @@ export const failureReasonDisplay = (row: SyncLogRow): string => row.errorMessag
 /**
  * 收到筆數。
  *
- * 走 `shared/format/` 的千分位（§9.2 要求所有格式化經統一函式），輸入是字串——
- * `formatAmount` 全程字串運算，這一格因此不會經過 `number`。
+ * 走 `shared/format/` 的千分位（§9.2 要求所有格式化經統一函式）：API 型別是 `number | null`，
+ * 這裡先轉成字串再交給 `formatAmount`——`formatAmount` 全程字串運算，不經過數值轉型。
  *
  * `null` 是合法狀態：在解析之前就失敗、以及還在執行中的那幾列都沒有筆數。
  */
 export const recordsReceivedDisplay = (value: SyncLogRow['recordsReceived']): string => {
   if (value === null) return EMPTY_DISPLAY
-  return formatAmount(typeof value === 'string' ? value : String(value))
+  return formatAmount(String(value))
 }
 
 /**
@@ -117,7 +122,7 @@ export const toDisplayRows = (
   rows.map((row) => {
     const status = syncStatusPresentation(row.statusCode)
     return {
-      id: typeof row.id === 'string' ? row.id : String(row.id),
+      id: String(row.id),
       dataset: datasetName,
       startedAt: formatDateTime(row.startedAt),
       finishedAt: formatDateTime(row.finishedAt),

@@ -31,6 +31,7 @@ const buildRecord = (clockedAt: string): AttendanceRecordDetail => ({
   address: null,
   revokedAt: null,
   revokedBy: null,
+  revokedByName: null,
   revokeReason: null,
   createdAt: clockedAt,
   updatedAt: clockedAt,
