@@ -1,0 +1,26 @@
+{
+  "skill_name": "sundial-backend",
+  "evals": [
+    {
+      "id": 1,
+      "name": "new-list-endpoint",
+      "prompt": "幫我在後端加一支端點，讓前端可以依部門查在職員工清單，要能分頁跟用姓名關鍵字篩選。",
+      "expected_output": "三段路徑 POST /employments/main/list-by-department（或等價的三段 kebab-case 路徑，前兩段對應真實模組目錄）；cmd 等於路徑機械轉換；參數全走 body 且不含 companyId；repository 用顯式 select + join 並帶公司範圍與 deleted_at 條件、不在迴圈內查詢；service 收集錯誤不 throw、不 import http 層；handler 不手刻 envelope；檔名符合 <大目錄>-<次目錄>.<動作>.{service,repository}.ts 且實作放 impl/",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "add-column-migration",
+      "prompt": "job_titles 這張表要多一個排序用的欄位 sort_order，整數、預設 0。幫我加上去並處理 migration。",
+      "expected_output": "改 db/schema/job-titles.ts 後用 bun run db:generate 產生 migration，不手寫 SQL；若手寫則同步補 drizzle/meta/_journal.json entry 與對應 snapshot 且 idx 不跳號；不修改已套用的 migration；提到 check:migration-journal 會擋什麼",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "audit-in-transaction",
+      "prompt": "員工離職這個動作要留稽核紀錄，記下是誰改的跟改了哪些欄位，幫我補上。",
+      "expected_output": "recordAudit 與業務寫入使用同一個交易 handle（同一個 TransactionRunner，不是兩個各自的交易）；交易邊界在 service 層；敏感欄位依 audit-field-policy 遮罩；不在 service 裡 throw 業務錯誤；能說出 check:audit-transaction 與 check:audit-policy 在擋什麼",
+      "files": []
+    }
+  ]
+}

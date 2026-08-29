@@ -1,6 +1,12 @@
 # Claude Code local settings (per-machine, not shared)
 .claude/settings.local.json
 
+# 未解開的 skill 壓縮檔。skill 本身要進版控（`.claude/skills/<name>/` 底下的 md），
+# 但 .zip 不進：它是下載來的原封包，內容在 review 上完全不透明——沒有人會為了看一份
+# skill 教了什麼而先解壓縮，於是它會以「反正之後會解開」的狀態一直留在版控裡。
+# 要用就解開成目錄，解開後那些 md 自然會被追蹤。
+.claude/skills/*.zip
+
 # 相依與建置產物
 node_modules/
 dist/
