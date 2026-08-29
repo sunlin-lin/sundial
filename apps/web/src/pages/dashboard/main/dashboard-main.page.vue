@@ -2,16 +2,26 @@
 /**
  * Dashboard。需要登入才進得來（見同層的 `.route.ts` 與 router 的守衛）。
  *
- * 目前內容只有「登入者是誰、屬於哪一家公司」——那正是登入回應唯一帶回來的東西。
- * 這一頁刻意不先擺上假的統計卡片：畫不出真實數字的區塊會被當成「還沒載入」，
- * 而它永遠不會載入完。
+ * 「登入者是誰、屬於哪一家公司」與「今日打卡」（計畫 06 Stage 5，UI 定案 10）並列在這一頁——
+ * 前者是登入回應本身帶回來的，後者是這一頁真正的主要功能。**這裡刻意仍然沒有假的統計卡片**：
+ * 畫不出真實數字的區塊會被當成「還沒載入」，而它永遠不會載入完；今日打卡是唯一已經有真實資料
+ * 來源可以畫的區塊。
+ *
+ * 本頁只負責載入出勤設定（`AttendanceTodayCard` 需要 `gpsRequired`／`gpsEnabled`／
+ * `allowEmployeeCancellation` 才能決定打卡與撤銷怎麼運作）＋登入者資訊＋登出；打卡、撤銷、GPS
+ * 全部在 `components/AttendanceTodayCard.vue` 裡（§1.2：一個元件不該同時扛「設定載入」與
+ * 「打卡狀態機」兩組互不相干的 loading／error 狀態）。
  */
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppShell from '../../../layouts/AppShell.vue'
+import { attendanceSettingsGet, type AttendanceSettingsGetData } from '../../../api/generated/api-client.ts'
+import { toLoadFailure, type LoadFailure } from '../../../shared/api/load-failure.ts'
 import { useSignOut } from '../../../shared/api/use-sign-out.ts'
 import type { TranslateMessage } from '../../../shared/i18n/messages.ts'
 import { useAuthStore } from '../../../stores/auth.ts'
+import AttendanceTodayCard from './components/AttendanceTodayCard.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -33,6 +43,31 @@ const $t: TranslateMessage = t
 const { isSigningOut, requestSignOut } = useSignOut(() => {
   auth.reset()
   void router.replace({ name: 'sessions-login' })
+})
+
+// --- 出勤設定：`AttendanceTodayCard` 決定打卡／撤銷怎麼運作要用的三個開關 -------------------
+const attendanceSettings = ref<AttendanceSettingsGetData | null>(null)
+const isLoadingAttendanceSettings = ref(false)
+const attendanceSettingsFailure = ref<LoadFailure | null>(null)
+
+const loadAttendanceSettings = (): void => {
+  isLoadingAttendanceSettings.value = true
+  attendanceSettingsFailure.value = null
+
+  attendanceSettingsGet({})
+    .then((settings) => {
+      attendanceSettings.value = settings
+      isLoadingAttendanceSettings.value = false
+    })
+    .catch((error: unknown) => {
+      attendanceSettings.value = null
+      attendanceSettingsFailure.value = toLoadFailure(error)
+      isLoadingAttendanceSettings.value = false
+    })
+}
+
+onMounted(() => {
+  loadAttendanceSettings()
 })
 </script>
 
@@ -60,5 +95,13 @@ const { isSigningOut, requestSignOut } = useSignOut(() => {
         <dd class="mt-2 text-lg font-semibold text-ink">{{ auth.companyName }}</dd>
       </div>
     </dl>
+
+    <AttendanceTodayCard
+      class="mt-6 max-w-xl"
+      :settings="attendanceSettings"
+      :is-loading-settings="isLoadingAttendanceSettings"
+      :settings-failure="attendanceSettingsFailure"
+      @retry="loadAttendanceSettings"
+    />
   </AppShell>
 </template>

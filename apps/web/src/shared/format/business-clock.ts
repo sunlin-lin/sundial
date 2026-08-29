@@ -37,6 +37,22 @@ const TAIPEI_DATE_PARTS = new Intl.DateTimeFormat('en-US', {
   day: '2-digit',
 })
 
+/**
+ * 台北時區的日期＋時間分段器（給 {@link nowInTaipei} 用）。與上面那份分開建立，理由同上：
+ * 兩者輸出的欄位數不同，硬併成一份還要在每次呼叫時判斷「這次要不要時間」，不如各自無狀態一份。
+ * `hour12: false` 是必要的——Dashboard「今日打卡」§9.2 要求 24 小時制，預設的 `en-US` 是 12 小時制。
+ */
+const TAIPEI_DATE_TIME_PARTS = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Taipei',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+})
+
 /** 取一段。取不到時回空字串，交給下面的長度檢查處理（不在這裡拋，理由見 {@link todayInTaipei}）。 */
 const partOf = (parts: readonly Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes): string =>
   parts.find((part) => part.type === type)?.value ?? ''
@@ -54,4 +70,25 @@ const partOf = (parts: readonly Intl.DateTimeFormatPart[], type: Intl.DateTimeFo
 export const todayInTaipei = (): string => {
   const parts = TAIPEI_DATE_PARTS.formatToParts(new Date())
   return `${partOf(parts, 'year')}-${partOf(parts, 'month')}-${partOf(parts, 'day')}`
+}
+
+/** 部分環境的 `hour12: false` 會在午夜整點輸出 `'24'` 而不是 `'00'`——已知的 `Intl` 實作歧異，
+ * 與後端無關，這裡直接正規化，不讓它流到畫面上變成一個看起來壞掉的時鐘。 */
+const normalizeHour = (hour: string): string => (hour === '24' ? '00' : hour)
+
+/**
+ * 現在（台北），`YYYY-MM-DD HH:mm:ss`——與後端 `TaipeiDateTime` 欄位逐字同格式（後端規範 §6.1），
+ * 供 Dashboard 頭部顯示「目前日期與時間」用（UI 定案 10）。**只給顯示用**：這是一次性讀值，
+ * 不是響應式的，呼叫端要自己用 `setInterval` 週期性重新呼叫才會像一個會走的時鐘
+ * （見 `pages/dashboard/main/dashboard-main.page.vue`）。
+ *
+ * ```ts
+ * nowInTaipei()   // '2026-08-28 14:30:05'
+ * ```
+ */
+export const nowInTaipei = (): string => {
+  const parts = TAIPEI_DATE_TIME_PARTS.formatToParts(new Date())
+  const date = `${partOf(parts, 'year')}-${partOf(parts, 'month')}-${partOf(parts, 'day')}`
+  const time = `${normalizeHour(partOf(parts, 'hour'))}:${partOf(parts, 'minute')}:${partOf(parts, 'second')}`
+  return `${date} ${time}`
 }

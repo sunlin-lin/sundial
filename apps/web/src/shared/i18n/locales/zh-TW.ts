@@ -44,6 +44,45 @@ export const ZH_TW = {
   'dashboard.company': '所屬公司',
   'dashboard.sign-out': '登出',
 
+  // --- 今日打卡（計畫 06 Stage 5，UI 定案 `docs/ui/10-ui-dashboard-attendance.md`） ----------
+  'dashboard.attendance.heading': '今日打卡',
+  'dashboard.attendance.retry': '重新載入',
+
+  'dashboard.attendance.status.not-started': '尚未上班',
+  'dashboard.attendance.status.clocked-in': '上班中',
+  'dashboard.attendance.status.clocked-out': '今日打卡完成',
+
+  'dashboard.attendance.field.clock-in-at': '上班時間',
+  'dashboard.attendance.field.clock-out-at': '下班時間',
+  'dashboard.attendance.field.worked-hours': '今日工時',
+  'dashboard.attendance.unit.hours': '小時',
+
+  'dashboard.attendance.action.clock-in': '上班打卡',
+  'dashboard.attendance.action.clock-out': '下班打卡',
+  'dashboard.attendance.action.revoke': '撤銷',
+  'dashboard.attendance.completed': '今天的上下班卡都已完成。',
+
+  /** 拒絕授權後瀏覽器不會再跳出詢問視窗，因此這裡明講要去哪裡改，不能只說「無法取得定位」。 */
+  'dashboard.attendance.gps.denied-required':
+    '無法取得定位：瀏覽器的定位權限已被封鎖，而公司的出勤設定要求打卡時需要定位。請在瀏覽器網址列旁的權限設定中允許定位存取，再重新整理頁面。',
+  'dashboard.attendance.gps.unavailable-required': '無法取得定位，請確認裝置的定位功能已開啟後再試一次。',
+
+  'dashboard.attendance.revoke.title-clock-in': '撤銷上班卡',
+  'dashboard.attendance.revoke.title-clock-out': '撤銷下班卡',
+  'dashboard.attendance.revoke.punch-time-label': '打卡時間',
+  'dashboard.attendance.revoke.field.reason': '撤銷原因',
+  'dashboard.attendance.revoke.cancel': '取消',
+  'dashboard.attendance.revoke.submit': '撤銷',
+  'dashboard.attendance.revoke.confirm': '撤銷後這筆打卡將不再計入今日出勤，確定要撤銷嗎？',
+  'dashboard.attendance.revoke.confirm-title': '請再次確認',
+  'dashboard.attendance.revoke.confirm-ok': '確定撤銷',
+  'dashboard.attendance.revoke.confirm-cancel': '取消',
+  'dashboard.attendance.revoke.hint.clock-out-first': '已有下班卡，須先撤銷下班卡才能撤銷上班卡。',
+
+  'dashboard.attendance.toast.clocked-in': '上班打卡成功。',
+  'dashboard.attendance.toast.clocked-out': '下班打卡成功。',
+  'dashboard.attendance.toast.revoked': '已撤銷這筆打卡。',
+
   'menu.overview': '總覽',
   'menu.dashboard': '首頁',
   'menu.system-settings': '系統設定',

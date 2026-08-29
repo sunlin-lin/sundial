@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { todayInTaipei } from './business-clock.ts'
-import { formatDate } from './business-date.ts'
+import { nowInTaipei, todayInTaipei } from './business-clock.ts'
+import { formatDate, formatDateTime } from './business-date.ts'
 
 describe('今天（台北）', () => {
   test('輸出是後端 date 欄位的格式，可以直接送出也可以直接顯示', () => {
@@ -19,5 +19,23 @@ describe('今天（台北）', () => {
     expect(today).not.toContain('T')
     expect(today).not.toContain('Z')
     expect(today).not.toContain('+')
+  })
+})
+
+describe('現在（台北），供 Dashboard 顯示目前日期與時間用（UI 定案 10）', () => {
+  test('輸出是後端 TaipeiDateTime 欄位的格式', () => {
+    expect(nowInTaipei()).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+  })
+
+  test('輸出直接餵給 formatDateTime 時，裁到分鐘那段原樣通過（不是讀不懂的字串）', () => {
+    const now = nowInTaipei()
+    expect(formatDateTime(now)).toBe(now.slice(0, 16))
+  })
+
+  test('不帶任何時區標記', () => {
+    const now = nowInTaipei()
+    expect(now).not.toContain('T')
+    expect(now).not.toContain('Z')
+    expect(now).not.toContain('+')
   })
 })

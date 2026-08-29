@@ -116,6 +116,13 @@ const PERMISSION_CODES = [
   'dependents.main.create',
   'dependents.main.terminate',
   'labor-pension.main.create',
+  // Dashboard 打卡與撤銷（計畫 06 Stage 5，UI 定案 `docs/ui/10-ui-dashboard-attendance.md`）。
+  // 兩碼逐字比對過 `0039_seed_permission_codes_attendance_records.sql`（f21／f22）。
+  // `attendance.records.get`／`.list-by-date`／`.revoke-other`／`.view-all` 不在這份清單裡：
+  // 這一輪 Dashboard 沒有任何 `can(...)` 呼叫點會判斷它們（`get`／`list-by-date` 沒有消費者，
+  // `revoke-other`／`view-all` 是他人撤銷與座標可見範圍的權限碼，屬於 Stage 6 每日全員打卡明細）。
+  'attendance.records.create',
+  'attendance.records.revoke',
 ] as const satisfies readonly ApiCommand[]
 
 /** 權限碼。全站判斷權限一律用這個型別，不用 `string`。 */
