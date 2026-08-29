@@ -4,16 +4,18 @@
  * **每個動作一個函式、每個函式只有一行委派。** 打開這個檔案就知道這個次實體有哪些動作、
  * 各自收什麼、回什麼，一頁看完；業務規則在 `impl/` 底下，一個動作一個檔。
  *
- * **這裡有四個動作沒有對應的端點**（`verifyAccessToken`／`renewSession`／`verifyRefreshTicket`／
- * `revokeChainsOnReuse`），它們的呼叫者是入口層的憑證驗證器。§0.4 明文允許：
- * 界線是「有沒有次目錄以外的呼叫者」——有，就是業務動作，放入口。
- * 把入口限制成「只能是端點」，這四個東西就無處可放：塞進 `impl/` 會繞過「所有呼叫必須經過入口」
+ * **這裡有五個動作沒有對應的端點**（`verifyAccessToken`／`renewSession`／`verifyRefreshTicket`／
+ * `revokeChainsOnReuse`／`revokeSessionsForDeactivation`）。前四個的呼叫者是入口層的憑證
+ * 驗證器；最後一個的呼叫者是 `company-users/main`（停用帳號時同一交易內作廢 session，見該動作
+ * 自己的檔頭）。§0.4 明文允許：界線是「有沒有次目錄以外的呼叫者」——有，就是業務動作，放入口。
+ * 把入口限制成「只能是端點」，這五個東西就無處可放：塞進 `impl/` 會繞過「所有呼叫必須經過入口」
  * 那道牆，塞進 middleware 則等於讓入口層直接碰 repository。
  *
  * 本層**不得碰 envelope、HTTP status 或 `WebFlowCode`**（§1.8.2、§3.1.1），
  * 這在本模組特別容易違反：登入失敗看起來很像該回 `900`，而 `900` 的唯一產出者是憑證驗證器
  *（§1.3）。本模組一個 `900` 都不會產生——登入失敗是**業務訊息**，走 `Unprocessable` → 422／`300`。
  */
+import type { TransactionRunner } from '../../../db/client.ts'
 import type { RefreshTicketVerification, SessionRenewal, VerifiedIdentity } from '../../../shared/access-control.ts'
 import type { ServiceResult } from '../../../shared/service-result.ts'
 import type { SessionsMainContext } from './domain/session-context.ts'
@@ -30,6 +32,7 @@ import { login as loginImpl } from './impl/sessions-main.login.service.ts'
 import { logoutAllDevices as logoutAllDevicesImpl } from './impl/sessions-main.logout-all.service.ts'
 import { logout as logoutImpl } from './impl/sessions-main.logout.service.ts'
 import { renewSession as renewSessionImpl } from './impl/sessions-main.renew.service.ts'
+import { revokeSessionsForDeactivation as revokeSessionsForDeactivationImpl } from './impl/sessions-main.revoke-for-deactivation.service.ts'
 import { revokeChainsOnReuse as revokeChainsOnReuseImpl } from './impl/sessions-main.revoke-on-reuse.service.ts'
 import { refreshSession as refreshSessionImpl } from './impl/sessions-main.refresh.service.ts'
 import { verifyAccessToken as verifyAccessTokenImpl } from './impl/sessions-main.verify-access.service.ts'
@@ -98,6 +101,18 @@ export const revokeChainsOnReuse = (
   identity: VerifiedIdentity,
   reusedTicketId: string,
 ): Promise<RevocationOutcome> => revokeChainsOnReuseImpl(context, identity, reusedTicketId)
+
+/**
+ * 無端點：供 `company-users/main` 在停用一個成員的登入帳號時，於**同一筆交易**內作廢該成員的
+ * 所有 refresh token 鏈（安全落差修補，見實作檔 `impl/sessions-main.revoke-for-deactivation.
+ * service.ts` 檔頭）。稽核由呼叫端負責，本動作不呼叫 `recordAudit`——理由同見該檔頭。
+ */
+export const revokeSessionsForDeactivation = (
+  tx: TransactionRunner,
+  companyId: string,
+  companyUserId: string,
+  now: string,
+): Promise<readonly string[]> => revokeSessionsForDeactivationImpl(tx, companyId, companyUserId, now)
 
 /**
  * 建立密碼 hash（§5.1）。零 IO 純函式，直接 re-export `domain/session-password.ts`。

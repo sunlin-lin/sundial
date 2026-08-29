@@ -49,7 +49,7 @@ export const TOKEN_HASH_BYTE_LENGTH = 32
 /**
  * 作廢原因。**不用 DB ENUM**（通用規範 §1.4），代碼值的唯一來源是這個 const object。
  *
- * 四種原因必須分得出來，因為它們在事後追查時的意義完全不同：`Rotated` 是每天都會發生的正常輪替，
+ * 五種原因必須分得出來，因為它們在事後追查時的意義完全不同：`Rotated` 是每天都會發生的正常輪替，
  * `ReuseDetected` 是**唯一一種系統自己偵測到的安全事件**（§5.4.2 要求寫稽核與告警）。
  * 把兩者混成一個「已作廢」旗標，等於把那個訊號丟掉——而它正是本系統偵測「票被偷」的唯一防線。
  */
@@ -62,6 +62,15 @@ export const RefreshTokenRevokeReason = {
   LogoutAll: 'LOGOUT_ALL',
   /** §5.4.2 偷用偵測：已作廢的票再次被使用，視為外洩，該成員的所有鏈作廢。 */
   ReuseDetected: 'REUSE_DETECTED',
+  /**
+   * 帳號被停用（管理者直接停用、或離職流程同步停用）——補的是這個安全落差：
+   * `company_users.status` 原本只在登入那一刻被檢查，access token 續期與 refresh 都不查，
+   * 停用一個帳號後舊票仍然能換出新票。停用時同步作廢該成員所有的 refresh token 鏈，
+   * 讓停用立即生效，不必等到下次登入才被擋下。呼叫者見
+   * `modules/company-users/main/impl/company-users-main.deactivate.service.ts` 與
+   * `company-users-main.deactivate-account.service.ts`。
+   */
+  AccountDeactivated: 'ACCOUNT_DEACTIVATED',
 } as const
 
 export type RefreshTokenRevokeReasonValue = (typeof RefreshTokenRevokeReason)[keyof typeof RefreshTokenRevokeReason]

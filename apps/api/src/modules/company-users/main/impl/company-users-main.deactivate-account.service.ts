@@ -70,13 +70,38 @@
  *
  * **本檔不開交易**：`deactivateCompanyUserAccountInTransaction` 只收外部交易 handle，開交易的
  * 包裝在入口檔 `company-users-main.service.ts` 的 `deactivateCompanyUserAccount`。
+ *
+ * ## 同時作廢該成員的所有 refresh token 鏈（安全落差修補）
+ *
+ * `company_users.status` 只在登入那一刻被檢查（`sessions-main.resolve-identity.repository.ts`），
+ * access token 續期與 refresh 都不查，因此停用一個帳號後，對方手上已經發出的 access token
+ * 原本會一直有效到期，refresh 票甚至還能繼續換出新的 access token——等於停用要等到下一次
+ * 重新登入才生效。呼叫 `sessions` 模組的 `revokeSessionsForDeactivation`（傳入同一個 `tx`，
+ * 見該檔頭）補上這一步。**company-users 依賴 sessions 不是新方向**：`create.service.ts`／
+ * `reset-password.service.ts` 早就在用 `sessions` 的 `hashPassword`，這裡是同一個方向的
+ * 第三個用途。`sessions` 本身不 import `company-users`（也不 import `employments`），
+ * 方向不會形成循環，見 `sessions/index.ts` 的說明。
+ *
+ * 作廢後的 token id 清單併進本檔本來就會寫的那一筆 `company-users.main.deactivate` 稽核，
+ * 不另開一筆——理由與 `company-users-main.deactivate.service.ts` 檔頭同一段一致：這是同一次
+ * 停用操作的一部分，不是獨立事件。
  */
 import type { TransactionRunner } from '../../../../db/client.ts'
 import { CompanyUserStatus, type CompanyUserStatusValue } from '../../../../db/schema/index.ts'
 import { buildAuditChanges, recordAudit } from '../../../audit/index.ts'
+import { revokeSessionsForDeactivation } from '../../../sessions/index.ts'
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import { cannotChangeOwnAccountStatus, companyUserNotFound } from '../company-users-main.errors.ts'
 import { findCompanyUserByEmployee, markCompanyUserDeactivated } from '../company-users-main.repository.ts'
+
+/**
+ * 把作廢的 token id 陣列序列化成一個可進 `changes` 的字串。與
+ * `sessions/main/impl/sessions-main.revoke-on-reuse.service.ts` 的同名函式邏輯完全相同，
+ * 但不能直接 import 它——那是別的模組 `impl/` 底下的內部檔案（§0.3、§0.4），這裡就地重寫
+ * 同一個小函式（理由與那一份檔頭「為什麼欄位是字串，不是陣列」一致）。
+ */
+const serializeTokenIds = (tokenIds: readonly string[]): string | null =>
+  tokenIds.length === 0 ? null : JSON.stringify(tokenIds)
 
 export type DeactivateCompanyUserAccountInput = {
   readonly employeeId: string
@@ -113,6 +138,9 @@ export const deactivateCompanyUserAccountInTransaction = async (
     return succeed({ companyUserId: target.id, status: CompanyUserStatus.Inactive })
   }
 
+  // 同一筆交易內作廢所有 session（安全落差修補，見檔頭「同時作廢」段落）。
+  const revokedTokenIds = await revokeSessionsForDeactivation(tx, companyId, target.id, now)
+
   await recordAudit(tx, {
     companyId,
     actor: { type: 'company-user', companyUserId: operatorCompanyUserId },
@@ -120,7 +148,13 @@ export const deactivateCompanyUserAccountInTransaction = async (
     subjectTable: 'company_users',
     subjectId: target.id,
     // `company_users` 政策的 `status` 欄位（`Value` 級，見 `audit-field-policy.ts`）。
-    changes: buildAuditChanges('company_users', { status: 'ACTIVE' }, { status: 'INACTIVE' }),
+    // `revokedTokenIds` 併進同一筆稽核，不另開一筆：作廢 session 是這次停用的一部分，
+    // 不是獨立事件（理由與 `employments-main.leave.service.ts` 的同一種併法一致）。
+    changes: buildAuditChanges(
+      'company_users',
+      { status: 'ACTIVE' },
+      { status: 'INACTIVE', revokedTokenIds: serializeTokenIds(revokedTokenIds) },
+    ),
     effectiveDate: null,
     now,
   })

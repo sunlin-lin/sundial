@@ -41,6 +41,15 @@ import {
 import { findEmploymentDetail, markEmploymentLeft } from '../employments-main.repository.ts'
 import { EmploymentStatus } from '../../../../db/schema/index.ts'
 
+/**
+ * 把作廢的 token id 陣列序列化成一個可進 `changes` 的字串。與
+ * `sessions/main/impl/sessions-main.revoke-on-reuse.service.ts` 的同名函式邏輯完全相同，
+ * 但不能直接 import 它——跨模組不得互相 import 對方 `impl/` 底下的內部檔案（§0.4），
+ * 這裡就地重寫同一個小函式（理由與那一份檔頭「為什麼欄位是字串，不是陣列」一致）。
+ */
+const serializeTokenIds = (tokenIds: readonly string[]): string | null =>
+  tokenIds.length === 0 ? null : JSON.stringify(tokenIds)
+
 export const leaveEmploymentInTransaction = async (
   tx: TransactionRunner,
   context: EmploymentsMainContext,
@@ -103,7 +112,14 @@ export const leaveEmploymentInTransaction = async (
       // `company_users` 政策的 `status` 欄位（§4.5：外層 key 是表名，內層是業務欄位名）——
       // 見 `modules/audit/main/domain/audit-field-policy.ts` 與
       // `modules/audit/main/domain/audit-company-users-content.ts` 對這一欄的新增說明。
-      changes: buildAuditChanges('company_users', { status: 'ACTIVE' }, { status: 'INACTIVE' }),
+      // `revokedTokenIds` 併進同一筆稽核，不另開一筆：這次停用同步作廢的 session 是這次
+      // 停用的一部分，不是獨立事件（理由見 `company-users-main.deactivate.service.ts` 檔頭
+      // 「作廢後的 token id 清單不在這裡記稽核」）。
+      changes: buildAuditChanges(
+        'company_users',
+        { status: 'ACTIVE' },
+        { status: 'INACTIVE', revokedTokenIds: serializeTokenIds(deactivation.revokedTokenIds) },
+      ),
       effectiveDate: null,
       now,
     })

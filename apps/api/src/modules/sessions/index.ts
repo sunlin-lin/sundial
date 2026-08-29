@@ -21,4 +21,11 @@ export * from './main/sessions-main.errors.ts'
 /**
  * `hashPassword` 已透過 `export * from './main/sessions-main.service.ts'` 匯出（見該檔），
  * 這裡不重複宣告——`index.ts` 只允許 `export ... from`，`export *` 已經涵蓋它。
+ *
+ * `revokeSessionsForDeactivation` 同理已由上面那行涵蓋：`company-users/main` 停用一個成員的
+ * 登入帳號時，透過這個出口在同一筆交易內作廢該成員的所有 refresh token 鏈（安全落差修補，
+ * 完整理由見 `main/impl/sessions-main.revoke-for-deactivation.service.ts` 檔頭）。`sessions`
+ * 被 `company-users` import 不是新方向——`company-users-main.create.service.ts`／
+ * `reset-password.service.ts` 早就在用這個出口的 `hashPassword`；`sessions` 本身不 import
+ * `company-users`，方向不會形成循環。
  */

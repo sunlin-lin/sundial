@@ -17,12 +17,27 @@
  * 的責任。這支動作收到「幫某位員工停用帳號」的指令就照做，找不到有效帳號時**不是錯誤**，
  * 是合法的空操作（見 repository 的說明：Stage 3 還沒有「新增員工同時建立帳號」的編排，
  * 一位員工完全可能沒有帳號）。
+ *
+ * **同時作廢該成員的所有 refresh token 鏈**（安全落差修補）：company_users.status 只在登入
+ * 那一刻被檢查，access token 續期與 refresh 都不查，停用帳號後舊票原本會一直有效到期、
+ * refresh 票甚至還能繼續換出新的 access token。呼叫 sessions 模組的
+ * revokeSessionsForDeactivation（傳入同一個 tx，見該檔頭）補上這一步，讓停用立即生效。
+ * **company-users 依賴 sessions 不是新方向**：create.service.ts／reset-password.service.ts
+ * 早就在用 sessions 的 hashPassword，這裡是同一個方向的第三個用途。sessions 本身不 import
+ * company-users（也不 import employments），方向不會形成循環。
+ *
+ * 作廢後的 token id 清單不在這裡記稽核——本檔本來就不呼叫 recordAudit（見上方「不做的事」），
+ * 回傳給呼叫端（離職流程）併進它自己那一筆 company_users 稽核的 revokedTokenIds 欄位，
+ * 避免同一次停用被兩筆稽核各自描述一次。
  */
 import type { TransactionRunner } from '../../../../db/client.ts'
+import { revokeSessionsForDeactivation } from '../../../sessions/index.ts'
 import { findActiveCompanyUserByEmployee, markCompanyUserDeactivated } from '../company-users-main.repository.ts'
 
 export type CompanyUserDeactivation = {
   readonly companyUserId: string
+  /** 這次停用同步作廢的 refresh token id 清單，供呼叫端併入自己的稽核 changes（見檔頭）。 */
+  readonly revokedTokenIds: readonly string[]
 } | null
 
 /**
@@ -30,7 +45,8 @@ export type CompanyUserDeactivation = {
  * @param now 台北牆鐘時間，**由呼叫端傳入而不是這裡自己取**：必須與呼叫端同一次操作寫下的其他
  *   時間戳（任職的 `updated_at`、稽核的 `created_at`）完全相同，理由與
  *   `company-users/roles/impl/company-users-roles.create.service.ts` 的 `assignedAt` 相同。
- * @returns 找不到有效帳號時回 `null`（合法的空操作，見檔頭）；停用成功回被停用的 `companyUserId`。
+ * @returns 找不到有效帳號時回 `null`（合法的空操作，見檔頭）；停用成功回被停用的 `companyUserId`
+ *   與這次一併作廢的 `revokedTokenIds`。
  */
 export const deactivateCompanyUser = async (
   tx: TransactionRunner,
@@ -45,5 +61,7 @@ export const deactivateCompanyUser = async (
   // 就算發生也不是這支動作要處理的業務拒絕——它只是「已經停用了」，靜默視為完成即可，
   // 不需要另開一個錯誤碼去描述一個對使用者沒有意義的競態。
   await markCompanyUserDeactivated(tx, companyId, companyUser.id, now)
-  return { companyUserId: companyUser.id }
+  // 同一筆交易內作廢所有 session（安全落差修補，見檔頭）。
+  const revokedTokenIds = await revokeSessionsForDeactivation(tx, companyId, companyUser.id, now)
+  return { companyUserId: companyUser.id, revokedTokenIds }
 }
