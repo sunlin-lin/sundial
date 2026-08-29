@@ -63,6 +63,10 @@ type CreateBody = {
   readonly employmentNatureCode?: number
   readonly hireDate: string
   readonly departmentId: string
+  /** 依公司設定，選填（UI 定案 §2.2）。 */
+  readonly jobTitleId?: string
+  /** 依公司設定，選填、可多個（UI 定案 §2.2）。沒帶這個欄位視同空陣列。 */
+  readonly jobPositionIds?: readonly string[]
   readonly withholdingMethodCode: WithholdingMethodCodeValue
   readonly username: string
   readonly initialPassword: string
@@ -72,7 +76,8 @@ type CreateBody = {
 /**
  * body → service 的輸入。選填欄位一律收斂成 `null`：`exactOptionalPropertyTypes` 之下，
  * 「沒有這個欄位」與「欄位是 undefined」是兩件事，讓它在跨層傳遞時只有一種形狀
- * （理由與 `employees-main.handler.ts` 的 `toProfileInput` 相同）。
+ * （理由與 `employees-main.handler.ts` 的 `toProfileInput` 相同）。`jobPositionIds` 收斂成
+ * 空陣列而不是 `null`：業務型別本來就用「空陣列＝不指派」表達，不需要多一種 `null` 狀態。
  */
 const toCreateInput = (body: CreateBody): CreateOnboardingInput => ({
   employeeCode: body.employeeCode,
@@ -87,6 +92,8 @@ const toCreateInput = (body: CreateBody): CreateOnboardingInput => ({
   employmentNatureCode: body.employmentNatureCode ?? null,
   hireDate: body.hireDate,
   departmentId: body.departmentId,
+  jobTitleId: body.jobTitleId ?? null,
+  jobPositionIds: body.jobPositionIds ?? [],
   withholdingMethodCode: body.withholdingMethodCode,
   username: body.username,
   initialPassword: body.initialPassword,
@@ -106,6 +113,10 @@ const toOnboardingData = (result: OnboardingResult) => ({
   employeeCode: result.employee.employeeCode,
   employmentId: result.employment.id,
   departmentHistoryId: result.departmentHistory.id,
+  /** `null`＝這次到職沒有設定職稱（`CreateOnboardingInput.jobTitleId` 為 `null`）。 */
+  jobTitleHistoryId: result.jobTitleHistory === null ? null : result.jobTitleHistory.id,
+  /** 空陣列＝這次到職沒有指派任何職務。 */
+  jobPositionHistoryIds: result.jobPositionHistories.map((history) => history.id),
   withholdingSettingId: result.withholdingSetting.id,
   companyUserId: result.companyUserId,
   roles: result.roles.map((role) => ({

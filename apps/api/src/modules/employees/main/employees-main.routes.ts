@@ -109,6 +109,10 @@ const EmployeeKeyword = t.String({ maxLength: 128 })
 /** 遮罩後的敏感欄位。刻意用寬鬆的字串型別：遮罩結果含 `*`，套原欄位的樣式驗證會失敗。 */
 const MaskedValue = t.String()
 
+/**
+ * 列表單筆。**多一欄 `jobTitleName`**（目前有效職稱，UI 定案 `docs/ui/20-employee-list.md` §1，
+ * 計畫 §3.2；Stage 5 接上）：`null` 代表這位員工目前沒有設定職稱，不是查詢失敗。
+ */
 const EmployeeSummarySchema = t.Object({
   id: Uuid,
   employeeCode: EmployeeCode,
@@ -116,6 +120,7 @@ const EmployeeSummarySchema = t.Object({
   gender: GenderSchema,
   /** 僅末 3 碼（§5.1）。完整值不在任何端點提供。 */
   identityNumberMasked: MaskedValue,
+  jobTitleName: Nullable(t.String({ maxLength: 128 })),
 })
 
 const EmployeeDetailSchema = t.Object({

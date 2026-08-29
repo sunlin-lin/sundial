@@ -29,7 +29,14 @@ import { refreshGuard } from '../http/refresh-guard.ts'
 import { companyUsersRolesRoutes } from '../modules/company-users/routes.ts'
 import { departmentsMainRoutes } from '../modules/departments/routes.ts'
 import { employeesMainRoutes, employeesOnboardingRoutes } from '../modules/employees/routes.ts'
-import { employmentsDepartmentHistoriesRoutes, employmentsMainRoutes } from '../modules/employments/routes.ts'
+import {
+  employmentsDepartmentHistoriesRoutes,
+  employmentsJobPositionHistoriesRoutes,
+  employmentsJobTitleHistoriesRoutes,
+  employmentsMainRoutes,
+} from '../modules/employments/routes.ts'
+import { jobPositionsMainRoutes } from '../modules/job-positions/routes.ts'
+import { jobTitlesMainRoutes } from '../modules/job-titles/routes.ts'
 import { permissionsMainRoutes } from '../modules/permissions/routes.ts'
 import { regulatoryDatasetsRoutes, regulatorySyncRoutes } from '../modules/regulatory/routes.ts'
 import { rolesMainRoutes } from '../modules/roles/routes.ts'
@@ -111,6 +118,12 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
       // 任職主檔與部門歷史：不需要 cipher（兩者都沒有個資欄位，`employee_id` 只是識別碼）。
       .use(employmentsMainRoutes({ db: database, clock }))
       .use(employmentsDepartmentHistoriesRoutes({ db: database, clock }))
+      // 職稱／職務歷史：不需要 cipher（皆無個資欄位）。實作計畫 05-employee-onboarding.md Stage 5。
+      .use(employmentsJobTitleHistoriesRoutes({ db: database, clock }))
+      .use(employmentsJobPositionHistoriesRoutes({ db: database, clock }))
+      // 職稱／職務主檔：同樣不需要 cipher。
+      .use(jobTitlesMainRoutes({ db: database, clock }))
+      .use(jobPositionsMainRoutes({ db: database, clock }))
       // 扣繳設定：同樣不需要 cipher。
       .use(withholdingMainRoutes({ db: database, clock }))
       // 法規資料集：**刻意不注入 clock**（實作計畫 §4.2）。這四支端點的時間維度只有呼叫端送來的

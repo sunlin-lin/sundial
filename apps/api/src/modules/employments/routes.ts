@@ -4,3 +4,5 @@
  */
 export { employmentsMainRoutes } from './main/employments-main.routes.ts'
 export { employmentsDepartmentHistoriesRoutes } from './department-histories/employments-department-histories.routes.ts'
+export { employmentsJobTitleHistoriesRoutes } from './job-title-histories/employments-job-title-histories.routes.ts'
+export { employmentsJobPositionHistoriesRoutes } from './job-position-histories/employments-job-position-histories.routes.ts'

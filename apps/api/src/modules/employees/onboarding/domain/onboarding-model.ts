@@ -2,28 +2,45 @@
  * 到職編排的業務型別（service ↔ repository 之間傳遞的形狀）。本目錄一律零 IO（§0.1、§3.1.1）。
  *
  * **本檔匯入其他大目錄的型別一律經由對方的 `index.ts`**（§0.3）：`EmploymentDetail`／
- * `DepartmentHistoryDetail` 來自 `employments`，`WithholdingSettingDetail` 來自 `withholding`，
- * `AssignedRole` 來自 `company-users`。唯一的例外是 `EmployeeDetail`——它與 `onboarding` 同屬
- * `employees` 這個大目錄，次目錄之間本來就可以互相 import（§0.3：「同一大目錄內的次目錄之間可以
- * 互相 import」），因此直接指向 `main/domain/employee-model.ts`。
+ * `DepartmentHistoryDetail`／`JobTitleHistoryDetail`／`JobPositionHistoryDetail` 來自
+ * `employments`，`WithholdingSettingDetail` 來自 `withholding`，`AssignedRole` 來自
+ * `company-users`。唯一的例外是 `EmployeeDetail`——它與 `onboarding` 同屬 `employees` 這個
+ * 大目錄，次目錄之間本來就可以互相 import（§0.3：「同一大目錄內的次目錄之間可以互相 import」），
+ * 因此直接指向 `main/domain/employee-model.ts`。
  */
 export type { EmploymentTypeCodeValue, GenderValue, WithholdingMethodCodeValue } from '../../../../db/schema/index.ts'
 
 import type { EmploymentTypeCodeValue, GenderValue, WithholdingMethodCodeValue } from '../../../../db/schema/index.ts'
 import type { EmployeeDetail } from '../../main/domain/employee-model.ts'
 import type { AssignedRole } from '../../../company-users/index.ts'
-import type { DepartmentHistoryDetail, EmploymentDetail } from '../../../employments/index.ts'
+import type {
+  DepartmentHistoryDetail,
+  EmploymentDetail,
+  JobPositionHistoryDetail,
+  JobTitleHistoryDetail,
+} from '../../../employments/index.ts'
 import type { WithholdingSettingDetail } from '../../../withholding/index.ts'
 
-export type { AssignedRole, DepartmentHistoryDetail, EmployeeDetail, EmploymentDetail, WithholdingSettingDetail }
+export type {
+  AssignedRole,
+  DepartmentHistoryDetail,
+  EmployeeDetail,
+  EmploymentDetail,
+  JobPositionHistoryDetail,
+  JobTitleHistoryDetail,
+  WithholdingSettingDetail,
+}
 
 /**
  * 建立到職的完整輸入。**單頁一次收齊**（UI 定案 `docs/ui/20-employee-list.md` §1、§2）：
  * 員工基本資料、任職與組織、登入帳號與角色，四段攤平在同一個型別裡，不分步驟。
  *
- * 刻意**沒有**眷屬、職稱、職務、勞退自願提繳率——這些依實作計畫 §8 分屬 Stage 5（職稱職務）
- * 與 Stage 7（眷屬、勞退），不在本輪 Stage 4（交易編排）範圍內，UI 定案也明說眷屬可以
- * 「建立員工後補登」。
+ * **職稱／職務依公司設定，非必填**（UI 定案 §2.2：「職稱——依公司設定」「職務——依公司設定，
+ * 可指派多個職務」；計畫 §3.2：「可做成非必填」）——`jobTitleId` 為 `null` 代表這次到職不設定
+ * 職稱，`jobPositionIds` 為空陣列代表不指派任何職務，兩者都合法。
+ *
+ * 刻意**沒有**眷屬、勞退自願提繳率——這兩項依實作計畫 §8 屬於 Stage 7，UI 定案也明說眷屬可以
+ * 「建立員工後補登」，不在本輪範圍內。
  */
 export type CreateOnboardingInput = {
   // ---- 基本資料（→ employees.main.create） ----
@@ -41,6 +58,13 @@ export type CreateOnboardingInput = {
   readonly employmentNatureCode: number | null
   readonly hireDate: string
   readonly departmentId: string
+
+  // ---- 職稱／職務（→ employments.job-title-histories.create、
+  // employments.job-position-histories.create；依公司設定，非必填，見上方檔頭） ----
+  /** `null`＝這次到職不設定職稱。生效日固定＝到職日，理由與部門歸屬、扣繳設定相同。 */
+  readonly jobTitleId: string | null
+  /** 空陣列＝不指派任何職務。生效日固定＝到職日。 */
+  readonly jobPositionIds: readonly string[]
 
   // ---- 扣繳（→ withholding.main.create）----
   /**
@@ -64,6 +88,10 @@ export type OnboardingResult = {
   readonly employee: EmployeeDetail
   readonly employment: EmploymentDetail
   readonly departmentHistory: DepartmentHistoryDetail
+  /** `null`＝這次到職沒有設定職稱（`CreateOnboardingInput.jobTitleId` 為 `null`）。 */
+  readonly jobTitleHistory: JobTitleHistoryDetail | null
+  /** 空陣列＝這次到職沒有指派任何職務。 */
+  readonly jobPositionHistories: readonly JobPositionHistoryDetail[]
   readonly withholdingSetting: WithholdingSettingDetail
   readonly companyUserId: string
   readonly roles: readonly AssignedRole[]

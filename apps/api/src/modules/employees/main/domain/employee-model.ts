@@ -42,6 +42,26 @@ export type EmployeeSummary = {
   readonly identityNumberMasked: string
 }
 
+/**
+ * 員工清單的一列，比 {@link EmployeeSummary} 多一欄「目前有效職稱」。
+ *
+ * **只加在列表，不加在 `EmployeeSummary` 本身**：`EmployeeDetail` 是 `EmployeeSummary` 的擴充，
+ * `get`／`update` 兩支端點回的是 `EmployeeDetail`，而職稱不是那兩支端點的欄位需求
+ * ——UI 定案（`docs/ui/20-employee-list.md` §1）明列「職稱」是**列表**欄位，不是單筆詳情欄位。
+ * 把它加進 `EmployeeSummary` 會連帶要求 `get`／`update` 的每一次查詢都算一次職稱，即使畫面根本
+ * 不顯示。
+ *
+ * `jobTitleName` 為 `null` 代表這位員工目前沒有生效中的職稱（職稱依公司設定為選填，見
+ * `employees/onboarding` 的 `CreateOnboardingInput.jobTitleId`），不是查詢失敗——計畫 §3.2
+ * 點名「不做的話那一欄永遠空白」，本輪（Stage 5）把它接進來。
+ *
+ * **批次計算，不是逐列查詢**（§4.5）：`impl/employees-main.list.repository.ts` 對整頁員工一次
+ * 批次查出目前有效任職與目前有效職稱，在記憶體裡用 `Map` 對應回去，不在迴圈裡逐一查詢。
+ */
+export type EmployeeListItem = EmployeeSummary & {
+  readonly jobTitleName: string | null
+}
+
 /** 單筆員工的完整內容。`get`／`create`／`update` 共用同一個形狀。敏感欄位一律已遮罩。 */
 export type EmployeeDetail = EmployeeSummary & {
   readonly birthdayMasked: string
@@ -55,7 +75,7 @@ export type EmployeeDetail = EmployeeSummary & {
 
 /** 列表查詢的一頁結果。**不含總頁數**（§1.4）：兩個數字並存時前端沒有依據判斷該信哪一個。 */
 export type EmployeeListPage = {
-  readonly items: readonly EmployeeSummary[]
+  readonly items: readonly EmployeeListItem[]
   readonly totalCount: number
 }
 

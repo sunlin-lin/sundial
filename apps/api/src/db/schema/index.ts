@@ -54,6 +54,10 @@ export {
   WithholdingMethodCode,
   type WithholdingMethodCodeValue,
 } from './employee-withholding-settings.ts'
+export { jobTitles, JobTitleStatus, type JobTitleStatusValue } from './job-titles.ts'
+export { jobPositions, JobPositionStatus, type JobPositionStatusValue } from './job-positions.ts'
+export { employeeJobTitleHistories } from './employee-job-title-histories.ts'
+export { employeeJobPositionHistories } from './employee-job-position-histories.ts'
 
 import { auditLogs } from './audit-logs.ts'
 import { companyUserRoles } from './company-user-roles.ts'
@@ -61,8 +65,12 @@ import { companyUsers } from './company-users.ts'
 import { departments } from './departments.ts'
 import { employeeDepartmentHistories } from './employee-department-histories.ts'
 import { employeeEmployments } from './employee-employments.ts'
+import { employeeJobPositionHistories } from './employee-job-position-histories.ts'
+import { employeeJobTitleHistories } from './employee-job-title-histories.ts'
 import { employeeWithholdingSettings } from './employee-withholding-settings.ts'
 import { employees } from './employees.ts'
+import { jobPositions } from './job-positions.ts'
+import { jobTitles } from './job-titles.ts'
 import { refreshTokens } from './refresh-tokens.ts'
 import { rolePermissions } from './role-permissions.ts'
 import { roles } from './roles.ts'
@@ -141,6 +149,31 @@ export type CompanyScopedTable =
   | typeof employeeEmployments
   | typeof employeeDepartmentHistories
   | typeof employeeWithholdingSettings
+  /**
+   * `job_titles`／`job_positions`／`employee_job_title_histories`／`employee_job_position_histories`
+   * 四張都有 `company_id`，因此屬於這個聯集（實作計畫 `plans/05-employee-onboarding.md` Stage 5）。
+   *
+   * **`job_titles`／`job_positions` 的 `company_id` 可為 NULL**（系統預設，見兩檔的 schema 檔頭），
+   * 這件事不影響它們屬於本聯集——`TenantDatabase` 的過濾條件 `eq(companyId, 本公司)` 對
+   * `company_id IS NULL` 的列天生不會命中，效果剛好是「公司範圍內的寫入動作（新增／修改／刪除）
+   * 摸不到系統預設列」，這正是我們要的行為，不是缺陷。查詢「公司自訂 ＋ 系統預設」需要繞過
+   * `TenantDatabase` 的預設 scope，見兩個 `main` 模組的 `list.repository.ts`。
+   *
+   * **排序（見下方陣列）：兩張歷史表必須排在 `employeeEmployments` 之前**（複合外鍵指向它），
+   * `employeeJobTitleHistories`／`employeeJobPositionHistories` 對 `jobTitles`／`jobPositions`
+   * 則是**單欄外鍵**（`job_titles.company_id`／`job_positions.company_id` 可為 NULL，複合外鍵在
+   * 系統預設列上恆不匹配，見兩張歷史表的 schema 檔頭第 2 點），因此兩張歷史表與
+   * `jobTitles`／`jobPositions` 之間**沒有「先清哪一個」的外鍵順序要求**——單欄外鍵只保證
+   * 「id 存在」，`companyScopedTablesInDeleteOrder` 逐表刪除時,`job_titles`／`job_positions`
+   * 若先被清空，歷史表裡指向它們的 `job_title_id`／`job_position_id` 會變成指向不存在的 id，
+   * 但那不會撞外鍵違反（單欄外鍵只在**新增**時檢查，`DELETE` 不會反向檢查子表）。實務上仍然把
+   * 兩張歷史表排在 `jobTitles`／`jobPositions` 之前，與其餘「歷史表先於主檔」的排列習慣一致，
+   * 方便閱讀，不是因為外鍵要求。
+   */
+  | typeof jobTitles
+  | typeof jobPositions
+  | typeof employeeJobTitleHistories
+  | typeof employeeJobPositionHistories
 
 /**
  * 對「窮舉一個聯集的所有成員」做編譯期檢查的小工具，供下方 {@link companyScopedTablesInDeleteOrder} 使用。
@@ -209,12 +242,18 @@ export const companyScopedTablesInDeleteOrder = exhaustiveCompanyScopedTables<Co
   // 排序註解。employeeDepartmentHistories 同時參照 employeeEmployments 與 departments，因此必須
   // 排在兩者之前；employeeWithholdingSettings 與 employeeEmployments 都只參照 employees，因此都
   // 必須排在 employees 之前，兩者之間互不依賴（順序無關）。
+  // 兩張新歷史表排在 employeeEmployments 之前（複合外鍵指向它，理由與 employeeDepartmentHistories
+  // 相同）；對 jobTitles／jobPositions 只是單欄外鍵，順序考量見上方型別聯集的說明。
+  employeeJobTitleHistories,
+  employeeJobPositionHistories,
   employeeDepartmentHistories,
   employeeWithholdingSettings,
   employeeEmployments,
   employees,
   shiftDefinitions,
   departments,
+  jobTitles,
+  jobPositions,
   companyUsers,
   roles,
 ] as const)

@@ -26,6 +26,7 @@ import type { EmployeesMainContext } from './domain/employee-context.ts'
 import { resolveEmployeeSort } from './domain/employee-list-view.ts'
 import type {
   EmployeeDetail,
+  EmployeeListItem,
   EmployeeListPage,
   EmployeeListQuery,
   EmployeeSummary,
@@ -101,6 +102,15 @@ const toEmployeeSummaryData = (employee: EmployeeSummary) => ({
   identityNumberMasked: employee.identityNumberMasked,
 })
 
+/**
+ * 列表單筆 → 本端點的 `data`。多一欄 `jobTitleName`（目前有效職稱，`null`＝沒有設定），
+ * 理由見 `domain/employee-model.ts` 的 `EmployeeListItem` 檔頭。
+ */
+const toEmployeeListItemData = (employee: EmployeeListItem) => ({
+  ...toEmployeeSummaryData(employee),
+  jobTitleName: employee.jobTitleName,
+})
+
 const toEmployeeDetailData = (employee: EmployeeDetail) => ({
   ...toEmployeeSummaryData(employee),
   birthdayMasked: employee.birthdayMasked,
@@ -171,7 +181,7 @@ const toEmployeeListData = (query: EmployeeListQuery, body: ListBody, page: Empl
     toSearchEcho(body),
     query.sort,
     { currentPage: query.currentPage, perPage: query.perPage, totalCount: page.totalCount },
-    page.items.map(toEmployeeSummaryData),
+    page.items.map(toEmployeeListItemData),
   )
 
 /** 各端點 `data` 的型別。由映射函式反推，因此**改了映射就會改型別**，不會兩邊漂移。 */

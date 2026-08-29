@@ -6,7 +6,8 @@
  * __tests__/employees-main.endpoints.test.ts` 檔頭）。
  *
  * **本檔最重要的三條測試（依計畫回報要求逐一對應）：**
- * 1. `★ 角色不存在時整筆取消`——證明八張表**逐表**零新增，不是「查不到那個員工」。
+ * 1. `★ 角色不存在時整筆取消`——證明**十張表**逐表零新增，不是「查不到那個員工」
+ *    （Stage 5 把職稱、職務兩張歷史表接進同一個交易，回捲測試跟著擴充，見計畫 §8 Stage 5 回報）。
  * 2. `username 全域重複時拒絕，且不touch既有帳號`——證明既有 `users` 列一個欄位都沒被動過。
  * 3. `密碼不進日誌`——故意讓建立失敗，確認 HTTP 回應與過程中寫進 console 的任何一行都沒有明文密碼。
  */
@@ -24,8 +25,14 @@ import {
   DepartmentStatus,
   employeeDepartmentHistories,
   employeeEmployments,
+  employeeJobPositionHistories,
+  employeeJobTitleHistories,
   employees,
   employeeWithholdingSettings,
+  jobPositions,
+  JobPositionStatus,
+  jobTitles,
+  JobTitleStatus,
   roles,
   RoleStatus,
   users,
@@ -70,6 +77,8 @@ type OnboardingDataShape = {
   readonly employeeCode: string
   readonly employmentId: string
   readonly departmentHistoryId: string
+  readonly jobTitleHistoryId: string | null
+  readonly jobPositionHistoryIds: readonly string[]
   readonly withholdingSettingId: string
   readonly companyUserId: string
   readonly roles: readonly { readonly id: string; readonly roleId: string; readonly roleCode: string }[]
@@ -222,6 +231,50 @@ const createRoleFixture = async (companyId: string): Promise<string> => {
   return roleId
 }
 
+/**
+ * 建立一個公司自訂職稱（Stage 5：§7.3 的例外，職稱主檔建立不是本檔要測的東西）。
+ * 用於練到「一次到職順便設定職稱」這條路徑，讓回捲測試真的會寫過
+ * `employee_job_title_histories` 再被回滾，不只是「這個欄位沒送所以那張表本來就是空的」。
+ */
+const createJobTitleFixture = async (companyId: string): Promise<string> => {
+  const jobTitleId = crypto.randomUUID()
+  const now = clock.now()
+  await database.insert(jobTitles).values({
+    id: jobTitleId,
+    companyId,
+    code: `TITLE-${jobTitleId.slice(0, 8)}`,
+    name: '測試職稱',
+    description: null,
+    isSystem: false,
+    status: JobTitleStatus.Active,
+    deletedAt: null,
+    deletedSeq: 0,
+    createdAt: now,
+    updatedAt: now,
+  })
+  return jobTitleId
+}
+
+/** 建立一個公司自訂職務，理由與 `createJobTitleFixture` 相同。 */
+const createJobPositionFixture = async (companyId: string): Promise<string> => {
+  const jobPositionId = crypto.randomUUID()
+  const now = clock.now()
+  await database.insert(jobPositions).values({
+    id: jobPositionId,
+    companyId,
+    code: `POSITION-${jobPositionId.slice(0, 8)}`,
+    name: '測試職務',
+    description: null,
+    isSystem: false,
+    status: JobPositionStatus.Active,
+    deletedAt: null,
+    deletedSeq: 0,
+    createdAt: now,
+    updatedAt: now,
+  })
+  return jobPositionId
+}
+
 const uniqueCode = (prefix: string): string => `${prefix}-${crypto.randomUUID().slice(0, 8)}`
 const uniqueIdentityNumber = (): string =>
   `A${Math.floor(Math.random() * 900_000_000 + 100_000_000)
@@ -229,13 +282,26 @@ const uniqueIdentityNumber = (): string =>
     .padStart(9, '1')}`
 const uniqueUsername = (): string => `onboarding-${crypto.randomUUID()}`
 
-/** 建立一份完整、可以直接送出的到職編排 body。 */
+/**
+ * 建立一份完整、可以直接送出的到職編排 body。
+ *
+ * **預設帶職稱與一個職務**：職稱／職務依公司設定為選填（UI 定案 §2.2），但既然 Stage 5 把它們
+ * 接進同一個交易，預設值就該練到那條路徑，否則本檔所有測試（含最重要的回捲測試）都不會真的寫過
+ * `employee_job_title_histories`／`employee_job_position_histories`，Stage 5 的交易編排等於
+ * 沒有被這份測試蓋到。呼叫端要測「不填職稱／職務」這個合法情境時，用 `overrides` 明確傳
+ * `jobTitleId: undefined`／`jobPositionIds: []`。
+ */
 const onboardingBody = async (
   companyId: string,
   overrides: Record<string, unknown> = {},
 ): Promise<Record<string, unknown>> => {
   const departmentId = (overrides['departmentId'] as string | undefined) ?? (await createDepartmentFixture(companyId))
   const roleIds = (overrides['roleIds'] as readonly string[] | undefined) ?? [await createRoleFixture(companyId)]
+  const jobTitleId =
+    'jobTitleId' in overrides ? (overrides['jobTitleId'] as string | undefined) : await createJobTitleFixture(companyId)
+  const jobPositionIds = (overrides['jobPositionIds'] as readonly string[] | undefined) ?? [
+    await createJobPositionFixture(companyId),
+  ]
 
   return {
     employeeCode: uniqueCode('EMP'),
@@ -254,6 +320,8 @@ const onboardingBody = async (
     ...overrides,
     departmentId,
     roleIds,
+    jobTitleId,
+    jobPositionIds,
   }
 }
 
@@ -301,6 +369,24 @@ describe('employees/onboarding/create（整合，實作計畫 05-employee-onboar
     expect(departmentHistoryRow?.employmentId).toBe(created.payload.data.employmentId)
     expect(departmentHistoryRow?.effectiveFrom).toBe('2026-09-01')
 
+    // Stage 5：預設的 onboardingBody 帶了職稱與一個職務，兩張新歷史表也各自新增了一列。
+    expect(created.payload.data.jobTitleHistoryId).not.toBeNull()
+    const [jobTitleHistoryRow] = await database
+      .select()
+      .from(employeeJobTitleHistories)
+      .where(eq(employeeJobTitleHistories.id, created.payload.data.jobTitleHistoryId ?? ''))
+    expect(jobTitleHistoryRow?.employmentId).toBe(created.payload.data.employmentId)
+    expect(jobTitleHistoryRow?.effectiveFrom).toBe('2026-09-01')
+
+    expect(created.payload.data.jobPositionHistoryIds).toHaveLength(1)
+    const jobPositionHistoryRows = await database
+      .select()
+      .from(employeeJobPositionHistories)
+      .where(eq(employeeJobPositionHistories.employmentId, created.payload.data.employmentId))
+    expect(jobPositionHistoryRows).toHaveLength(1)
+    expect(jobPositionHistoryRows[0]?.id).toBe(created.payload.data.jobPositionHistoryIds[0])
+    expect(jobPositionHistoryRows[0]?.effectiveFrom).toBe('2026-09-01')
+
     const [withholdingRow] = await database
       .select()
       .from(employeeWithholdingSettings)
@@ -334,10 +420,15 @@ describe('employees/onboarding/create（整合，實作計畫 05-employee-onboar
   })
 
   /**
-   * ★ 整個 Stage 4 存在的理由：靠後的步驟（角色指派）失敗時，前面五步已經成功寫入的資料
+   * ★ 整個 Stage 4 存在的理由：靠後的步驟（角色指派）失敗時，前面幾步已經成功寫入的資料
    * **必須跟著整筆取消**，而不是「查不到那個員工」——逐表確認零新增，不是查一次 get。
+   *
+   * **Stage 5 擴充**：`onboardingBody` 預設帶職稱與一個職務，這條測試因此連帶驗證
+   * `employee_job_title_histories`／`employee_job_position_histories` 也跟著回滾——
+   * 若把鎖或交易 handle 寫錯（例如漏收 `TransactionRunner` 而各自另開連線），這裡會是
+   * 第一個變紅的地方。
    */
-  test('★ 角色不存在時整筆取消：八張表逐表確認零新增', async () => {
+  test('★ 角色不存在時整筆取消：十張表逐表確認零新增', async () => {
     const company = await registerCompany()
     const body = await onboardingBody(company.companyId, { roleIds: [crypto.randomUUID()] })
 
@@ -362,6 +453,20 @@ describe('employees/onboarding/create（整合，實作計畫 05-employee-onboar
       .from(employeeDepartmentHistories)
       .where(eq(employeeDepartmentHistories.companyId, company.companyId))
     expect(departmentHistoryRows).toHaveLength(0)
+
+    // ★ Stage 5 新增：職稱與職務歷史也必須跟著回滾，不能因為它們排在編排順序的前段
+    // （在扣繳、帳號、角色之前）就殘留下來。
+    const jobTitleHistoryRows = await database
+      .select()
+      .from(employeeJobTitleHistories)
+      .where(eq(employeeJobTitleHistories.companyId, company.companyId))
+    expect(jobTitleHistoryRows).toHaveLength(0)
+
+    const jobPositionHistoryRows = await database
+      .select()
+      .from(employeeJobPositionHistories)
+      .where(eq(employeeJobPositionHistories.companyId, company.companyId))
+    expect(jobPositionHistoryRows).toHaveLength(0)
 
     const withholdingRows = await database
       .select()

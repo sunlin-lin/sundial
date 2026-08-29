@@ -216,6 +216,36 @@ export const AUDIT_FIELD_POLICY = {
       effectiveTo: AuditFieldLevel.Value,
     },
   },
+  /**
+   * 職稱異動（資料字典明列「部門、職稱及職務異動」；實作計畫 `plans/05-employee-onboarding.md`
+   * §8 Stage 5）。形狀與 `employee_department_histories` 完全同構——鎖粒度、期間重疊的處置、
+   * 稽核欄位都跟部門那一張一樣，差別只在指向 `job_titles`。
+   */
+  employee_job_title_histories: {
+    source: 'modules/employments/job-title-histories/domain/job-title-history-model.ts#JobTitleHistoryAuditSnapshot',
+    fields: {
+      jobTitleId: AuditFieldLevel.Value,
+      effectiveFrom: AuditFieldLevel.Value,
+      effectiveTo: AuditFieldLevel.Value,
+    },
+  },
+  /**
+   * 職務異動（資料字典明列「部門、職稱及職務異動」；實作計畫 `plans/05-employee-onboarding.md`
+   * §8 Stage 5）。**主體是一次批次指派動作，不是逐筆歷史列**——與 `company_users` 的角色指派
+   * 稽核（`roleIds` 記整組有效角色）同一個判斷，理由見 `modules/employments/job-position-histories/
+   * impl/employments-job-position-histories.create.service.ts` 檔頭「稽核：整批只留一筆」。
+   * `jobPositionIds` 序列化成字串的理由與 `company_users.roleIds` 相同：`AuditFieldValue`
+   * 不允許陣列。
+   */
+  employee_job_position_histories: {
+    source:
+      'modules/employments/job-position-histories/domain/job-position-history-model.ts#JobPositionAssignmentAuditSnapshot',
+    fields: {
+      jobPositionIds: AuditFieldLevel.Value,
+      effectiveFrom: AuditFieldLevel.Value,
+      effectiveTo: AuditFieldLevel.Value,
+    },
+  },
 } as const satisfies Readonly<Record<string, AuditTablePolicy>>
 
 /**

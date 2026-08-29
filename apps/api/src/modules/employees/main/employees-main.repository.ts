@@ -55,8 +55,9 @@ export const listEmployeePage = (
   runner: QueryRunner,
   cipher: FieldCipher,
   companyId: string,
+  today: string,
   query: EmployeeListQuery,
-): Promise<EmployeeListPage> => listEmployeePageImpl(runner, cipher, companyId, query)
+): Promise<EmployeeListPage> => listEmployeePageImpl(runner, cipher, companyId, today, query)
 
 export const findEmployeeDetail = (
   runner: QueryRunner,

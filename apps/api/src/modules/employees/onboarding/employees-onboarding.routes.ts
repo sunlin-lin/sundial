@@ -10,7 +10,7 @@
 import { Elysia, t } from 'elysia'
 import { requestContext } from '../../../http/request-context.ts'
 import { envelope } from '../../../shared/envelope.ts'
-import { BaseRequest, codeField, IsoDate, Uuid } from '../../../shared/field-schemas.ts'
+import { BaseRequest, codeField, IsoDate, Nullable, Uuid } from '../../../shared/field-schemas.ts'
 import { describeOnboardingErrors, ONBOARDING_ENDPOINT_ERRORS } from './employees-onboarding.errors.ts'
 import { handleOnboardingCreate, type OnboardingDependencies } from './employees-onboarding.handler.ts'
 
@@ -68,11 +68,20 @@ const InitialPassword = t.String({ minLength: 8, maxLength: 128 })
 const MAX_ROLE_IDS = 50
 const RoleIds = t.Array(Uuid, { minItems: 1, maxItems: MAX_ROLE_IDS, uniqueItems: true })
 
+/**
+ * 職務 id 清單。選填，可多個（UI 定案 §2.2）。上限比照
+ * `employments/job-position-histories` 端點的 `JobPositionIds`。
+ */
+const MAX_JOB_POSITION_IDS = 50
+const JobPositionIds = t.Array(Uuid, { minItems: 1, maxItems: MAX_JOB_POSITION_IDS, uniqueItems: true })
+
 const OnboardingResultSchema = t.Object({
   employeeId: Uuid,
   employeeCode: EmployeeCode,
   employmentId: Uuid,
   departmentHistoryId: Uuid,
+  jobTitleHistoryId: Nullable(Uuid),
+  jobPositionHistoryIds: t.Array(Uuid),
   withholdingSettingId: Uuid,
   companyUserId: Uuid,
   roles: t.Array(t.Object({ id: Uuid, roleId: Uuid, roleCode: t.String(), roleName: t.String() })),
@@ -116,6 +125,9 @@ export const employeesOnboardingRoutes = (dependencies: OnboardingDependencies) 
         employmentNatureCode: t.Optional(OpenCode),
         hireDate: IsoDate,
         departmentId: Uuid,
+        // ---- 職稱／職務（依公司設定，選填，見 domain/onboarding-model.ts 的型別註解） ----
+        jobTitleId: t.Optional(Uuid),
+        jobPositionIds: t.Optional(JobPositionIds),
         // ---- 扣繳（生效日固定＝到職日，見 domain/onboarding-model.ts 的型別註解） ----
         withholdingMethodCode: WithholdingMethodCodeSchema,
         // ---- 登入帳號與角色 ----
@@ -129,7 +141,8 @@ export const employeesOnboardingRoutes = (dependencies: OnboardingDependencies) 
         ...CommonFailureResponses,
       },
       detail: {
-        summary: '新增員工（到職）：單一交易內建立員工、任職、部門歸屬、扣繳設定、登入帳號及角色',
+        summary:
+          '新增員工（到職）：單一交易內建立員工、任職、部門歸屬、職稱、職務、扣繳設定、登入帳號及角色（職稱／職務依公司設定，選填）',
         description: `${describeOnboardingErrors(ONBOARDING_ENDPOINT_ERRORS.create)} 任一步失敗，整筆取消（UI 定案 docs/ui/20-employee-list.md §2.4）。`,
       },
     })

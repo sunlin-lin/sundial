@@ -19,7 +19,12 @@ import { ErrorGroup, type ErrorGroupValue } from '../../../shared/service-result
 // 與 `onboarding` 同屬 `employees` 大目錄，次目錄之間可以互相 import（§0.3），不必經過 index.ts。
 import { EmployeeErrorCode } from '../main/employees-main.errors.ts'
 import { CompanyUserErrorCode, RoleAssignmentErrorCode } from '../../company-users/index.ts'
-import { DepartmentHistoryErrorCode, EmploymentErrorCode } from '../../employments/index.ts'
+import {
+  DepartmentHistoryErrorCode,
+  EmploymentErrorCode,
+  JobPositionHistoryErrorCode,
+  JobTitleHistoryErrorCode,
+} from '../../employments/index.ts'
 import { WithholdingErrorCode } from '../../withholding/index.ts'
 
 export type OnboardingErrorDeclaration = {
@@ -46,7 +51,7 @@ const unprocessable = (code: string): OnboardingErrorDeclaration => ({
 /**
  * `POST /employees/onboarding/create` 可能吐出的業務錯誤碼（§1.8.3）。
  *
- * 依編排順序分組排列（員工 → 任職 → 部門歸屬 → 扣繳 → 帳號 → 角色），
+ * 依編排順序分組排列（員工 → 任職 → 部門歸屬 → 職稱 → 職務 → 扣繳 → 帳號 → 角色），
  * 讓「這支端點在哪一步可能失敗」一眼看得出來——這正是稽核與除錯時最常問的問題。
  */
 export const ONBOARDING_ENDPOINT_ERRORS = {
@@ -63,6 +68,18 @@ export const ONBOARDING_ENDPOINT_ERRORS = {
     unprocessable(DepartmentHistoryErrorCode.DepartmentNotFound),
     unprocessable(DepartmentHistoryErrorCode.PeriodOverlap),
     conflict(DepartmentHistoryErrorCode.DuplicateEffectiveFrom),
+    // 職稱（選填，見 domain 型別註解）：JobTitleNotFound 真正會發生（選了不存在或已刪除的職稱）；
+    // 其餘（同一任職既有職稱重疊）在一個全新任職上理論上不會發生。
+    unprocessable(JobTitleHistoryErrorCode.EmploymentNotFound),
+    unprocessable(JobTitleHistoryErrorCode.JobTitleNotFound),
+    unprocessable(JobTitleHistoryErrorCode.PeriodOverlap),
+    conflict(JobTitleHistoryErrorCode.DuplicateEffectiveFrom),
+    // 職務（選填、可多個）：JobPositionNotFound 真正會發生；PeriodOverlap 只在同一個請求裡
+    // 重複帶同一個 jobPositionId 時才會發生（見該模組 domain model 檔頭），其餘理論上不會。
+    unprocessable(JobPositionHistoryErrorCode.EmploymentNotFound),
+    unprocessable(JobPositionHistoryErrorCode.JobPositionNotFound),
+    unprocessable(JobPositionHistoryErrorCode.PeriodOverlap),
+    conflict(JobPositionHistoryErrorCode.DuplicateEffectiveFrom),
     // 扣繳設定（理論上不會發生）。
     unprocessable(WithholdingErrorCode.EmployeeNotFound),
     unprocessable(WithholdingErrorCode.PeriodOverlap),
