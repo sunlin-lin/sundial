@@ -19,4 +19,4 @@ export const getEmployee = async (
   context: EmployeesMainContext,
   input: EmployeeTargetInput,
 ): Promise<ServiceResult<EmployeeDetail | null>> =>
-  succeed(await findEmployeeDetail(context.db, context.cipher, context.companyId, input.id))
+  succeed(await findEmployeeDetail(context.db, context.companyId, input.id))

@@ -11,11 +11,11 @@
  * 本檔（含 `impl/`）是本模組唯一可以碰資料庫的一層；`*.repository.ts` 也不得被本次目錄以外的
  * 任何檔案 import（§0.3）——要資料一律走 service。
  *
- * **加解密器由參數傳入，不由本層自己建立**（§5.1）：金鑰來自環境變數，讓資料存取層自己去讀，
- * 測試就得為了跑一條測試去設環境變數，而「用錯金鑰」這條路徑也就永遠測不到。
+ * **不再需要欄位加解密器**：員工個資已改回明文儲存（改由資料庫端靜態加密負責，見
+ * `db/schema/employees.ts` 檔頭「敏感欄位改回明文」），本層與 `impl/` 底下的切片都不再持有
+ * 或轉傳 `FieldCipher`。
  */
 import type { QueryRunner } from '../../../db/client.ts'
-import type { FieldCipher } from '../../../db/field-encryption.ts'
 import type { EmployeeWriteOutcome } from './domain/employee-duplicate.ts'
 import type {
   EmployeeDetail,
@@ -53,41 +53,36 @@ export type { QueryRunner }
 
 export const listEmployeePage = (
   runner: QueryRunner,
-  cipher: FieldCipher,
   companyId: string,
   today: string,
   query: EmployeeListQuery,
-): Promise<EmployeeListPage> => listEmployeePageImpl(runner, cipher, companyId, today, query)
+): Promise<EmployeeListPage> => listEmployeePageImpl(runner, companyId, today, query)
 
 export const findEmployeeDetail = (
   runner: QueryRunner,
-  cipher: FieldCipher,
   companyId: string,
   employeeId: string,
-): Promise<EmployeeDetail | null> => findEmployeeDetailImpl(runner, cipher, companyId, employeeId)
+): Promise<EmployeeDetail | null> => findEmployeeDetailImpl(runner, companyId, employeeId)
 
 /** 稽核用明文快照（稽核計畫 §4.4）。**只給 `buildAuditChanges` 用**，見 impl 切片檔頭。 */
 export const findEmployeeAuditSnapshot = (
   runner: QueryRunner,
-  cipher: FieldCipher,
   companyId: string,
   employeeId: string,
-): Promise<EmployeeProfileInput | null> => findEmployeeAuditSnapshotImpl(runner, cipher, companyId, employeeId)
+): Promise<EmployeeProfileInput | null> => findEmployeeAuditSnapshotImpl(runner, companyId, employeeId)
 
 export const insertEmployee = (
   runner: QueryRunner,
-  cipher: FieldCipher,
   companyId: string,
   employee: NewEmployee,
-): Promise<EmployeeInsertOutcome> => insertEmployeeImpl(runner, cipher, companyId, employee)
+): Promise<EmployeeInsertOutcome> => insertEmployeeImpl(runner, companyId, employee)
 
 export const updateEmployeeProfile = (
   runner: QueryRunner,
-  cipher: FieldCipher,
   companyId: string,
   employeeId: string,
   update: EmployeeProfileUpdate,
-): Promise<EmployeeWriteOutcome> => updateEmployeeProfileImpl(runner, cipher, companyId, employeeId, update)
+): Promise<EmployeeWriteOutcome> => updateEmployeeProfileImpl(runner, companyId, employeeId, update)
 
 export const markEmployeeDeleted = (
   runner: QueryRunner,

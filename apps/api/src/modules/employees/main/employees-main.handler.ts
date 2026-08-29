@@ -90,7 +90,6 @@ const toEmployeeContext = (
   identity: VerifiedIdentity,
 ): EmployeesMainContext => ({
   db: dependencies.db,
-  cipher: dependencies.cipher,
   clock: dependencies.clock,
   companyId: identity.companyId,
   // 稽核的操作者一律由已驗證身分推導，不信任請求帶來的任何識別碼（§5.2）。

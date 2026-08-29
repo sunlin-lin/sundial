@@ -33,7 +33,7 @@ export const createEmployeeInTransaction = async (
 
   // 員工編號與身分證的唯一性都交給資料庫的唯一鍵，不做「先 SELECT 再 INSERT」（§4.3）：
   // 兩個併發請求會同時查到「沒有」然後都寫進去，而那個 bug 只在同時送出時才出現。
-  const outcome = await insertEmployee(tx, context.cipher, context.companyId, { id: employeeId, profile: input, now })
+  const outcome = await insertEmployee(tx, context.companyId, { id: employeeId, profile: input, now })
 
   // 重複時**立刻結束、不再對這個交易下任何一句寫入**（§3.4）：InnoDB 對唯一鍵違反只回滾
   // 那一句，交易本身仍然可用，但繼續寫下去就會出現孤兒列。這裡沒有後續寫入，帶著零筆變更結束。
@@ -57,7 +57,7 @@ export const createEmployeeInTransaction = async (
     now,
   })
 
-  const detail = await findEmployeeDetail(tx, context.cipher, context.companyId, employeeId)
+  const detail = await findEmployeeDetail(tx, context.companyId, employeeId)
   if (detail === null) {
     // 系統錯誤（§3.1.2）：剛剛在同一個交易內寫進去的員工讀不回來，代表資料庫或本模組的
     // 公司範圍有問題，不是使用者做錯了什麼。走例外路徑才會帶著堆疊進告警。

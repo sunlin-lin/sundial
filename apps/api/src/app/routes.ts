@@ -99,7 +99,7 @@ const refreshGroup = (dependencies: AppDependencies) =>
  * 掛在哪一組是這裡的一行程式碼，掛錯就是掛不上。
  */
 const authenticatedGroup = (dependencies: AppDependencies) => {
-  const { database, clock, cipher } = dependencies
+  const { database, clock } = dependencies
   return (
     new Elysia({ name: 'authenticated-group' })
       .use(identityGuard(dependencies.accessControl))
@@ -110,10 +110,10 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
       // 重設密碼（UI 定案 §3.5）：與 `roles` 共用同一組相依，不需要 cipher（密碼雜湊不是
       // `db/field-encryption.ts` 那一套欄位加密）。
       .use(companyUsersMainRoutes({ database, clock }))
-      .use(employeesMainRoutes({ db: database, cipher, clock }))
-      // 到職編排（實作計畫 05-employee-onboarding.md Stage 4）：需要 cipher，理由與
-      // `employeesMainRoutes` 相同——它把 `employees.main.create` 這個業務動作包在同一個交易裡。
-      .use(employeesOnboardingRoutes({ db: database, cipher, clock }))
+      .use(employeesMainRoutes({ db: database, clock }))
+      // 到職編排（實作計畫 05-employee-onboarding.md Stage 4）：把 `employees.main.create`
+      // 這個業務動作包在同一個交易裡，理由與 `employeesMainRoutes` 相同。
+      .use(employeesOnboardingRoutes({ db: database, clock }))
       // 班別主檔：不需要 cipher（班別沒有個資欄位），理由與 `regulatoryDatasetsRoutes` 不注入 clock
       // 是同一類決定——只給這個次實體真的用得到的相依。
       .use(shiftsMainRoutes({ db: database, clock }))
@@ -133,9 +133,9 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
       .use(withholdingMainRoutes({ db: database, clock }))
       // 勞退自願提繳率：同樣不需要 cipher（沒有個資欄位）。實作計畫 05-employee-onboarding.md Stage 7。
       .use(laborPensionMainRoutes({ db: database, clock }))
-      // 眷屬：需要 cipher（身分證字號比照員工加密＋blind index，見
+      // 眷屬：不需要 cipher——身分證字號已改回明文儲存（見
       // `modules/dependents/main/domain/dependent-context.ts`）。同一計畫 Stage 7。
-      .use(dependentsMainRoutes({ db: database, cipher, clock }))
+      .use(dependentsMainRoutes({ db: database, clock }))
       // 法規資料集：**刻意不注入 clock**（實作計畫 §4.2）。這四支端點的時間維度只有呼叫端送來的
       // `asOfDate`，拿得到 clock 就寫得出「沒帶就用今天」，而那會讓補算去年 12 月的薪資
       // 抓到今年的費率，算出一個完全合理的數字。也沒有公司範圍——法規三表是平台全域資料。

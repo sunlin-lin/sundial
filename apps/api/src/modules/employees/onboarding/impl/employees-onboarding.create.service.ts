@@ -85,7 +85,6 @@ export const createOnboardingInTransaction = async (
   // ---- 1. 員工主檔 ----
   const employeesContext: EmployeesMainContext = {
     db: context.db,
-    cipher: context.cipher,
     clock: context.clock,
     companyId: context.companyId,
     operatorCompanyUserId: context.operatorCompanyUserId,

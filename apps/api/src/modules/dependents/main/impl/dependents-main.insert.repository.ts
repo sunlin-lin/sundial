@@ -1,10 +1,13 @@
-/** 資料存取：新增眷屬。唯一性由資料庫的唯一鍵擋，不做「先 SELECT 再 INSERT」（§4.3）。 */
+/**
+ * 資料存取：新增眷屬。唯一性由資料庫的唯一鍵擋，不做「先 SELECT 再 INSERT」（§4.3）。
+ * 身分證的重複現在直接由明文欄位上的唯一鍵擋（`uq_employee_dependents_company_employee_
+ * identity_plain`，見 `domain/dependent-duplicate.ts`）。
+ */
 import { TenantDatabase, type QueryRunner } from '../../../../db/client.ts'
 import { DependentStatus, employeeDependents } from '../../../../db/schema/index.ts'
-import type { FieldCipher } from '../../../../db/field-encryption.ts'
 import { classifyDependentDuplicate, type DependentInsertOutcome } from '../domain/dependent-duplicate.ts'
 import type { DependentProfileInput } from '../domain/dependent-model.ts'
-import { toEncryptedColumns } from '../domain/dependent-secrets.ts'
+import { toStoredColumns } from '../domain/dependent-secrets.ts'
 
 export type NewDependent = {
   readonly id: string
@@ -16,13 +19,11 @@ export type NewDependent = {
 
 export const insertDependent = async (
   runner: QueryRunner,
-  cipher: FieldCipher,
   companyId: string,
   dependent: NewDependent,
 ): Promise<DependentInsertOutcome> => {
   const tenant = new TenantDatabase(runner, companyId)
-  // 加密在寫入的最後一刻才做，明文不在本函式以外存在（§5.1）。
-  const encrypted = toEncryptedColumns(cipher, dependent.profile)
+  const stored = toStoredColumns(dependent.profile)
 
   try {
     await tenant.insert(employeeDependents, (scopedCompanyId) => ({
@@ -30,7 +31,7 @@ export const insertDependent = async (
       companyId: scopedCompanyId,
       employeeId: dependent.employeeId,
       name: dependent.profile.name,
-      ...encrypted,
+      ...stored,
       relationshipCode: dependent.profile.relationshipCode,
       isStudent: dependent.profile.isStudent,
       isDisabled: dependent.profile.isDisabled,

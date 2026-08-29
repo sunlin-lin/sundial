@@ -16,10 +16,13 @@
  *   ——那一欄記錄的是「這筆稽核講的是哪張表的哪一列」。
  * - **內層 key = 業務層欄位名（camelCase）**，因為它要對上 `recordAudit` 執行時**實際收到**的欄位集合，
  *   而那是業務型別（`EmployeeProfileInput` 那一套）的欄位，不是 Drizzle schema 的欄位。
- *   兩邊的詞彙本來就對不上：「身分證」在業務上是一個 `identityNumber`，在資料庫裡是兩欄
- *   （`identityNumberEncrypted` 密文 ＋ `identityNumberHash` blind index），schema 裡沒有任何一欄叫
- *   `identityNumber`。掃描器若照「讀 Drizzle schema 比對政策」實作，第一次就對不上，
- *   而真正危險的是下一步：有人為了讓它過而把比對改成鬆散比對（剝掉 `_encrypted`／`_hash` 後綴），
+ *   兩邊的詞彙不保證對得上，這件事不因為某個欄位現在剛好同名就不成立：舉例，「員工到職日」在
+ *   業務上是 `hireDate`，在資料庫裡是 `employee_employments.hire_date`（表都不一樣）；「身分證」
+ *   在業務上是 `identityNumber`，資料庫這一輪雖然新增了同名的明文欄位 `identity_number`，
+ *   但舊的 `identity_number_encrypted`／`identity_number_hash` 這一輪仍然原封不動留著（過渡狀態，
+ *   見 `db/schema/employees.ts` 檔頭），一張表上同時有「對得上業務欄位名」與「對不上」的欄位並存。
+ *   掃描器若照「讀 Drizzle schema 比對政策」實作，換一張表、換一個時期就可能踩到不同的落差，
+ *   而真正危險的是下一步：有人為了讓它過而把比對改成鬆散比對（猜測欄位名的對應規則），
  *   從此它驗證的是一份人工拼湊的映射，跟執行期真正收到的欄位集合對不上，**而掃描器是綠的**。
  *
  * ## `source` 是字串，不是 import
@@ -93,28 +96,34 @@ export const AUDIT_FIELD_POLICY = {
       gender: AuditFieldLevel.Value,
       /**
        * 資料字典**明文禁止**完整身分證字號寫入稽核內容（與密碼、密碼 hash、完整銀行帳號同列）。
-       * 這一欄沒有判斷空間，只能是 `presence`。
+       * 這一欄沒有判斷空間，只能是 `presence`——**且這個判準與 `employees` 存不存加密欄位無關**：
+       * `employees.identity_number_encrypted` 移除加密、改回明文儲存（見 `db/schema/employees.ts`
+       * 檔頭）不會、也不該讓這一欄的級別跟著鬆動，因為理由從來就不是「這欄剛好是加密欄位」，
+       * 是資料字典本身明文禁止身分證進稽核內容。
        */
       identityNumber: AuditFieldLevel.Presence,
       /*
        * 以下四欄（生日、電話、Email、地址）不在字典的明文禁止清單內，但**已定案一律只記
-       * 「有調整」、不記內容**——請勿日後「補上」前後值。判準是**機械的、不必逐欄重新判斷
-       * 「這個算不算敏感」**：
+       * 「有調整」、不記內容**——請勿日後「補上」前後值，**這個決定不因為 `employees` 欄位改回
+       * 明文儲存而改變**（架構變更見 `db/schema/employees.ts` 檔頭「敏感欄位改回明文」）。
        *
-       *   業務欄位對應到 `employees` 的 `*_encrypted` 欄位者，一律 `presence`。
+       * **判準原本是「業務欄位對應到 `*_encrypted` 欄位者，一律 presence」，那條判準現在不成立了
+       * ——`employees` 已經沒有加密欄位。仍然維持 presence 級的理由是下面第 2 點單獨就足以撐住：**
        *
-       * 兩個具體後果撐著這條判準：
-       *
-       * 1. **明文副本會落在加密邊界之外。** 這幾欄在 `employees` 是加密儲存的，而 `audit_logs.changes`
-       *    是一個沒有加密的 JSON 欄位，且這張表 append-only——寫進去的明文**改不掉也刪不掉**（§3.4）。
-       *    等於系統一邊花成本把地址加密，一邊在旁邊留一份永久明文。
-       * 2. **稽核會變成遮罩規則的旁路。** §5.1 要求對外一律遮罩，`employee-model.ts` 更是刻意讓
-       *    輸出型別上根本沒有明文欄位。若稽核記明文，日後那支稽核查詢端點回的地址會是完整的，
-       *    而員工詳情端點回的是遮罩的——**同一份個資，兩支端點兩種答案**，先做的那道防線等於白做。
+       * 1. ~~明文副本會落在加密邊界之外。~~ **這條理由隨加密移除而失效，不再適用**：欄位加密
+       *    移除後，主表本來就是明文，稽核表多一份明文副本不再是「多穿越一層加密邊界」，
+       *    而是單純的個資重複儲存問題——理由性質不同，不能拿舊理由套新架構，因此獨立列出、
+       *    誠實標記為失效，而不是悄悄留著一段對不上程式碼的舊註解。
+       * 2. **稽核會變成遮罩規則的旁路，這一條不因儲存方式改變而改變。** §5.1 要求對外一律遮罩，
+       *    `employee-model.ts` 更是刻意讓輸出型別上根本沒有明文欄位。若稽核記明文，日後那支稽核
+       *    查詢端點回的地址會是完整的，而員工詳情端點回的是遮罩的——**同一份個資，兩支端點兩種
+       *    答案**，先做的那道防線等於白做。這條理由完全獨立於「主表存不存加密」，因此級別維持
+       *    `presence`。
        *
        * 代價講清楚：查稽核的人看不到「地址從 A 改成 B」，只看得到「地址被改過」。
        * 需要前後值時，正確的作法是走 §5.1 允許的那種「明確授權 ＋ 必寫稽核」的專用端點，
-       * 而不是把明文放進一張人人查得到、且永遠刪不掉的表。
+       * 而不是把明文放進一張人人查得到、且永遠刪不掉的表。**請勿以「反正主表現在也是明文」為
+       * 理由把這幾欄放寬成 `value`**——那正是這段說明要擋住的事。
        */
       birthday: AuditFieldLevel.Presence,
       phone: AuditFieldLevel.Presence,
@@ -264,11 +273,14 @@ export const AUDIT_FIELD_POLICY = {
    * `status` 恆為 `ACTIVE`，`terminate` 只改動 `endDate`／`status`。
    *
    * **`identityNumber`／`birthday` 是 `presence` 級，判準與 `employees` 逐字相同**：
-   * 業務欄位對應到 `employee_dependents` 的 `*_encrypted` 欄位者，一律 `presence`
-   * ——理由完整寫在上面 `employees.fields` 的同名說明，不重複。其餘欄位（姓名、關係代碼、
-   * 四個資格布林值、生效日、結束日、狀態）都不是加密欄位，記值不擴大任何外洩面，
-   * 而且正是「這個人什麼時候開始／結束列入扶養、資格條件何時變動」這種需要前後值才回答得出來
-   * 的問題。
+   * `identityNumber` 的理由是資料字典明文禁止身分證進稽核內容（與 `employees.identityNumber`
+   * 同一條規則）；`birthday` 的理由是「稽核不得變成遮罩規則的旁路」（§5.1 要求對外一律遮罩，
+   * 若稽核記明文，稽核查詢端點回的生日會是完整的，而眷屬列表端點回的是遮罩的）——完整說明見
+   * 上面 `employees.fields` 的同名說明，不重複。**這兩欄的級別不因 `employee_dependents` 欄位
+   * 改回明文儲存而改變**（見 `db/schema/employee-dependents.ts` 檔頭「敏感欄位改回明文」）。
+   * 其餘欄位（姓名、關係代碼、四個資格布林值、生效日、結束日、狀態）都不是個資欄位，記值不擴大
+   * 任何外洩面，而且正是「這個人什麼時候開始／結束列入扶養、資格條件何時變動」這種需要前後值
+   * 才回答得出來的問題。
    */
   employee_dependents: {
     source: 'modules/dependents/main/domain/dependent-model.ts#DependentAuditSnapshot',

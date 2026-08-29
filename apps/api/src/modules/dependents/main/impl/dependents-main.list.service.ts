@@ -7,5 +7,4 @@ import { listDependentPage } from '../dependents-main.repository.ts'
 export const listDependents = async (
   context: DependentsMainContext,
   query: DependentListQuery,
-): Promise<ServiceResult<DependentListPage>> =>
-  succeed(await listDependentPage(context.db, context.cipher, context.companyId, query))
+): Promise<ServiceResult<DependentListPage>> => succeed(await listDependentPage(context.db, context.companyId, query))

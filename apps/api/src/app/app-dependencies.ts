@@ -29,8 +29,13 @@ export type AppDependencies = {
    */
   readonly database: Database
   /**
-   * 欄位加解密器（§5.1）。由組裝點注入而不是由 repository 自己讀環境變數建立：
-   * 讓底層自己讀，測試就得為了跑一條測試去設環境變數，「金鑰設錯」那條路徑也就永遠測不到。
+   * 欄位加解密器（§5.1 現況：應用層欄位加密已移除，本欄位目前沒有任何業務路由在用）。
+   *
+   * **這一輪過渡期刻意保留，不拆掉**：`index.ts` 的金鑰啟動自檢（`assertFieldEncryptionKeys`）
+   * 與回填腳本（`apps/api/scripts/backfill-plaintext.ts`）都還需要它——回填要解密舊資料裡的
+   * 密文欄位，解密需要金鑰環與 `FieldCipher`，而金鑰的合法性檢查放在服務啟動流程比放在一支
+   * 獨立腳本裡更早攔下設定錯誤。下一輪確認回填無誤、drop 掉 `*_encrypted`／`*_hash` 舊欄位之後，
+   * 這個欄位、`db/field-encryption.ts` 與這一段啟動自檢會一併移除。
    */
   readonly cipher: FieldCipher
   /**

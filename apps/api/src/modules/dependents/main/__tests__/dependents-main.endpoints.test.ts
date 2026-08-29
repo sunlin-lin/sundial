@@ -6,12 +6,10 @@
  * 不需要 `FOR UPDATE` 來序列化併發請求，因此也沒有對應的併發測試（比照 `withholding`／
  * `labor-pension` 的模式：有鎖才需要併發測試）。
  */
-import { Buffer } from 'node:buffer'
 import { randomBytes } from 'node:crypto'
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { Elysia } from 'elysia'
 import { createDatabase, type Database } from '../../../../db/client.ts'
-import { createFieldCipher, createKeyRing, ENCRYPTION_KEY_BYTE_LENGTH } from '../../../../db/field-encryption.ts'
 import { companies, companyUsers, employees, users } from '../../../../db/schema/index.ts'
 import { errorHandler } from '../../../../http/error-handler.ts'
 import { identityGuard } from '../../../../http/identity-guard.ts'
@@ -63,11 +61,6 @@ const accessControl: AccessControlPorts = {
     Promise.resolve(new Set(['dependents.main.list', 'dependents.main.create', 'dependents.main.terminate'])),
 }
 
-const testKey = (seed: number): string => Buffer.alloc(ENCRYPTION_KEY_BYTE_LENGTH, seed).toString('base64')
-const cipher = createFieldCipher(
-  createKeyRing({ keys: `v1:${testKey(31)}`, activeKeyId: 'v1', blindIndexKey: testKey(32) }),
-)
-
 const buildTestApp = (db: Database) =>
   new Elysia()
     .use(requestContext)
@@ -76,7 +69,7 @@ const buildTestApp = (db: Database) =>
     .use(
       new Elysia({ name: 'test-authenticated-group' })
         .use(identityGuard(accessControl))
-        .use(dependentsMainRoutes({ db, cipher, clock })),
+        .use(dependentsMainRoutes({ db, clock })),
     )
 
 let database: Database

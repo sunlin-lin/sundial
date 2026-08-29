@@ -1,14 +1,12 @@
 /** 資料存取：一位員工的眷屬清單的一頁 ＋ 總筆數。理由與 `employments-main.list.repository.ts` 同構。 */
 import { and, asc, count, eq, isNull } from 'drizzle-orm'
 import { TenantDatabase, type QueryRunner } from '../../../../db/client.ts'
-import type { FieldCipher } from '../../../../db/field-encryption.ts'
 import { employeeDependents } from '../../../../db/schema/index.ts'
 import type { DependentListPage, DependentListQuery } from '../domain/dependent-model.ts'
 import { toMaskedDetail } from '../domain/dependent-secrets.ts'
 
 export const listDependentPage = async (
   runner: QueryRunner,
-  cipher: FieldCipher,
   companyId: string,
   query: DependentListQuery,
 ): Promise<DependentListPage> => {
@@ -26,8 +24,8 @@ export const listDependentPage = async (
         id: employeeDependents.id,
         employeeId: employeeDependents.employeeId,
         name: employeeDependents.name,
-        identityNumberEncrypted: employeeDependents.identityNumberEncrypted,
-        birthdayEncrypted: employeeDependents.birthdayEncrypted,
+        identityNumber: employeeDependents.identityNumber,
+        birthday: employeeDependents.birthday,
         relationshipCode: employeeDependents.relationshipCode,
         isStudent: employeeDependents.isStudent,
         isDisabled: employeeDependents.isDisabled,
@@ -49,5 +47,5 @@ export const listDependentPage = async (
   const totalRows = await tenant.select({ total: count() }, employeeDependents, condition)
   const [totalRow] = totalRows
 
-  return { items: rows.map((row) => toMaskedDetail(cipher, row)), totalCount: totalRow?.total ?? 0 }
+  return { items: rows.map((row) => toMaskedDetail(row)), totalCount: totalRow?.total ?? 0 }
 }

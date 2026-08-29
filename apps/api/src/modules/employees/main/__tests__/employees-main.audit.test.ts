@@ -18,12 +18,10 @@
  * （`employees-main.service.ts` 仍然 export 它，§0.4 允許「沒有端點的業務動作」）；
  * update／delete 本身的稽核仍然是從 HTTP 打進去驗證的，不受影響。
  */
-import { Buffer } from 'node:buffer'
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { Elysia } from 'elysia'
 import { createDatabase, type Database } from '../../../../db/client.ts'
-import { createFieldCipher, createKeyRing, ENCRYPTION_KEY_BYTE_LENGTH } from '../../../../db/field-encryption.ts'
 import { AuditActorType, auditLogs, companies, companyUsers, users } from '../../../../db/schema/index.ts'
 import { errorHandler } from '../../../../http/error-handler.ts'
 import { identityGuard } from '../../../../http/identity-guard.ts'
@@ -41,11 +39,6 @@ const readTestDatabaseConfig = () => ({
   password: process.env['DB_PASSWORD'] ?? '',
   database: process.env['DB_NAME'] ?? '',
 })
-
-const testKey = (seed: number): string => Buffer.alloc(ENCRYPTION_KEY_BYTE_LENGTH, seed).toString('base64')
-const cipher = createFieldCipher(
-  createKeyRing({ keys: `v1:${testKey(41)}`, activeKeyId: 'v1', blindIndexKey: testKey(42) }),
-)
 
 /** 釘住「現在」（§6.2）。台北時間 2026-08-27 12:00:00。 */
 const clock = fixedClock(new Date('2026-08-27T04:00:00.000Z'))
@@ -84,7 +77,7 @@ const buildTestApp = (db: Database) =>
     .use(
       new Elysia({ name: 'test-authenticated-group' })
         .use(identityGuard(accessControl))
-        .use(employeesMainRoutes({ db, cipher, clock })),
+        .use(employeesMainRoutes({ db, clock })),
     )
 
 let database: Database
@@ -202,7 +195,7 @@ const createEmployeeFixture = async (
   body: ReturnType<typeof profileBody>,
 ): Promise<{ readonly status: 200; readonly payload: { readonly data: EmployeeDetailShape } }> => {
   const result = await createEmployee(
-    { db: database, cipher, clock, companyId: company.companyId, operatorCompanyUserId: company.companyUserId },
+    { db: database, clock, companyId: company.companyId, operatorCompanyUserId: company.companyUserId },
     {
       employeeCode: body['employeeCode'] as string,
       name: body['name'] as string,

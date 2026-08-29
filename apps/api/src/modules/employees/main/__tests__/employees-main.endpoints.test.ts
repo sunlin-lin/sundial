@@ -20,12 +20,10 @@
  * export 它——§0.4 明文允許「沒有端點的業務動作」放入口檔）而不是繞過去直接寫資料庫（§7.3）：
  * 呼叫服務層函式本來就是「正式流程」，只是不再有 HTTP 端點包著它。
  */
-import { Buffer } from 'node:buffer'
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { Elysia } from 'elysia'
 import { createDatabase, type Database } from '../../../../db/client.ts'
-import { createFieldCipher, createKeyRing, ENCRYPTION_KEY_BYTE_LENGTH } from '../../../../db/field-encryption.ts'
 import { companies, companyUsers, employees, users } from '../../../../db/schema/index.ts'
 import { errorHandler } from '../../../../http/error-handler.ts'
 import { identityGuard } from '../../../../http/identity-guard.ts'
@@ -44,11 +42,6 @@ const readTestDatabaseConfig = () => ({
   password: process.env['DB_PASSWORD'] ?? '',
   database: process.env['DB_NAME'] ?? '',
 })
-
-const testKey = (seed: number): string => Buffer.alloc(ENCRYPTION_KEY_BYTE_LENGTH, seed).toString('base64')
-const cipher = createFieldCipher(
-  createKeyRing({ keys: `v1:${testKey(21)}`, activeKeyId: 'v1', blindIndexKey: testKey(22) }),
-)
 
 /** 釘住「現在」（§6.2）。台北時間 2026-08-27 12:00:00。 */
 const clock = fixedClock(new Date('2026-08-27T04:00:00.000Z'))
@@ -134,7 +127,7 @@ const buildTestApp = (db: Database) =>
     .use(
       new Elysia({ name: 'test-authenticated-group' })
         .use(identityGuard(accessControl))
-        .use(employeesMainRoutes({ db, cipher, clock })),
+        .use(employeesMainRoutes({ db, clock })),
     )
 
 let database: Database
@@ -273,7 +266,7 @@ const createEmployeeFixture = async (
   body: ReturnType<typeof profileBody>,
 ): Promise<{ readonly status: 200; readonly payload: { readonly data: EmployeeDetailShape } }> => {
   const result = await createEmployee(
-    { db: database, cipher, clock, companyId: company.companyId, operatorCompanyUserId: company.companyUserId },
+    { db: database, clock, companyId: company.companyId, operatorCompanyUserId: company.companyUserId },
     {
       employeeCode: body['employeeCode'] as string,
       name: body['name'] as string,
@@ -389,18 +382,28 @@ describe('employees/main endpoints (integration)', () => {
     expect(withAccount.payload.data?.companyUserId).toBe(employeeCompanyUserId)
   })
 
-  test('資料庫裡存的是密文：明文一段都找不到，且同一個明文兩次寫入的位元組不同', async () => {
+  /**
+   * 架構變更後的等效測試：過去這裡驗證「資料庫裡存的是密文」，現在的規則反過來——
+   * 敏感個資改回明文儲存（改由資料庫端靜態加密負責，§5.1 現況），所以要驗證的是「新的明文欄位
+   * 確實存了明文，且與建立時送出的值逐字相同」；`*_encrypted`／`*_hash` 舊欄位這一輪仍然保留
+   * 但不再被寫入新值（見 `db/schema/employees.ts` 檔頭），因此新資料的舊欄位應為 `NULL`。
+   */
+  test('資料庫裡新的明文欄位存的就是明文，舊的加密欄位不再被新資料寫入', async () => {
     const company = await registerCompany()
     const body = profileBody()
 
     const created = await createEmployeeFixture(company, body)
     const [row] = await database
       .select({
+        identityNumber: employees.identityNumber,
+        birthday: employees.birthday,
+        phone: employees.phone,
+        email: employees.email,
+        address: employees.address,
         identityNumberEncrypted: employees.identityNumberEncrypted,
         identityNumberHash: employees.identityNumberHash,
         birthdayEncrypted: employees.birthdayEncrypted,
         phoneEncrypted: employees.phoneEncrypted,
-        emailEncrypted: employees.emailEncrypted,
         addressEncrypted: employees.addressEncrypted,
       })
       .from(employees)
@@ -408,41 +411,19 @@ describe('employees/main endpoints (integration)', () => {
 
     if (row === undefined) throw new Error('剛建立的員工在資料庫裡找不到')
 
-    // `latin1` 是逐位元組轉字元，不會像 utf8 那樣把不合法序列換成 U+FFFD——
-    // 用 utf8 比對會讓這條測試在明文其實還在的情況下也通過。
-    const stored = Buffer.concat([
-      row.identityNumberEncrypted,
-      row.identityNumberHash,
-      row.birthdayEncrypted,
-      row.phoneEncrypted,
-      row.emailEncrypted ?? Buffer.alloc(0),
-      row.addressEncrypted,
-    ]).toString('latin1')
+    // 新的明文欄位逐字等於建立時送出的值。
+    expect(row.identityNumber).toBe(body.identityNumber)
+    expect(row.birthday).toBe('1990-05-21')
+    expect(row.phone).toBe('0912345678')
+    expect(row.email).toBe('someone@example.com')
+    expect(row.address).toBe(body.address)
 
-    expect(stored).not.toContain(body.identityNumber)
-    expect(stored).not.toContain('1990-05-21')
-    expect(stored).not.toContain('0912345678')
-    expect(stored).not.toContain('someone@example.com')
-    // 地址是中文，先轉成同一種逐位元組表示再比對。
-    expect(stored).not.toContain(Buffer.from(body.address, 'utf8').toString('latin1'))
-
-    // blind index 是固定長度（DB 端 BINARY(32)）。
-    expect(row.identityNumberHash.byteLength).toBe(32)
-
-    // 同一個明文在另一家公司再寫一次，密文位元組必然不同（隨機 IV），而 hash 必然相同。
-    const otherCompany = await registerCompany()
-    const twin = await createEmployeeFixture(otherCompany, body)
-    const [twinRow] = await database
-      .select({
-        identityNumberEncrypted: employees.identityNumberEncrypted,
-        identityNumberHash: employees.identityNumberHash,
-      })
-      .from(employees)
-      .where(eq(employees.id, twin.payload.data.id))
-
-    if (twinRow === undefined) throw new Error('第二家公司的員工在資料庫裡找不到')
-    expect(twinRow.identityNumberEncrypted.equals(row.identityNumberEncrypted)).toBe(false)
-    expect(twinRow.identityNumberHash.equals(row.identityNumberHash)).toBe(true)
+    // 舊的加密欄位這一輪仍然保留，但新寫入的列不再產生密文——全部應為 NULL。
+    expect(row.identityNumberEncrypted).toBeNull()
+    expect(row.identityNumberHash).toBeNull()
+    expect(row.birthdayEncrypted).toBeNull()
+    expect(row.phoneEncrypted).toBeNull()
+    expect(row.addressEncrypted).toBeNull()
   })
 
   test('查無資料的清單回空陣列與正確的 pagination，不是錯誤', async () => {
@@ -478,7 +459,6 @@ describe('employees/main endpoints (integration)', () => {
     const employeeCode = uniqueCode('DUP')
     const context = {
       db: database,
-      cipher,
       clock,
       companyId: company.companyId,
       operatorCompanyUserId: company.companyUserId,
@@ -509,7 +489,6 @@ describe('employees/main endpoints (integration)', () => {
     const identityNumber = uniqueIdentityNumber()
     const context = {
       db: database,
-      cipher,
       clock,
       companyId: company.companyId,
       operatorCompanyUserId: company.companyUserId,
@@ -534,12 +513,11 @@ describe('employees/main endpoints (integration)', () => {
     expect(JSON.stringify(second.errors)).not.toContain(identityNumber)
   })
 
-  test('大小寫不同的同一個身分證也算重複（blind index 前先正規化）', async () => {
+  test('大小寫不同的同一個身分證也算重複（唯一鍵比對前先正規化）', async () => {
     const company = await registerCompany()
     const identityNumber = uniqueIdentityNumber()
     const context = {
       db: database,
-      cipher,
       clock,
       companyId: company.companyId,
       operatorCompanyUserId: company.companyUserId,

@@ -28,6 +28,12 @@
  * §3.4）「可以新增、修改及終止扶養眷屬」的「終止」，與 `employee_employments` 的離職是同一種
  * 動作形狀：把 `end_date`／`status` 寫回同一列，理由是眷屬關係與任職不同——「這個人不再列入
  * 扶養」不是「換了一個新的扶養關係」，沒有「回任」這種語意需要保留舊列不動。
+ *
+ * **敏感欄位改回明文（架構變更，過渡狀態）：** 理由、代價與過渡期的處置與 `employees.ts` 檔頭
+ * 「敏感欄位改回明文」逐字同構，不重複——新增明文 `identity_number`／`birthday` 兩欄，舊的
+ * `identity_number_encrypted`／`identity_number_hash`／`birthday_encrypted` 原封不動保留，只是
+ * 從 `NOT NULL` 改成可為 `NULL`；唯一鍵角色由 `uq_employee_dependents_company_employee_identity`
+ * 交棒給下方的 `uq_employee_dependents_company_employee_identity_plain`。
  */
 import { Buffer } from 'node:buffer'
 import {
@@ -117,17 +123,28 @@ export const employeeDependents = mysqlTable(
     employeeId: char('employee_id', { length: 36 }).notNull(),
     name: varchar('name', { length: 128 }).notNull(),
     /**
-     * 身分證加密值。明文上限 10 碼（與 `employees.identity_number_encrypted` 同一種格式），
-     * 取 32 位元組留餘裕。§5.1：禁止新增明文欄位或明文索引。
+     * 身分證加密值（**舊欄位，過渡狀態**，見檔頭「敏感欄位改回明文」）。改成 `nullable`：
+     * 新寫入的列不再產生密文，下一輪確認回填無誤後才會真的 `DROP`。
      */
-    identityNumberEncrypted: encryptedBytes('identity_number_encrypted', { length: encryptedWidth(32) }).notNull(),
+    identityNumberEncrypted: encryptedBytes('identity_number_encrypted', { length: encryptedWidth(32) }),
     /**
-     * 身分證查詢 Hash（blind index，HMAC-SHA256，固定 32 位元組）。用途與 `employees` 同構：
-     * 加密值每次寫入的 IV 都不同，密文不能拿來比對，重複檢查一律靠這一欄的唯一鍵。
+     * 身分證查詢 Hash（**舊欄位，過渡狀態**）。唯一鍵的角色已由明文 `identity_number` 接手
+     * （見下方 `uq_employee_dependents_company_employee_identity_plain`）。
      */
-    identityNumberHash: fixedBytes('identity_number_hash', { length: BLIND_INDEX_BYTE_LENGTH }).notNull(),
-    /** 出生年月日加密值。明文是 `YYYY-MM-DD`（10 位元組）。 */
-    birthdayEncrypted: encryptedBytes('birthday_encrypted', { length: encryptedWidth(16) }).notNull(),
+    identityNumberHash: fixedBytes('identity_number_hash', { length: BLIND_INDEX_BYTE_LENGTH }),
+    /** 出生年月日加密值（**舊欄位，過渡狀態**）。明文是 `YYYY-MM-DD`（10 位元組）。 */
+    birthdayEncrypted: encryptedBytes('birthday_encrypted', { length: encryptedWidth(16) }),
+    /**
+     * 身分證字號，明文（新欄位，取代 `identityNumberEncrypted`／`identityNumberHash`）。
+     * 長度與理由見 `employees.ts` 的同名欄位，逐字同構。暫時 nullable，回填後、下一輪拿掉舊
+     * 欄位時才會轉 `NOT NULL`。
+     */
+    identityNumber: varchar('identity_number', { length: 10 }),
+    /**
+     * 出生年月日，明文（新欄位，取代 `birthdayEncrypted`）。理由見 `employees.ts` 的同名欄位。
+     * 暫時 nullable，理由同 `identityNumber`。
+     */
+    birthday: date('birthday', { mode: 'string' }),
     relationshipCode: int('relationship_code').$type<DependentRelationshipCodeValue>().notNull(),
     isStudent: boolean('is_student').notNull(),
     isDisabled: boolean('is_disabled').notNull(),
@@ -146,17 +163,28 @@ export const employeeDependents = mysqlTable(
   },
   (table) => [
     /**
-     * 同一位員工的同一個眷屬（同一個身分證字號）不得重複新增。見檔頭：這是本表唯一需要的
-     * 重複防線，取代 `employee_withholding_settings` 那一套「有效期間不得重疊」的處置
-     * ——多名眷屬本來就可以同時有效，不需要鎖。
+     * **舊唯一鍵，過渡狀態，原封不動保留**（見檔頭「敏感欄位改回明文」）。同一位員工的同一個
+     * 眷屬（同一個身分證字號）不得重複新增，取代 `employee_withholding_settings` 那一套
+     * 「有效期間不得重疊」的處置——多名眷屬本來就可以同時有效，不需要鎖。
      *
      * 帶 `deleted_seq` 的理由與 `employees.uq_employees_company_identity` 相同：
-     * 軟刪除後同一個人可以重新建立。
+     * 軟刪除後同一個人可以重新建立。**唯一鍵的角色已由下方 `_plain` 版本接手**，新寫入的列
+     * `identity_number_hash` 是 `NULL`，這條舊鍵對它們不生效，只對回填前的舊資料仍然有效。
      */
     uniqueIndex('uq_employee_dependents_company_employee_identity').on(
       table.companyId,
       table.employeeId,
       table.identityNumberHash,
+      table.deletedSeq,
+    ),
+    /**
+     * **新唯一鍵，接手上面那條舊鍵的角色**（見檔頭「敏感欄位改回明文」）。明文欄位可以直接
+     * 比對，唯一鍵直接建在 `identity_number` 上即可，不再需要 blind index。
+     */
+    uniqueIndex('uq_employee_dependents_company_employee_identity_plain').on(
+      table.companyId,
+      table.employeeId,
+      table.identityNumber,
       table.deletedSeq,
     ),
     /** §4.5：索引以 company_id 開頭。供「這位員工目前的眷屬清單」查詢使用。 */

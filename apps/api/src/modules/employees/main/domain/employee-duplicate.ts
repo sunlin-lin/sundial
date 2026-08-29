@@ -16,9 +16,13 @@ import { isUniqueViolation } from '../../../../db/driver-error.ts'
  * 名稱必須與 migration 及 `db/schema/employees.ts` **逐字相同**：唯一鍵違反時 MariaDB 報的是
  * 資料庫端的名字，對不上程式碼裡的任何字串就只能逐表比對，而比對錯的後果是把 A 的重複
  * 回報成 B 的重複——使用者照著訊息去改另一個欄位，怎麼改都不會成功。
+ *
+ * **`EMPLOYEE_IDENTITY_UNIQUE_INDEX` 指向明文欄位上的新鍵，不是舊的 `uq_employees_company_identity`**
+ * （見 `db/schema/employees.ts` 檔頭「敏感欄位改回明文」）：新寫入的列一律走這條，舊的 blind
+ * index 唯一鍵只對回填前的舊資料仍然有效，本模組的程式碼不再需要認得它。
  */
 export const EMPLOYEE_CODE_UNIQUE_INDEX = 'uq_employees_company_code'
-export const EMPLOYEE_IDENTITY_UNIQUE_INDEX = 'uq_employees_company_identity'
+export const EMPLOYEE_IDENTITY_UNIQUE_INDEX = 'uq_employees_company_identity_plain'
 
 /** 寫入結果。`not-affected` 只會出現在 update：條件式 UPDATE 沒有命中任何列（§4.4）。 */
 export type EmployeeWriteOutcome = 'written' | 'not-affected' | 'duplicate-code' | 'duplicate-identity-number'

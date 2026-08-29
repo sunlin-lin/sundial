@@ -101,8 +101,9 @@ const Address = t.String({ minLength: 1, maxLength: 255 })
 /**
  * 列表的關鍵字。
  *
- * **只比對員工編號與姓名**——其餘欄位在資料庫裡是密文，而且每次寫入的 IV 都不同，
- * `LIKE` 在上面連完全相符都比不出來。上限對齊姓名的長度上限，超過就不可能命中任何資料。
+ * **只比對員工編號與姓名**——身分證等其餘個資欄位刻意不開放模糊搜尋（理由見
+ * `impl/employees-main.list.repository.ts` 的 `buildConditions`）。上限對齊姓名的長度上限，
+ * 超過就不可能命中任何資料。
  */
 const EmployeeKeyword = t.String({ maxLength: 128 })
 
@@ -270,7 +271,7 @@ export const employeesMainRoutes = (dependencies: EmployeesMainDependencies) =>
       },
       detail: {
         summary: '查詢員工清單',
-        description: `${describeEmployeeErrors(EMPLOYEE_ENDPOINT_ERRORS.list)} keyword 只比對員工編號與姓名——其餘個資欄位為加密儲存，無法比對。departmentId／employmentStatus／accountStatus 比對的都是「目前」資料，不比對歷史。`,
+        description: `${describeEmployeeErrors(EMPLOYEE_ENDPOINT_ERRORS.list)} keyword 只比對員工編號與姓名——其餘個資欄位刻意不開放模糊搜尋。departmentId／employmentStatus／accountStatus 比對的都是「目前」資料，不比對歷史。`,
       },
     })
     .post('/employees/main/get', (context) => handleEmployeeGet(dependencies, context), {

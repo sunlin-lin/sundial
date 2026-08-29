@@ -35,7 +35,6 @@ const toDependentsContext = (
   identity: VerifiedIdentity,
 ): DependentsMainContext => ({
   db: dependencies.db,
-  cipher: dependencies.cipher,
   clock: dependencies.clock,
   companyId: identity.companyId,
   operatorCompanyUserId: identity.companyUserId,

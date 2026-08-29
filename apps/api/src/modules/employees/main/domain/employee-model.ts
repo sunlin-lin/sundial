@@ -142,9 +142,9 @@ export type EmployeeSortOption = {
  * 「沒有這個欄位」與「欄位是 undefined」是兩件事，讓它在跨層傳遞時只有一種形狀，
  * 下游就不必為兩種寫法各寫一次判斷。
  *
- * **`keyword` 只比對 `name` 與 `employee_code`**：其餘欄位都是密文，而密文的每一次寫入
- * 都用不同的 IV，同一個明文的位元組每次都不一樣——`LIKE` 在上面連完全相符都比不出來，
- * 更不用說前綴比對。這不是「暫時還沒做」，是加密欄位的固有性質。
+ * **`keyword` 只比對 `name` 與 `employee_code`**：身分證等其餘個資欄位刻意不開放模糊搜尋
+ * ——開放的話等於讓任何有清單查詢權限的人用片段反查是哪一位員工，這是業務規則的選擇，
+ * 與欄位是否加密無關（理由見 `impl/employees-main.list.repository.ts` 的 `buildConditions`）。
  */
 export type EmployeeListQuery = {
   readonly keyword: string | null

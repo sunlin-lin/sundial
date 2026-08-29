@@ -34,7 +34,7 @@ export const createDependentInTransaction = async (
   const employee = await findEmployeeForReference(tx, context.companyId, input.employeeId)
   if (employee === null) return fail([dependentEmployeeNotFound()])
 
-  const outcome = await insertDependent(tx, context.cipher, context.companyId, {
+  const outcome = await insertDependent(tx, context.companyId, {
     id: dependentId,
     employeeId: input.employeeId,
     profile: input,
@@ -74,5 +74,5 @@ export const createDependentInTransaction = async (
     // 公司範圍有問題，不是使用者做錯了什麼。訊息只帶 id，不帶任何個資（§5.1）。
     throw new Error(`眷屬 ${dependentId} 建立後於同一交易內讀不回來`)
   }
-  return succeed(toMaskedDetail(context.cipher, row))
+  return succeed(toMaskedDetail(row))
 }

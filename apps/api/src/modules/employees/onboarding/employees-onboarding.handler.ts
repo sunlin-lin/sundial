@@ -44,7 +44,6 @@ const requireIdentity = (session: RequestSession | null): VerifiedIdentity => {
 
 const toOnboardingContext = (dependencies: OnboardingDependencies, identity: VerifiedIdentity): OnboardingContext => ({
   db: dependencies.db,
-  cipher: dependencies.cipher,
   clock: dependencies.clock,
   companyId: identity.companyId,
   operatorCompanyUserId: identity.companyUserId,

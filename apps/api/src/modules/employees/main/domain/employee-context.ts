@@ -8,7 +8,6 @@
  * 仍然符合「零 IO」。（與 `roles/main/domain/role-context.ts` 的處置相同。）
  */
 import type { Database } from '../../../../db/client.ts'
-import type { FieldCipher } from '../../../../db/field-encryption.ts'
 import type { Clock } from '../../../../shared/clock.ts'
 
 export type EmployeesMainContext = {
@@ -17,14 +16,6 @@ export type EmployeesMainContext = {
    * ——repository 不自開交易，否則巢狀時無法合併成一個原子操作。
    */
   readonly db: Database
-  /**
-   * 欄位加解密器（§5.1）。
-   *
-   * **由組裝點注入而不是由 repository 自己建立**，理由與 clock 相同：金鑰來自環境變數，
-   * 讓底層自己去讀，測試就得為了跑一條測試去設環境變數，而「金鑰設錯」這條路徑也就永遠測不到。
-   * 注入之後，「用哪一把金鑰」是一個在組裝點看得見、可以被質疑的決定。
-   */
-  readonly cipher: FieldCipher
   /**
    * 可注入的「現在」（§6.2）。業務程式碼禁止直接 `new Date()`：底層自己抓時間，
    * 跨日、月底這類邏輯就根本無法測試。

@@ -7,7 +7,8 @@
     "db:generate": "bun --env-file=../../.env run drizzle-kit generate",
     "db:migrate": "bun --env-file=../../.env run drizzle-kit migrate",
     "db:migrate:test": "bun --env-file=../../.env --env-file=../../.env.test run drizzle-kit migrate",
-    "seed:dev": "bun --env-file=../../.env run scripts/seed-dev.ts"
+    "seed:dev": "bun --env-file=../../.env run scripts/seed-dev.ts",
+    "backfill:plaintext": "bun --env-file=../../.env run scripts/backfill-plaintext.ts"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.0",

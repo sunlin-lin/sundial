@@ -1,5 +1,24 @@
 /**
- * 欄位級加密（AES-256-GCM）與 blind index（HMAC-SHA256）（§5.1）。
+ * 欄位級加密（AES-256-GCM）與 blind index（HMAC-SHA256）（§5.1 現況）。
+ *
+ * **現在的處境：應用層欄位加密已移除，本檔不再是業務路徑的一部分。** `employees`／
+ * `employee_dependents` 的敏感個資改回明文欄位儲存，改由資料庫端靜態加密負責（代價與現況見
+ * `docs/dev-standards-backend.md` §5.1）。`modules/employees`／`modules/dependents` 底下的
+ * repository 與 service 都已經不再 import 本檔。
+ *
+ * **本檔這一輪刻意不刪**，唯二還在用它的地方：
+ *
+ * 1. **`apps/api/scripts/backfill-plaintext.ts`**——把舊資料裡 `*_encrypted` 欄位的密文解回
+ *    明文、寫進新的明文欄位，這支腳本活著的每一天都需要 `FieldCipher.decrypt`。
+ * 2. **`index.ts` 的金鑰啟動自檢**（`assertFieldEncryptionKeys`）——保留是因為回填腳本仍然
+ *    依賴同一組金鑰設定，啟動時把金鑰檢查掉比讓回填腳本執行到一半才發現金鑰壞掉更早攔下問題。
+ *
+ * `*_encrypted`／`*_hash` 這幾個舊欄位本身也還沒被 `DROP`（見 `db/schema/employees.ts`／
+ * `db/schema/employee-dependents.ts` 檔頭）——回填如果漏了一筆，密文還在就還能重新核對、
+ * 重新回填。**下一輪**確認回填無誤、drop 掉舊欄位之後，本檔、`app-dependencies.ts` 的
+ * `cipher` 欄位與 `index.ts` 的金鑰自檢會一併移除。
+ *
+ * ---
  *
  * **為什麼放在 `db/` 而不是 `shared/`：** 加密值的位元組排列是這幾個欄位的**儲存格式**——
  * 它決定欄位要開多寬、換金鑰之後舊資料還讀不讀得回來。那是資料層的關注點，與連線封裝

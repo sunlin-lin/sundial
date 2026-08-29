@@ -5,16 +5,14 @@
  * 「沒有」然後都寫進去，而那個 bug 只在同時送出時才出現，測試環境重現不了。
  * 這裡直接寫入並攔截唯一鍵違反，轉成一個業務結果交給 service 判斷。
  *
- * 身分證的重複之所以擋得住，靠的是 `identity_number_hash` 這個 blind index
- * ——加密值每次的 IV 都不同，同一個身分證寫兩次會得到兩串不同的位元組，
- * 建在密文上的唯一鍵**一次也擋不到**（而且看起來是有設的）。
+ * 身分證的重複現在直接由明文欄位上的唯一鍵擋（`uq_employees_company_identity_plain`，見
+ * `domain/employee-duplicate.ts`）——欄位加密移除後不再需要 blind index 那一層間接。
  */
 import { TenantDatabase, type QueryRunner } from '../../../../db/client.ts'
-import type { FieldCipher } from '../../../../db/field-encryption.ts'
 import { employees } from '../../../../db/schema/index.ts'
 import { classifyEmployeeDuplicate, type EmployeeDuplicateOutcome } from '../domain/employee-duplicate.ts'
 import type { EmployeeProfileInput } from '../domain/employee-model.ts'
-import { toEncryptedColumns } from '../domain/employee-secrets.ts'
+import { toStoredColumns } from '../domain/employee-secrets.ts'
 
 export type EmployeeInsertOutcome = 'inserted' | EmployeeDuplicateOutcome
 
@@ -27,13 +25,11 @@ export type NewEmployee = {
 
 export const insertEmployee = async (
   runner: QueryRunner,
-  cipher: FieldCipher,
   companyId: string,
   employee: NewEmployee,
 ): Promise<EmployeeInsertOutcome> => {
   const tenant = new TenantDatabase(runner, companyId)
-  // 加密在寫入的最後一刻才做，明文不在本函式以外存在（§5.1）。
-  const encrypted = toEncryptedColumns(cipher, employee.profile)
+  const stored = toStoredColumns(employee.profile)
 
   try {
     await tenant.insert(employees, (scopedCompanyId) => ({
@@ -42,7 +38,7 @@ export const insertEmployee = async (
       employeeCode: employee.profile.employeeCode,
       name: employee.profile.name,
       gender: employee.profile.gender,
-      ...encrypted,
+      ...stored,
       deletedAt: null,
       deletedSeq: 0,
       createdAt: employee.now,

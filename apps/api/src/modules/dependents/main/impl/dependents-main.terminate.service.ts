@@ -35,7 +35,7 @@ export const terminateDependentInTransaction = async (
   })
   if (affectedRows === 0) return fail([dependentStateChanged()])
 
-  const beforeSnapshot: DependentAuditSnapshot = toPlaintextSnapshot(context.cipher, before)
+  const beforeSnapshot: DependentAuditSnapshot = toPlaintextSnapshot(before)
   const afterSnapshot: DependentAuditSnapshot = {
     ...beforeSnapshot,
     endDate: input.endDate,
@@ -57,5 +57,5 @@ export const terminateDependentInTransaction = async (
   if (updated === null) {
     throw new Error(`眷屬 ${input.id} 終止扶養後於同一交易內讀不回來`)
   }
-  return succeed(toMaskedDetail(context.cipher, updated))
+  return succeed(toMaskedDetail(updated))
 }

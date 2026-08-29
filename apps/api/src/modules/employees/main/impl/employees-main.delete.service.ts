@@ -32,7 +32,7 @@ export const deleteEmployeeInTransaction = async (
   const deletedSeq = context.clock.epochMs()
 
   // 存在性檢查與稽核的 before 快照合併成同一次查詢，理由同 `update` 切片。
-  const before = await findEmployeeAuditSnapshot(tx, context.cipher, context.companyId, input.id)
+  const before = await findEmployeeAuditSnapshot(tx, context.companyId, input.id)
   // 目標不存在與「屬於別家公司」回完全相同的一筆錯誤（§3.2、§3.1.3）。
   if (before === null) return fail([employeeNotFound()])
 

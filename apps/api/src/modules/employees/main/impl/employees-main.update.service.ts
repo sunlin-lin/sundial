@@ -44,13 +44,13 @@ export const updateEmployeeInTransaction = async (
 
   // 同時做存在性檢查與稽核的 before 快照：兩者本來就要讀同一列，分兩次查只會多一趟往返，
   // 而且會有一瞬間的視窗讓兩次讀到的不是同一個版本。
-  const before = await findEmployeeAuditSnapshot(tx, context.cipher, context.companyId, input.id)
+  const before = await findEmployeeAuditSnapshot(tx, context.companyId, input.id)
   // 動作類端點的「目標不存在」是業務錯誤（§3.1.3）：使用者確實嘗試了一個做不到的操作。
   // 回 200 等於告訴前端「改好了」，畫面會若無其事地更新成完成後的狀態。
   // **別家公司的員工也走這一行**，回一模一樣的錯誤（§3.2）。
   if (before === null) return fail([employeeNotFound()])
 
-  const outcome = await updateEmployeeProfile(tx, context.cipher, context.companyId, input.id, {
+  const outcome = await updateEmployeeProfile(tx, context.companyId, input.id, {
     profile: input,
     now,
   })
@@ -70,8 +70,8 @@ export const updateEmployeeInTransaction = async (
   // 身分證、生日、手機、地址四欄：請求省略時代表「不變更」，因此用 `before`（明文現值）補齊，
   // 讓這幾欄的前後值逐字相同，`buildAuditChanges` 自然比不出差異——這正是「省略＝不變更」
   // 在稽核上該有的樣子：使用者根本沒有動它，稽核也就不該記一筆「變更了」。
-  // 身分證額外正規化一次，理由是**實際寫進資料庫的就是正規化後的值**（`toEncryptedColumns`／
-  // `toEncryptedColumnsForUpdate` 對兩邊做同一件事，見 `domain/employee-secrets.ts`）：
+  // 身分證額外正規化一次，理由是**實際寫進資料庫的就是正規化後的值**（`toStoredColumns`／
+  // `toStoredColumnsForUpdate` 對兩邊做同一件事，見 `domain/employee-secrets.ts`）：
   // 不正規化的話，同一個身分證只是大小寫不同就會被誤判成「變更了」，而 `identityNumber` 是
   // presence 級，這種誤判無法從 `changes` 裡分辨出來。
   const after: EmployeeProfileInput = {
@@ -96,7 +96,7 @@ export const updateEmployeeInTransaction = async (
     now,
   })
 
-  const updated = await findEmployeeDetail(tx, context.cipher, context.companyId, input.id)
+  const updated = await findEmployeeDetail(tx, context.companyId, input.id)
   if (updated === null) {
     // 系統錯誤（§3.1.2）：同一交易內剛讀到、剛寫過的員工又讀不回來了。
     throw new Error(`員工 ${input.id} 更新後於同一交易內讀不回來`)

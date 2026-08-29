@@ -12,7 +12,6 @@ import { beforeAll, describe, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { Elysia } from 'elysia'
 import { createDatabase, type Database } from '../../../../db/client.ts'
-import { createFieldCipher, createKeyRing, ENCRYPTION_KEY_BYTE_LENGTH } from '../../../../db/field-encryption.ts'
 import {
   AuditActorType,
   auditLogs,
@@ -39,11 +38,6 @@ const readTestDatabaseConfig = () => ({
   password: process.env['DB_PASSWORD'] ?? '',
   database: process.env['DB_NAME'] ?? '',
 })
-
-const testKey = (seed: number): string => Buffer.alloc(ENCRYPTION_KEY_BYTE_LENGTH, seed).toString('base64')
-const cipher = createFieldCipher(
-  createKeyRing({ keys: `v1:${testKey(51)}`, activeKeyId: 'v1', blindIndexKey: testKey(52) }),
-)
 
 /** 釘住「現在」（§6.2）。台北時間 2026-08-27 12:00:00。 */
 const clock = fixedClock(new Date('2026-08-27T04:00:00.000Z'))
@@ -74,7 +68,7 @@ const buildTestApp = (db: Database) =>
     .use(
       new Elysia({ name: 'test-authenticated-group' })
         .use(identityGuard(accessControl))
-        .use(employeesOnboardingRoutes({ db, cipher, clock })),
+        .use(employeesOnboardingRoutes({ db, clock })),
     )
 
 let database: Database

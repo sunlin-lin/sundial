@@ -19,7 +19,6 @@
  */
 import { eq, isNull } from 'drizzle-orm'
 import { TenantDatabase, type QueryRunner } from '../../../../db/client.ts'
-import type { FieldCipher } from '../../../../db/field-encryption.ts'
 import { CompanyUserStatus, companyUsers, employees } from '../../../../db/schema/index.ts'
 import type { EmployeeDetail } from '../domain/employee-model.ts'
 import { toMaskedDetail } from '../domain/employee-secrets.ts'
@@ -46,13 +45,12 @@ const findActiveCompanyUserId = async (tenant: TenantDatabase, employeeId: strin
  *   ——公司條件由 `TenantDatabase` 寫進 `WHERE`（§4.2），因此「不存在」與「屬於其他公司」
  *   想寫出不一致的回應都寫不出來（§3.2）。
  *
- * 回傳的**每一個敏感欄位都已經遮罩**（§5.1）：明文在本函式內解密、當場遮罩，一步都不往上走。
+ * 回傳的**每一個敏感欄位都已經遮罩**（§5.1）：本函式讀出明文後當場遮罩，一步都不往上走。
  * 需要完整值的端點依 §5.1 必須「明確授權且必寫稽核」，屆時是一個**另外命名**的動作，
  * 不是把明文加回這個回傳型別。
  */
 export const findEmployeeDetail = async (
   runner: QueryRunner,
-  cipher: FieldCipher,
   companyId: string,
   employeeId: string,
 ): Promise<EmployeeDetail | null> => {
@@ -65,11 +63,11 @@ export const findEmployeeDetail = async (
       employeeCode: employees.employeeCode,
       name: employees.name,
       gender: employees.gender,
-      identityNumberEncrypted: employees.identityNumberEncrypted,
-      birthdayEncrypted: employees.birthdayEncrypted,
-      phoneEncrypted: employees.phoneEncrypted,
-      emailEncrypted: employees.emailEncrypted,
-      addressEncrypted: employees.addressEncrypted,
+      identityNumber: employees.identityNumber,
+      birthday: employees.birthday,
+      phone: employees.phone,
+      email: employees.email,
+      address: employees.address,
       createdAt: employees.createdAt,
       updatedAt: employees.updatedAt,
     },
@@ -83,5 +81,5 @@ export const findEmployeeDetail = async (
   if (row === undefined) return null
 
   const companyUserId = await findActiveCompanyUserId(tenant, employeeId)
-  return toMaskedDetail(cipher, row, companyUserId)
+  return toMaskedDetail(row, companyUserId)
 }

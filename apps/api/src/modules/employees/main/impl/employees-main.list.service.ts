@@ -16,4 +16,4 @@ export const listEmployees = async (
 ): Promise<ServiceResult<EmployeeListPage>> =>
   // `today`（§6.2：由注入的 clock 取得，不在 repository 內部呼叫 `new Date()`）決定「目前有效
   // 職稱」的判斷基準（見 `impl/employees-main.list.repository.ts` 的批次查詢）。
-  succeed(await listEmployeePage(context.db, context.cipher, context.companyId, context.clock.today(), query))
+  succeed(await listEmployeePage(context.db, context.companyId, context.clock.today(), query))

@@ -101,8 +101,7 @@ const BusinessFailureResponses = {
 /**
  * 到職編排的端點。
  *
- * @param dependencies 由組裝點注入的資料庫、欄位加解密器（給 `employees/main` 用）與 clock。
- *   **不在模組層建立連線或讀金鑰**（§1.7）。
+ * @param dependencies 由組裝點注入的資料庫與 clock。**不在模組層建立連線或讀金鑰**（§1.7）。
  */
 export const employeesOnboardingRoutes = (dependencies: OnboardingDependencies) =>
   new Elysia({ name: 'employees-onboarding-routes' })

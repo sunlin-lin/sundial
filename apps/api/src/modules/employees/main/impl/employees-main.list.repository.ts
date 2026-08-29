@@ -6,7 +6,6 @@
  */
 import { and, asc, count, desc, eq, gte, inArray, isNull, like, or, lte, type SQL } from 'drizzle-orm'
 import { TenantDatabase, type QueryRunner } from '../../../../db/client.ts'
-import type { FieldCipher } from '../../../../db/field-encryption.ts'
 import {
   companyUsers,
   departments,
@@ -280,9 +279,10 @@ const resolveEligibleEmployeeIds = async (
  *
  * 公司範圍不在這裡——它由 `TenantDatabase` 補上，讓「不帶公司條件」寫不出來（§4.2）。
  *
- * **`keyword` 只比對 `name` 與 `employee_code`**：其餘欄位在資料庫裡是密文，而每次寫入的 IV
- * 都不同，同一個明文的位元組每次都不一樣——`LIKE` 在上面連完全相符都比不出來。
- * 這是加密欄位的固有性質，不是還沒做完的功能。
+ * **`keyword` 只比對 `name` 與 `employee_code`**：身分證等其餘個資欄位即使現在已經是明文欄位
+ * （見 `db/schema/employees.ts` 檔頭「敏感欄位改回明文」），仍然刻意不開放給關鍵字模糊搜尋
+ * ——開放的話等於讓任何有清單查詢權限的人，可以用身分證片段反查是哪一位員工，這是業務規則的
+ * 選擇，與欄位存不存加密無關。
  *
  * `eligibleEmployeeIds` 是 {@link resolveEligibleEmployeeIds} 算出來的結果：`null` 代表沒有
  * 部門／任職狀態／帳號狀態篩選，不加任何限制。
@@ -311,7 +311,7 @@ const buildConditions = (
  * 兩次查詢都吃 `ix_employees_company_name`（以 `company_id` 開頭，§4.5）。
  *
  * **只 select 清單真的要用的五欄**（§2 禁止 `select *`／禁止直接回 Drizzle row）：
- * 把生日、電話、地址一起撈出來，等於每列多解三次密，而清單根本不顯示它們。
+ * 生日、電話、地址清單根本不顯示，沒有理由多撈。
  *
  * `currentPage` 超出範圍時自然回空陣列與正確的 `pagination`，不另外判斷、也不回 404（§1.4）。
  *
@@ -340,7 +340,6 @@ const buildConditions = (
  */
 export const listEmployeePage = async (
   runner: QueryRunner,
-  cipher: FieldCipher,
   companyId: string,
   today: string,
   query: EmployeeListQuery,
@@ -363,7 +362,7 @@ export const listEmployeePage = async (
         employeeCode: employees.employeeCode,
         name: employees.name,
         gender: employees.gender,
-        identityNumberEncrypted: employees.identityNumberEncrypted,
+        identityNumber: employees.identityNumber,
       },
       employees,
       ...conditions,
@@ -396,7 +395,7 @@ export const listEmployeePage = async (
 
   const accountStatusByEmployeeId = await findAccountStatusesByEmployeeIds(runner, companyId, employeeIds)
 
-  // 解密後**當場遮罩**，明文不離開資料存取層（§5.1，見 `domain/employee-secrets.ts`）。
+  // 讀出來**當場遮罩**，明文不離開資料存取層（§5.1，見 `domain/employee-secrets.ts`）。
   return {
     items: rows.map((row) => {
       const employment = currentEmployments.get(row.id) ?? null
@@ -404,7 +403,7 @@ export const listEmployeePage = async (
       const jobTitleId = employment === null ? null : (jobTitleByEmploymentId.get(employment.id) ?? null)
 
       return {
-        ...toMaskedSummary(cipher, row),
+        ...toMaskedSummary(row),
         jobTitleName: jobTitleId === null ? null : (jobTitleNameById.get(jobTitleId) ?? null),
         departmentName: departmentId === null ? null : (departmentNameById.get(departmentId) ?? null),
         employmentTypeCode: employment === null ? null : employment.employmentTypeCode,

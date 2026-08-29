@@ -1,6 +1,8 @@
-/** 眷屬的資料存取入口（§0.4）。 */
+/**
+ * 眷屬的資料存取入口（§0.4）。**不再需要欄位加解密器**：眷屬個資已改回明文儲存（改由資料庫端
+ * 靜態加密負責，見 `db/schema/employee-dependents.ts` 檔頭「敏感欄位改回明文」）。
+ */
 import type { QueryRunner } from '../../../db/client.ts'
-import type { FieldCipher } from '../../../db/field-encryption.ts'
 import type { DependentInsertOutcome } from './domain/dependent-duplicate.ts'
 import type { DependentListPage, DependentListQuery } from './domain/dependent-model.ts'
 import type { DependentRow } from './domain/dependent-secrets.ts'
@@ -24,17 +26,15 @@ export const findEmployeeForReference = (
 
 export const insertDependent = (
   runner: QueryRunner,
-  cipher: FieldCipher,
   companyId: string,
   dependent: NewDependent,
-): Promise<DependentInsertOutcome> => insertDependentImpl(runner, cipher, companyId, dependent)
+): Promise<DependentInsertOutcome> => insertDependentImpl(runner, companyId, dependent)
 
 export const listDependentPage = (
   runner: QueryRunner,
-  cipher: FieldCipher,
   companyId: string,
   query: DependentListQuery,
-): Promise<DependentListPage> => listDependentPageImpl(runner, cipher, companyId, query)
+): Promise<DependentListPage> => listDependentPageImpl(runner, companyId, query)
 
 export const findDependentRow = (
   runner: QueryRunner,
