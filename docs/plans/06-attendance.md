@@ -213,7 +213,7 @@ attendance_correction_reviews:
 
 **排在哪個 Stage：** 見 §5 Stage 6。後端查詢端點（`list-by-date`）本身只讀 `attendance_records`，不依賴判定引擎，可以與 `revoke-other` 同一階段（Stage 3）先做掉；但整頁前端要能操作撤銷並看到 `attendance_results` 隨之重算，必須等判定引擎（Stage 4）與 Dashboard 撤銷流程（Stage 5）都跑得通之後——這與 §6 對 Dashboard／`attendance_results` 順序的判斷是同一個道理：撤銷後重算是這一頁的核心操作，判定引擎不存在，這條驗收就無法通過。
 
-**UI 定案缺這一頁，需要補文件。** 本計畫只定案上述分工、端點形狀與權限碼，不越權設計畫面版面、欄位排列或互動細節；開工前需要有人補一份對應的 UI 定案文件（見檔頭「待補 UI 文件」）。
+**UI 定案已補齊。** 本計畫只定案上述分工、端點形狀與權限碼，不越權設計畫面版面、欄位排列或互動細節；畫面本身見 [23-ui-daily-attendance-records.md](../ui/23-ui-daily-attendance-records.md)（已經使用者確認）。
 
 ---
 
@@ -245,7 +245,7 @@ roadmap 原始拆法是 2-A（設計）→2-B（settings+records）→2-C（Dash
 
 ### Stage 6 — 每日全員打卡明細（前後端，新增畫面）
 
-對應 §4.7：使用者本輪新提出、五份既有 UI 定案都沒有涵蓋的畫面。後端查詢端點（Stage 3 的 `list-by-date`）不依賴判定引擎，其實可以更早做；但整頁前端要能操作 `revoke-other` 並看到 `attendance_results` 隨之更新，必須等 Stage 4（判定引擎）與 Stage 5（Dashboard 的撤銷／重算流程已跑通）都完成——理由與 §6 對 Dashboard／`attendance_results` 順序的判斷相同：這一頁的撤銷驗收同樣要求「撤銷後重新計算」，判定引擎不存在，這條驗收就無法通過。**開工前需要先有對應的 UI 定案文件**（見檔頭「待補 UI 文件」），本計畫不代為設計畫面版面。
+對應 §4.7：使用者本輪新提出、五份既有 UI 定案都沒有涵蓋的畫面。後端查詢端點（Stage 3 的 `list-by-date`）不依賴判定引擎，其實可以更早做；但整頁前端要能操作 `revoke-other` 並看到 `attendance_results` 隨之更新，必須等 Stage 4（判定引擎）與 Stage 5（Dashboard 的撤銷／重算流程已跑通）都完成——理由與 §6 對 Dashboard／`attendance_results` 順序的判斷相同：這一頁的撤銷驗收同樣要求「撤銷後重新計算」，判定引擎不存在，這條驗收就無法通過。畫面本身依 [23-ui-daily-attendance-records.md](../ui/23-ui-daily-attendance-records.md) 實作。
 
 ### Stage 7 — 全體出勤 ⇄ 我的出勤（前後端，可平行）
 
@@ -296,7 +296,7 @@ roadmap 把 2-C（Dashboard）排在 2-D（`attendance_results`）之前，但 0
 | 地圖顯示打卡位置                          | §4.2 定案明細輸出座標後，輸出管道已經存在，但地圖仍是新的前端設計動作；五份 UI 定案與 §4.7 新頁都沒有地圖需求                    |
 | 班別六項待設計功能（換班、代班、待命等）  | 已在 `docs/schema/03` 定案延後到排班上線之後，不屬於出勤層                                                                       |
 
-**「撤銷別人打卡的前端畫面」原本列在這張表裡，本次已移除**：§4.7 新增的「每日全員打卡明細」正是那個畫面，已排進 Stage 6，不再是本計畫排除的項目——只是它的 UI 定案文件還沒寫，見檔頭「待補 UI 文件」。
+**「撤銷別人打卡的前端畫面」原本列在這張表裡，本次已移除**：§4.7 新增的「每日全員打卡明細」正是那個畫面，已排進 Stage 6，不再是本計畫排除的項目，UI 定案見 [23](../ui/23-ui-daily-attendance-records.md)。
 
 ---
 
