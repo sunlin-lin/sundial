@@ -101,6 +101,24 @@ export function availableActions(
 
 兩種用途都要把哨兵值在送出前擋下來，不要讓它混進送出 payload：`employees-onboarding.payload.ts` 的 `toOnboardingCreatePayload` 對每個哨兵值都丟一個開發期錯誤（第 98～104 行），理由是「呼叫端必須先過 `canSubmitOnboardingForm` 才能送出」——哨兵值本身不是合法業務值，混進 payload 只會讓後端回一個更難懂的 `300`。
 
+### 1.8 `ElTableColumn` 的 `scope.row` 沒有泛型，是 `DefaultRow`
+
+表格欄位的預設插槽拿到的 `scope.row` **不帶你的列型別**，它是 Element Plus 未泛型化的 `DefaultRow`。因此把整列物件傳給一個收窄型別的函式（例如 `toStatusLabel(row: ShiftDisplayRow)`）會被 `vue-tsc` 擋下，症狀跟 §1.6／§1.7 一樣指向套件內部型別，看不出是自己的程式碼有問題。
+
+既有解法（`apps/web/src/pages/shifts/main/components/ShiftListTable.vue` 第 48～50 行的檔頭已寫明）是**在模板端用索引取值**，而不是把整列交給函式：
+
+```vue
+<template #default="scope">
+  <span>{{ scope.row['workPeriods'] }}</span>
+</template>
+```
+
+配套是**在進模板之前就把每一列算成純顯示用的形狀**（該檔的 `ShiftDisplayRow`）：欄位怎麼組、狀態文字與色彩全部在 `.view.ts` 的純函式裡算完，模板只負責把算好的字串放到位。這樣索引取值失去型別保護這件事就沒有代價可言——那一格本來就只是一個字串。
+
+**不要為了拿型別而在模板裡寫型別斷言**：斷言在 `.vue` 裡沒有測試覆蓋、也不會因為列型別改變而變紅，等於把一個編譯期問題換成一個安靜的執行期問題。
+
+這一條是連續兩個頁面（員工明細的逐列動作、眷屬與勞退的清單）各自獨立踩到之後才補進來的——會重複發生，是因為它只寫在某一頁的檔頭註解裡。
+
 ## 2. 狀態管理
 
 ### 2.1 進 Pinia 的判準

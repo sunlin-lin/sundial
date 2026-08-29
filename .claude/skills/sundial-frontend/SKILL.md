@@ -105,7 +105,7 @@ description: Sundial 前端（apps/web）的開發規範與實作指引，涵蓋
 
 ## 幾條特別容易錯、而且沒有工具擋的地方
 
-- **Element Plus 元件在 `exactOptionalPropertyTypes` 下的已知地雷**——`ElOption` 的 `value`／`label`、`ElFormItem` 的 `error`、`ElRadioGroup` 的 `modelValue` 這三處，`vue-tsc` 會擋，但錯誤訊息只會指向 Element Plus 內部的型別宣告，看不出是本專案這個 tsconfig 選項造成的，不知道就得來回 typecheck 好幾次才摸得出方向。改用 `ElTreeSelect`、`formItemErrorProp` 這種回傳「有鍵或沒有鍵」的物件、以及值域外的哨兵值三種手法繞過去，細節見 `references/components-state-permission.md` §1.6～1.7 與 `references/forms-and-lists.md` §6.3。
+- **Element Plus 元件在 `exactOptionalPropertyTypes` 下的已知地雷**——`ElOption` 的 `value`／`label`、`ElFormItem` 的 `error`、`ElRadioGroup` 的 `modelValue`、`ElTableColumn` 插槽的 `scope.row`（沒有泛型，是 `DefaultRow`）這四處，`vue-tsc` 會擋，但錯誤訊息只會指向 Element Plus 內部的型別宣告，看不出是本專案這個 tsconfig 選項造成的，不知道就得來回 typecheck 好幾次才摸得出方向。改用 `ElTreeSelect`、`formItemErrorProp` 這種回傳「有鍵或沒有鍵」的物件、以及值域外的哨兵值三種手法繞過去，細節見 `references/components-state-permission.md` §1.6～1.8 與 `references/forms-and-lists.md` §6.3。
 - **`901`（無權限）比照 `900`（未登入）導向登入頁**——會產生「登入→點到沒權限的功能→被踢回登入頁→登入→又被踢回」的無限迴圈。統一 client（`shared/api/client.ts`）已經把這兩條路分開，寫新的錯誤處理時不要自己再判斷一次 HTTP status。
 - **`exp` 被撈出來顯示或拿去跟 `Date.now()` 比較**——`check:tz-leak` 擋得到大部分情形，但擋不到 `stores/` 或非 `pages/`／`shared/components/`／`shared/format/` 角落的誤用（見上表）。`exp` 唯一合法用途是寫進錯誤回報與 log；到期判斷與顯示一律用 `expiresIn` 換算的 `deadline`（`shared/api/session-deadline.ts`）。
 - **金額或費率轉型顯示**——`Number(record.data.wage).toLocaleString()` 這一行型別完全合法、九成的值都對，直到某個級距邊界值才顯示成完全不對的數字，而且不報錯。`check:number-cast` 只掃 `pages/` 與 `shared/components/`，其餘角落（例如不小心把轉型寫進 `shared/format/` 以外的共用檔）掃不到。一律用 `shared/format/decimal.ts` 的 `formatAmount`／`formatRate`。
