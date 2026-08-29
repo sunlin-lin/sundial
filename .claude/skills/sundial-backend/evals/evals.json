@@ -18,7 +18,7 @@
     {
       "id": 3,
       "name": "audit-in-transaction",
-      "prompt": "員工離職這個動作要留稽核紀錄，記下是誰改的跟改了哪些欄位，幫我補上。",
+      "prompt": "部門的建立、修改、刪除都要留稽核紀錄，記下是誰改的跟改了哪些欄位，幫我補上。",
       "expected_output": "recordAudit 與業務寫入使用同一個交易 handle（同一個 TransactionRunner，不是兩個各自的交易）；交易邊界在 service 層；敏感欄位依 audit-field-policy 遮罩；不在 service 裡 throw 業務錯誤；能說出 check:audit-transaction 與 check:audit-policy 在擋什麼",
       "files": []
     }

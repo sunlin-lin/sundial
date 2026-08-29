@@ -44,10 +44,11 @@
    - `_journal.json` 的 `entries` 每筆四個欄位：`idx`（嚴格等於陣列位置，從 0 起不跳號）、
      `tag`（等於這支 `.sql` 檔名去掉副檔名）、`when`（產生時間戳，毫秒）、`breakpoints`。
    - **`NNNN_snapshot.json` 是整個資料庫當下的全量快照，不是這次改動的差異**——它記錄這一版
-     全部的表與全部的欄位，不只是這次新增或修改的那幾個。手寫 snapshot 時最直覺的錯誤就是只寫
-     這次改動的欄位，漏掉其他表；正確做法是先複製上一份 snapshot 全文，再疊上這次的改動。
+     全部的表與全部的欄位，不只是這次新增或修改的那幾個。這是 `db:generate` 自己維護的檔案，
+     不要手動編輯它（手寫時最直覺的錯誤就是只寫這次改動的欄位，漏掉其他表——見下方「鐵律」
+     為什麼這條路本身就不該走）。
    - snapshot 的 `id`／`prevId` 是一條鏈：本次的 `prevId` 必須等於上一份 snapshot 的 `id`，
-     drizzle-kit 靠這條鏈確認「基準版本沒有斷過」。
+     drizzle-kit 靠這條鏈確認「基準版本沒有斷過」，這條鏈同樣由工具自己維護。
 
 3. 檢查產出：新增欄位是允許 NULL、還是帶 `default`——這是兩種不同的因應方式（前者放行「沒填」，
    後者替沒填的列補一個值），不是同一件事可以互換的兩種寫法。真正會炸的地雷組合是**對已有資料
@@ -76,13 +77,22 @@
 
 - ❌ 禁止手動連線資料庫執行 DDL——手改過的資料庫與 migration 歷史分岔後，新環境建不起來。
 - ❌ 禁止修改或刪除已合併進 main 的 migration 檔，修正一律新增新檔（CI 比對既有檔 diff）。
-- ✅ 手寫 migration SQL 時必須同步補 `_journal.json` 的 entry 與對應 snapshot（正常走
-  `db:generate` 會自動處理，只有手寫 SQL 才需要自己補）。**但這條路有陷阱**：snapshot 的
-  `id`／`prevId` 這組 UUID 鏈手寫時無法正確偽造，而 `check:migration-journal` 只驗證檔名存在
-  （entry 對得上一支 `.sql`、`idx` 對得上一份 `snapshot.json`），不驗證 snapshot 內容或這條鏈
-  是否正確——假鏈能通過這支掃描，卻會在下一次真的跑 `db:generate` 時對不上基準，導致後續
-  migration 整組重新產生。結論：優先用 `bun run db:generate`，手寫 SQL 是不得已的例外，不是
-  常態選項。
+- ✅ 真的需要手寫 SQL 內容（schema 沒有變動，例如純 `INSERT` 的權限碼 seed）時，用
+  `bun run db:generate -- --custom` 產生一支空白 migration，**不要自己動 `_journal.json`
+  或 `NNNN_snapshot.json`**。`drizzle-kit generate --help` 印出的說明是「Prepare empty
+  migration file for custom SQL」——這個旗標讓 drizzle-kit 自己算 journal entry 與
+  snapshot（schema 沒變，snapshot 內容照抄前一份，只有 `id`／`prevId` 這條鏈是工具重新算
+  出來的），開發者只需要把 SQL 寫進產生出來的 `.sql` 檔。真實先例：
+  `apps/api/drizzle/0026_seed_permission_codes_employments_withholding.sql`／
+  `0029_seed_permission_codes_job_titles_positions.sql`；比對它們與前一份的
+  `meta/NNNN_snapshot.json` 只有 `id`／`prevId` 換新、JSON 鍵序略有差異，表格內容語意相同。
+  **手寫 migration 的正確作法不是「手寫並補齊 journal 與 snapshot」，是「用工具產生骨架，
+  自己只寫 SQL 內容」。**
+  **不要走的路**：直接手寫 `.sql` 再手動編輯兩個 JSON 檔——snapshot 的 `id`／`prevId` 這組
+  UUID 鏈手寫時無法正確偽造，而 `check:migration-journal` 只驗證檔名存在（entry 對得上一支
+  `.sql`、`idx` 對得上一份 `snapshot.json`），**不驗證 snapshot 內容或這條鏈是否正確**——
+  假鏈能通過這支掃描，卻會在下一次真的跑 `db:generate` 時對不上基準，導致後續 migration
+  整組重新產生。
 - ✅ 每支 migration 必須能在空資料庫從頭跑到尾。
 
 ## 2. 多公司資料隔離（最高優先）
@@ -478,7 +488,8 @@ const rows = await runner
 ```
 
 ```ts
-// ❌ 錯誤：禁止的寫法（掃描腳本抓 db.query. 或 with: 選項）
+// ❌ 錯誤：寫不出來，不是「掃描腳本會抓」——db.query 的型別是 DrizzleTypeError（見上方
+// db/client.ts 的引用），接下去取 .companyUserRoles 這個屬性名本身就是編譯錯誤。
 const rows = await db.query.companyUserRoles.findMany({
   with: { role: true, assignedByMember: { with: { account: true } } },
 })

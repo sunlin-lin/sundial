@@ -5,9 +5,110 @@ description: Sundial 後端（apps/api）的開發規範與實作指引，涵蓋
 
 # Sundial 後端開發
 
-這個後端的規則密度遠高於一般專案：路徑形狀、檔名、分層依賴、交易邊界都有明文規定。**但其中只有一部分有工具在擋**——照一般 Node 習慣寫，多數情況不會有任何東西報錯，程式碼只是安靜地違規，直到 review 或出事。所以這裡的規則要當成「必須主動遵守」，不是「反正 CI 會抓」。
+權威來源是 `docs/dev-standards-backend.md`（1451 行，§0～§9）。需要完整論證時回查該章；本 skill
+不重複它。
 
-權威來源是 `docs/dev-standards-backend.md`（1451 行，§0～§9）。本 skill 是它的可執行版本：把「怎麼做」抽出來，理由壓成一句並附章節號，需要完整論證時回查該章。
+## 這份 skill 只講什麼
+
+`modules/employments/main/`、`modules/departments/main/` 這兩個模組本身就是最好的教材——每個
+檔案的檔頭都寫了「為什麼」。分層責任、`ServiceResult` 的基本寫法、repository 要帶公司範圍、
+`recordAudit` 要收交易 handle，照抄這兩個模組就能自己做對，這份 skill 不會再講一次。
+
+**只留三類東西**：
+
+1. **規則本身看不出來或猜不到**——檔名一個字取錯，會讓一整組規則同時失效，卻不會報錯；模組
+   歸屬的判準也不寫在程式碼的任何一行裡。
+2. **寫錯了沒有紅字**——哪些規則真的有工具擋、擋的範圍到哪，是可以查證的事實不是慣例，得去看
+   腳本或設定檔本身才知道，光看業務程式碼看不出來。
+3. **規範文件本身過期或不準**——標 ✅ 但腳本其實不存在，或工具現況與文件描述不同。
+
+多數任務仍要跨兩三份 `references/`，但目的是查這三類事，不是重新學一次分層結構。
+
+## 什麼有工具擋、什麼只能靠自己
+
+這一節放在最前面，因為它決定你要多小心。規範 §8 那張表列了 66 條「可自動化檢查」，**但相當一部分的腳本還沒寫**——規範標著 ✅ 不等於現在有東西在跑。以下每一行都對照過實際腳本或設定檔，不是照抄規範原文。
+
+**真的會擋你的：**
+
+| 工具                                            | 擋什麼                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `check:n-plus-one`                              | 迴圈內 await 資料庫查詢（§4.5）                                                                                                                                                                                                                                                                                                                  |
+| `check:audit-transaction`＋`check:audit-policy` | 稽核與業務寫入不同交易、稽核欄位政策（§5.3）                                                                                                                                                                                                                                                                                                     |
+| `check:migration-journal`                       | 手寫 migration 沒補 journal／snapshot、idx 跳號（§4.1）。**它不驗什麼**：只比對檔名存在（entry 對得上一支 `.sql`、`idx` 對得上一份 `snapshot.json`），**不讀 snapshot 內容，也不驗證 `id`／`prevId` 鏈是否正確**——手寫時偽造的假鏈一樣通過，卻會在下次真的跑 `db:generate` 時對不上基準，見 `references/database.md` §1                          |
+| `check:i18n`                                    | 訊息參數與 `MESSAGE_PARAM_SPECS` 對不上                                                                                                                                                                                                                                                                                                          |
+| `check:tz-leak`／`check:number-cast`            | 掃的是 `apps/web`：前端時區洩漏、金額退化。**後端不在這兩支的範圍內**                                                                                                                                                                                                                                                                            |
+| `check:dataset-code`                            | **掃的是後端**（`apps/api/src`，讀 `apps/api/tsconfig.json`）：`REGULATORY_DATASETS` 與 `docs/` 的代碼與名稱必須逐字一致。改 `regulatory-dataset-code.ts` 沒同步改文件會被擋                                                                                                                                                                     |
+| `check:layers`（dependency-cruiser，21 條）     | service／domain 不得 import http、`impl/` 可見範圍、跨大目錄邊界、`index.ts` 不得被 import、`shared/` 不得 import 其他頂層目錄、發證能力限認證模組、envelope 限 handler／routes                                                                                                                                                                  |
+| ESLint                                          | 空 catch（§3.3）、業務程式碼 `new Date()`／`Date.now()`（§6.2）                                                                                                                                                                                                                                                                                  |
+| TypeScript 型別                                 | `recordAudit` 只收 `TransactionRunner`（傳連線池是編譯錯誤）、金額 branded type、`errors` 僅 `code='300'` 可非空、業務時間欄位用 `TaipeiDateTime`／`IsoDate`（不允許時區字元）、`db.query.*` 關聯查詢——`db/client.ts` 刻意不把 schema 傳給 `drizzle()`，`.query` 的型別是 `DrizzleTypeError`，接下去取表名本身就是編譯錯誤，**不是掃描腳本擋的** |
+| 啟動自檢／測試守衛                              | DB session 時區非 `+08:00` 拒絕啟動、測試禁連非測試資料庫                                                                                                                                                                                                                                                                                        |
+
+**沒有工具擋、寫錯不會報錯的（節錄，完整對照見 `references/testing-and-checks.md`）：** 路徑三段形狀、一律 `POST`、`cmd` 與權限碼的機械轉換、`companyId`／`status` 不得出現在 request body、禁止手刻 envelope、檔名推導與 `modules/` 檔名白名單、入口檔只能單行委派、`modules/` 底下禁讀 cookie／header、軟刪除查詢要帶 `deleted_at`、**業務規則不符時要「收集」錯誤回傳 `ServiceResult`，不得 `throw`**（`throw` 只留給真正的意外，§3.1.1）。
+
+另外三件現況要知道：**覆蓋率門檻完全未設定**；**`.github/workflows/` 與 git hook 都不存在**，`bun run ci` 是唯一的手動把關；規範 §8 開頭寫「`.dependency-cruiser.cjs` 目前不存在」是**過期資訊**，該檔存在且完整。
+
+## 檔名推導與模組歸屬：兩個看不出來、錯了也不會報錯的判準
+
+### 檔名推導與 `modules/` 檔名白名單
+
+**分層規則全部靠檔名後綴當比對依據，不是靠人工判斷「這是哪一層」。** 取錯名字（例如
+`employments-main.manager.ts`）不會報錯，是所有以 `*.service.ts`／`*.repository.ts` 為目標的
+分層規則同時對它失效——這個檔案實質上活在規則管不到的地方；反過來在 `modules/` 以外用那五種
+後綴，會讓規則當場誤報，接著被加白名單，白名單就此長大。完整的檔名推導規則與 `modules/` 允許的
+檔名清單見 `references/module-layout.md` §2；新增檔案前先核對那份白名單，不要憑感覺照別的專案
+習慣命名。
+
+### 模組歸屬：輸出型別決定掛哪個模組
+
+一支查詢橫跨多個實體時（例如同時碰員工、任職、部門歷史三張表），判準是**看輸出型別是誰，就掛
+在誰的模組底下**——回的是員工摘要就掛 `employees/`，不因為 JOIN 到了部門就搬去 `departments/`。
+這條在既有程式碼裡看不出來：程式碼只看得到「這支函式 import 了哪些 schema」，看不出「決定放在
+這裡的判準是什麼」，得靠 skill 講清楚才成立。先例與完整範例見 `references/module-layout.md`
+§1.1。
+
+## 什麼時候該去查工具的原始碼，而不是照既有檔案推
+
+大多數規則，讀 `modules/employments/main/` 這類現成模組就能推出正確寫法。但有一類任務不行：
+**產出必須逐字符合某個工具下次執行時自己認得的格式**（migration SQL、snapshot 結構、`gen:api`
+產生的 client 形狀）。這種時候照著現有檔案的樣子模仿，只能做到「看起來像」——工具不會管你的檔案
+長得像不像它自己的輸出，它只看格式對不對；下次真的執行時，會用它自己的規則覆蓋掉你模仿出來的
+那份。
+
+判準：這個產出物**會不會被同一支工具在未來某次執行時重新讀取、比對、或覆蓋**？會的話，去讀
+**安裝在 `node_modules` 裡那個確切版本**的原始碼，或直接跑一次那個指令看真正的輸出，不要用
+「看起來差不多」代替查證。
+
+**真實例子**：`job_titles` 加一個 `sort_order` 欄位，想確認 migration 輸出的 `ALTER TABLE`
+長什麼樣。這個專案釘死 `drizzle-kit@0.31.10`，其單檔打包的 CLI
+（`node_modules/.bun/drizzle-kit@0.31.10/node_modules/drizzle-kit/bin.cjs`）裡 MySQL 方言的
+`ADD COLUMN` 轉換器寫死輸出格式：
+
+```js
+// bin.cjs（MySqlAlterTableAddColumnConvertor.convert，節錄）
+return `ALTER TABLE \`${tableName}\` ADD \`${name}\` ${type}${primaryKeyStatement}${autoincrementStatement}${defaultStatement}${generatedStatement}${notNullStatement}${onUpdateStatement};`
+```
+
+兩個從「照抄現有檔案」猜不出來的細節：**關鍵字是 `ADD`，不是 `ADD COLUMN`**（Postgres 方言才是
+`ADD COLUMN`，兩個方言各自是獨立的轉換器函式）；子句順序固定是型別 → 主鍵 → 自動遞增 →
+`DEFAULT` → `GENERATED` → `NOT NULL` → `ON UPDATE`。這件事只能讀原始碼查，因為這個 repo 目前
+**沒有任何一支既有 migration 加過欄位**（`apps/api/drizzle/*.sql` 只有 `CREATE TABLE` 與
+`ADD CONSTRAINT`）——沒有現成檔案可以模仿。
+
+**snapshot 也是同一類。** `NNNN_snapshot.json` 的 `id`／`prevId` 是 drizzle-kit 自己算的 UUID
+鏈，手寫猜不出正確值（見 `references/database.md` §1）。加完欄位、跑完 `db:generate` 之後，
+與其憑肉眼看過一遍就假設沒問題，寫一段腳本把新 snapshot 裡「這次沒有改動的表」逐一與前一份
+snapshot 做結構化比對（不是整檔案 diff——`id`／`prevId` 一定不同，鍵序也可能因重新序列化而變）；
+本專案目前 24 張表，改一張表的欄位，就該有其餘 23 張在這次比對裡完全等價。程式化驗證比「看起來
+沒少表」可靠，因為漏看一張表不會有任何提示。
+
+## 引用依據前，要先真的查過
+
+寫 PR 描述或跟人解釋「為什麼這樣做」時，常常會想引用專案裡某個檔案檔頭的說法當依據——這是好
+習慣，但**前提是真的打開那個檔案確認那句話存在**。編一個聽起來合理、但查無此言的依據，比誠實
+說「我不確定」危險得多：後者會讓下一個人知道這裡需要人工複查，前者會讓下一個人以為這件事已經
+查證過，直接引用下去，錯誤就這樣鍍上一層「查過了」的保護色繼續往下傳。
+
+沒時間查證時，寧可寫「這是我的推測，沒有實際核對來源」，也不要生造一個檔頭引言或章節編號。
 
 ## 先決定你在做什麼
 
@@ -23,29 +124,6 @@ description: Sundial 後端（apps/api）的開發規範與實作指引，涵蓋
 
 多數任務會跨兩三章。**新增一支端點幾乎一定要讀 module-layout、api-design、database 三份**，並在收尾時翻 testing-and-checks 的交件清單。
 
-## 什麼有工具擋、什麼只能靠自己
-
-這一節放在最前面，因為它決定你要多小心。規範 §8 那張表列了 66 條「可自動化檢查」，**但相當一部分的腳本還沒寫**——規範標著 ✅ 不等於現在有東西在跑。
-
-**真的會擋你的：**
-
-| 工具                                            | 擋什麼                                                                                                                                                                          |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `check:n-plus-one`                              | 迴圈內 await 資料庫查詢（§4.5）                                                                                                                                                 |
-| `check:audit-transaction`＋`check:audit-policy` | 稽核與業務寫入不同交易、稽核欄位政策（§5.3）                                                                                                                                    |
-| `check:migration-journal`                       | 手寫 migration 沒補 journal／snapshot、idx 跳號（§4.1）                                                                                                                         |
-| `check:i18n`                                    | 訊息參數與 `MESSAGE_PARAM_SPECS` 對不上                                                                                                                                         |
-| `check:tz-leak`／`check:number-cast`            | 掃的是 `apps/web`：前端時區洩漏、金額退化。**後端不在這兩支的範圍內**                                                                                                           |
-| `check:dataset-code`                            | **掃的是後端**（`apps/api/src`，讀 `apps/api/tsconfig.json`）：`REGULATORY_DATASETS` 與 `docs/` 的代碼與名稱必須逐字一致。改 `regulatory-dataset-code.ts` 沒同步改文件會被擋    |
-| `check:layers`（dependency-cruiser，21 條）     | service／domain 不得 import http、`impl/` 可見範圍、跨大目錄邊界、`index.ts` 不得被 import、`shared/` 不得 import 其他頂層目錄、發證能力限認證模組、envelope 限 handler／routes |
-| ESLint                                          | 空 catch（§3.3）、業務程式碼 `new Date()`／`Date.now()`（§6.2）                                                                                                                 |
-| TypeScript 型別                                 | `recordAudit` 只收 `TransactionRunner`（傳連線池是編譯錯誤）、金額 branded type、`errors` 僅 `code='300'` 可非空、業務時間欄位用 `TaipeiDateTime`／`IsoDate`（不允許時區字元）  |
-| 啟動自檢／測試守衛                              | DB session 時區非 `+08:00` 拒絕啟動、測試禁連非測試資料庫                                                                                                                       |
-
-**沒有工具擋、寫錯不會報錯的（節錄，完整對照見 `references/testing-and-checks.md`）：** 路徑三段形狀、一律 `POST`、`cmd` 與權限碼的機械轉換、`companyId`／`status` 不得出現在 request body、禁止手刻 envelope、檔名推導與 `modules/` 檔名白名單、入口檔只能單行委派、`modules/` 底下禁讀 cookie／header、軟刪除查詢要帶 `deleted_at`、禁止 Drizzle `db.query.*` 關聯查詢。
-
-另外三件現況要知道：**覆蓋率門檻完全未設定**；**`.github/workflows/` 與 git hook 都不存在**，`bun run ci` 是唯一的手動把關；規範 §8 開頭寫「`.dependency-cruiser.cjs` 目前不存在」是**過期資訊**，該檔存在且完整。
-
 ## 開工前：先確認缺口真的存在
 
 **動手寫之前，先搜尋這個動作是不是已經做過了。** 這個專案的模組數量已經不少，而檔名是機械推導的——`employments-main.leave.service.ts` 就是「辦理離職」，`impl/` 底下一列檔名就是這個次實體現有的全部動作。花一分鐘 grep，好過刻一份重複的實作。
@@ -53,8 +131,6 @@ description: Sundial 後端（apps/api）的開發規範與實作指引，涵蓋
 這件事在稽核上特別容易出事：若某個動作已經在自己的交易裡呼叫過 `recordAudit`，你在外層編排點「補一筆稽核」的結果是**同一項異動被記兩遍**——而兩筆都合法、都不會報錯。橫跨多張表時的正確形狀是每一步各自記一筆、編排點不再另記（§5.3）。
 
 先看三個地方：目標次目錄的 `impl/` 檔名清單、該模組 `index.ts` 匯出了哪些動作、以及 `__tests__/` 裡有沒有已經在測這件事。
-
-**確定要新增之後，再決定它掛哪個模組。** 一支查詢橫跨多個實體時（例如同時碰員工、任職、部門歷史三張表），判準是**看輸出型別是誰，就掛在誰的模組底下**——回的是員工摘要就掛 `employees/`，不因為 JOIN 到了部門就搬去 `departments/`。判準的依據與先例見 `references/module-layout.md`。
 
 ## 新增一支端點：由下往上，六步
 
@@ -66,23 +142,23 @@ description: Sundial 後端（apps/api）的開發規範與實作指引，涵蓋
 
 改完表定義用 `bun run db:generate` 產 migration，不要手寫 SQL。**這支指令需要 `.env`**——`drizzle.config.ts` 在載入階段就要求連線參數必填，即使 generate 本身不連資料庫，沒設就會卡在一個看起來與任務無關的錯誤。
 
-真的手寫 SQL 就要同步補 `drizzle/meta/_journal.json` 的 entry 與對應 snapshot——`drizzle-kit migrate` 讀的是 journal 不是 `.sql` 檔案清單，漏補的話它會印出成功但**零個動作**（`check:migration-journal` 會擋）。而 snapshot 是**整個資料庫的全量快照，不是這次的差異**，手寫時最容易只寫改動的表而漏掉其餘。細節見 `references/database.md`。
+真的要手寫 SQL 內容（schema 沒變，例如純 `INSERT` 的權限碼 seed）用 `bun run db:generate -- --custom` 產生空白 migration 骨架，不要自己動 `_journal.json` 或 snapshot——手寫 snapshot 猜不出 `id`／`prevId` 鏈，猜錯了掃描器不會抓到，細節見 `references/database.md` §1。
 
 兩個容易誤判的點：已有資料的表加 `NOT NULL` **又沒有 default** 才是地雷組合（nullable 與帶 default 是兩種各自安全的策略，不是二選一）；還有——**表加了欄位，API 契約不會自動變**，前端要看得到還得動 repository 的 select、domain 型別、handler 映射與 routes 的 response schema（§1.8.0 禁止把 repository 回傳值直接丟給 `data`）。
 
 ### 2. repository（`impl/<大目錄>-<次目錄>.<動作>.repository.ts`）
 
-- **一律顯式 `select` ＋ `join`，禁止 `db.query.*` 搭配 `with`**（§4.6）。⚠️ 無工具，自己守。
-- **每一支查詢都要帶公司範圍**，且公司範圍**永遠來自已驗證的身分，不來自 request body**（§4.2）。用 `db/client.ts` 的 `TenantDatabase`／`scopeAll` 封裝，不要繞過它拿裸連線。這是本系統最嚴重的單點風險。
+- **一律顯式 `select` ＋ `join`，禁止 `db.query.*` 搭配 `with`**（§4.6）。這由型別擋，不是「自己守」——`db/client.ts` 沒把 schema 傳給 `drizzle()`，`.query` 的型別是 `DrizzleTypeError`，接下去取表名是編譯錯誤。
+- **公司範圍一律用 `TenantDatabase`／`scopeAll` 封裝取得，不拿裸連線自己組 `WHERE`**（§4.2），公司範圍只能來自已驗證身分，不來自 request body。這是本系統最嚴重的單點風險，寫法照抄 `references/database.md` §2 或任一既有模組。
 - 軟刪除表的查詢要處理 `deleted_at`（§4.3）。⚠️ 無工具。
 - **不要在迴圈裡 await 查詢**，包含 `Promise.all(arr.map(async ...))` 這種偽裝成平行的寫法——它一樣是 N 次往返、N 個連線池 slot（§4.5，`check:n-plus-one` 會擋）。
 
 ### 3. service（`impl/<大目錄>-<次目錄>.<動作>.service.ts`）
 
-- **業務規則不符時「收集」錯誤後回傳 `ServiceResult`，不要 `throw`**（§3.1.1）。`throw` 只留給真正的意外。⚠️ 無工具。
+- **業務規則不符時「收集」錯誤後回傳 `ServiceResult`，不要 `throw`**（§3.1.1）。`throw` 只留給真正的意外，寫法照抄 `modules/roles/main/impl/roles-main.create.service.ts`。⚠️ 無工具。
 - **service 與 domain 不得 import http 層**，不得碰 envelope、HTTP status 或 `cmd`（§1.0.1、§3.1.1）。錯誤分組用具名常數（`Conflict`／`Unprocessable`／`Forbidden`），不寫 HTTP 數字——那是入口的事，不是業務層的事。（`check:layers` 會擋。）
 - **「現在」必須由呼叫端注入**，業務程式碼禁止 `new Date()`／`Date.now()`（§6.2，ESLint 會擋）。
-- 寫入多張表時交易邊界屬於 service 層；**稽核必須與業務寫入用同一個交易 handle**——`recordAudit` 收 `TransactionRunner`，傳連線池是編譯錯誤，但**傳「另一個」交易編譯得過**，那一半由 `check:audit-transaction` 擋（§5.3）。
+- 寫入多張表時交易邊界屬於 service 層；**稽核必須與業務寫入用同一個交易 handle**——`recordAudit` 收 `TransactionRunner`，傳連線池是編譯錯誤，但**傳「另一個」交易編譯得過**，那一半由 `check:audit-transaction` 擋（§5.3，範例見 `references/security.md` §3）。
 
 ### 4. errors（`<大目錄>-<次目錄>.errors.ts`）
 

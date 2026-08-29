@@ -1,0 +1,26 @@
+{
+  "skill_name": "sundial-frontend",
+  "evals": [
+    {
+      "id": 1,
+      "name": "new-page-shift-settings",
+      "prompt": "幫我在前端新增一個「班別設定」頁面，路徑掛在人事作業底下，要有一個列表可以看目前建立的班別，每一列有名稱、上下班時間、狀態，並且可以點進去看明細。",
+      "expected_output": "pages/shifts/main/ 這種兩層目錄（<段1>/<段2>，第二層可能是 main 或其他子實體名），目錄內只出現白名單檔名（.page.vue、.route.ts、選用的 .view.ts/.actions.ts/.payload.ts、components/**/*.vue、.<角色>.test.ts），不會出現 helpers.ts/utils.ts 這類檔案；.route.ts 的 path 以 /<段1>/<段2> 開頭、用動態 import 載入同目錄的 .page.vue；選單分組寫在 menu/main-menu.ts 而不是靠目錄結構表達「人事作業」這個分類；列名怎麼組、狀態文字與色彩這類呈現決策抽進 .view.ts 而不是留在 .vue 的 computed 或模板裡；不寫 .vue 元件測試，改對 .view.ts 等純函式寫同層的 .test.ts。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "call-existing-endpoint-with-error-handling",
+      "prompt": "現在有一支後端 API 是 /employees/main/list，我要在員工列表頁串接它，並且要把各種失敗情況都處理好，包含沒有權限跟系統錯誤。",
+      "expected_output": "呼叫一律經 shared/api/ 的統一 client（api/generated/ 產生的函式），不 import axios、不自己組 rqTS/cmd/locale；不依 HTTP status 判斷，一律讓統一 client 依 envelope 的 code 分支（900 導登入頁、901 顯示無權限且絕對不導登入頁、300 逐筆讀 errors 依 field 的 dot-path 定位、100/400 一律當系統錯誤不顯示細節）；頁面拿到的是型別化錯誤（BusinessRuleError/AuthRequiredError/PermissionDeniedError/SystemFailureError）而不是 AxiosError，也不會在頁面程式碼裡出現 '900'/'901'/'300' 這類 code 常值或 .response.status 比對；列表回應要先比對 search/sort 回聲再賦值，不符就丟棄；能指出這幾條大多沒有掃描腳本在擋（check:tz-leak 和 check:number-cast 管的是別的規則），必須自己核對。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "display-amount-and-session-countdown",
+      "prompt": "薪資明細頁要顯示這個月的應付金額，還有畫面右上角要顯示登入 session 大概還剩多久會過期，快過期的時候要提示使用者。",
+      "expected_output": "金額顯示一律用 shared/format/decimal.ts 的 formatAmount，不對 API 回來的金額欄位用 Number()/parseFloat()/一元 + 做任何轉型（decimal 字串進、字串出，全程不經過 number）；session 剩餘時間由 expiresIn 換算出的 deadline 做 deadline - Date.now() 的即時投影，不使用 exp 做判斷或顯示、不自己寫一個每秒遞減的計數器；exp 不得出現在任何顯示路徑（.vue 模板或 script）；能提到 check:number-cast 只掃 pages/ 與 shared/components/ 兩個目錄、check:tz-leak 會擋 exp 外洩與帶時區標記字面值，但兩者都有掃不到的角落，不能完全依賴工具。",
+      "files": []
+    }
+  ]
+}

@@ -7,6 +7,12 @@
 # 要用就解開成目錄，解開後那些 md 自然會被追蹤。
 .claude/skills/*.zip
 
+# skill 評測的工作目錄（skill-creator 的 `<skill-name>-workspace/`）。
+# 裡面是「有 skill vs 沒 skill」兩組子代理的實際產出，用來比對差異、決定 skill 要怎麼改。
+# 它是**過程**不是**結論**：結論已經寫進 skill 本身，而這些產出隨下一輪評測就會被取代。
+# 進版控的話，每跑一輪就多出上百個不會被任何人再讀第二次的檔案。
+.claude/skills/*-workspace/
+
 # 相依與建置產物
 node_modules/
 dist/
