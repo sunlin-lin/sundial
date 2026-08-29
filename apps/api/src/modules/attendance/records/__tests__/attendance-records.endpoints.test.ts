@@ -383,6 +383,69 @@ describe('attendance/records endpoints (integration)', () => {
     expect(clockOut.payload.data.workDate).toBe(clockIn.payload.data.workDate)
   })
 
+  test('create：打上班卡後，attendance_results 已有一筆 NO_SCHEDULE、worked_minutes=0 的紀錄（不是完全沒有紀錄）', async () => {
+    const { companyId, registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+
+    const clockIn = await call<{ workDate: string }>('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 1,
+    })
+    const workDate = clockIn.payload.data.workDate
+
+    // 只打了上班卡：判斷依據見 create.service.ts 檔頭「打卡成功後……」那一段——上班卡也要重算，
+    // 這裡應該已經有一筆 NO_SCHEDULE、worked_minutes=0 的紀錄，而不是查無資料。UI 09「全體出勤」
+    // 需要看到「今天已上班、尚未下班」這件事，不能讓這個人今天整天在畫面上消失。
+    const afterClockIn = await readAttendanceResult(companyId, employee.employeeId, workDate)
+    expect(afterClockIn).not.toBeNull()
+    expect(afterClockIn?.resultStatusCode).toBe(AttendanceResultStatusCode.NoSchedule)
+    expect(afterClockIn?.workedMinutes).toBe(0)
+  })
+
+  test('create：打卡上班→打卡下班後，attendance_results 的 worked_minutes 正確反映兩次打卡的時間差', async () => {
+    const { companyId, registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+    const workDate = '2026-08-29'
+
+    // 直接寫入一張三小時前的有效上班卡（測試用固定 clock 無法在同一支測試內前進時間，比照本檔
+    // 「由核准補打卡建立的紀錄」測試的手法，直接造一筆過去的打卡事件），再透過真正的 create 端點
+    // 打下班卡——這一步才是本測試要驗證的重算路徑。
+    await database.insert(attendanceRecords).values({
+      id: crypto.randomUUID(),
+      companyId,
+      employeeId: employee.employeeId,
+      employmentId: employee.employmentId,
+      employeeScheduleId: null,
+      workDate,
+      attendanceTypeCode: AttendanceTypeCode.ClockIn,
+      sourceTypeCode: AttendanceSourceTypeCode.Field,
+      sourceId: null,
+      clockedAt: '2026-08-29 09:00:00',
+      latitude: null,
+      longitude: null,
+      accuracyMeters: null,
+      address: null,
+      addressResolvedAt: null,
+      revokedAt: null,
+      revokedBy: null,
+      revokeReason: null,
+      revokedSeq: 0,
+      createdAt: clock.now(),
+      updatedAt: clock.now(),
+    })
+
+    // 打下班卡：fixedClock 釘在台北時間 2026-08-29 12:00:00，與上面的上班卡相差 180 分鐘。
+    const clockOut = await call<{ workDate: string }>('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 2,
+    })
+    expect(clockOut.status).toBe(200)
+    expect(clockOut.payload.data.workDate).toBe(workDate)
+
+    const afterClockOut = await readAttendanceResult(companyId, employee.employeeId, workDate)
+    expect(afterClockOut).not.toBeNull()
+    expect(afterClockOut?.resultStatusCode).toBe(AttendanceResultStatusCode.NoSchedule)
+    expect(afterClockOut?.workedMinutes).toBe(180)
+  })
+
   test('create：already-punched，同一天已有一張有效上班卡時再打一次回 409', async () => {
     const { registerEmployee } = await registerCompany()
     const employee = await registerEmployee()

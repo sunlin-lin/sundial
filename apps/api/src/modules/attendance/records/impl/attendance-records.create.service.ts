@@ -35,11 +35,32 @@
  * `createAttendanceRecord` 自己，這裡沒有像其他模組那樣切成「單一端點用」與「供編排點用」兩支
  * ——Stage 3 沒有任何編排點需要把打卡納進別人的交易，先寫成一支即可，日後真的出現編排需求時
  * 再拆。
+ *
+ * ## 打卡成功後，在同一筆交易內重算 `attendance_results`（補計畫 §4.3.1 遺漏的主要路徑）
+ *
+ * `revoke`／`revoke-other` 成功後都會呼叫 `recalculateAttendanceResultForWorkDay`，但計畫
+ * §4.3.1 只寫了「撤銷後要重算」，沒提到打卡成功本身。若正常打卡不重算，`attendance_results`
+ * 永遠只會因為「撤銷」而出現——這是反過來的：唯一會產生判定結果的路徑竟然是撤銷，正常上下班
+ * 打卡反而不會留下任何 `attendance_results` 紀錄，UI 09「全體出勤」與 UI 12「我的出勤」會一片
+ * 空白。因此本檔比照 `revoke.service.ts` 的形狀，在同一筆交易內呼叫同一支重算函式。
+ *
+ * **上班卡與下班卡都要重算，不是只有下班卡**：上班卡打完時還沒有下班卡，`computeAttendanceResult`
+ * 對缺一張卡的情況固定回傳 `worked_minutes = 0`（見該函式檔頭），不是算不出來而中止。若只在下班卡
+ * 才重算，當天只打了上班卡、還在上班中的員工，那一整天在 `attendance_results` 裡完全沒有紀錄，
+ * UI 09「全體出勤」會看不到這個人今天已經打卡上班——這比顯示「工時 0、尚未下班」更誤導，因為後者
+ * 至少誠實反映「人在，還沒打下班卡」這個事實，前者則讓人以為他今天根本沒來。這與 `revoke`／
+ * `revoke-other` 對 `ClockIn` 類型的撤銷一樣要重算（不分卡別）是同一個對稱：卡的類型不影響
+ * 「這個工作日是否需要重算」這個判斷，只影響重算後算出來的值長什麼樣。
+ *
+ * 重算對象是配對後解出來的 `workDate`（上班卡固定是今天；下班卡可能配對到前一天，例如跨日班），
+ * 不是打卡當下的今天——比照 `revoke.service.ts` 檔頭「撤銷影響的是那一天，不是撤銷者自己的今天」
+ * 同一個道理。
  */
 import type { TransactionRunner } from '../../../../db/client.ts'
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import { AttendanceSourceTypeCode, AttendanceTypeCode } from '../../../../db/schema/index.ts'
 import { getAttendanceSettings } from '../../settings/attendance-settings.service.ts'
+import { recalculateAttendanceResultForWorkDay } from '../../results/attendance-results.service.ts'
 import type { AttendanceRecordsContext } from '../domain/attendance-record-context.ts'
 import type { AttendanceRecordDetail, CreateAttendanceRecordInput } from '../domain/attendance-record-model.ts'
 import {
@@ -119,6 +140,15 @@ const createAttendanceRecordInTransaction = async (
   // 唯一鍵是配對／重複檢查之外最後一道保險（計畫 §4.5）：鎖不完美時（例如鎖粒度以外的邊界
   // 情況）擋不住的，交給唯一鍵擋，回同一則業務錯誤——呼叫端不需要分辨是哪一層擋下來的。
   if (outcome === 'duplicate') return fail([attendanceRecordAlreadyPunched()])
+
+  // ★ 同一筆交易內重算（見檔頭「打卡成功後……」那一段）：上班卡與下班卡都要重算，且重算對象是
+  // 上面配對解出來的 `workDate`，不是 `today`——下班卡可能配對到前一天。
+  await recalculateAttendanceResultForWorkDay(
+    tx,
+    context.companyId,
+    { employeeId: employment.employeeId, workDate },
+    now,
+  )
 
   const detail = await findAttendanceRecordDetail(tx, context.companyId, id)
   if (detail === null) {
