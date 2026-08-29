@@ -26,13 +26,20 @@ import {
   type RevokeFormErrors,
 } from '../dashboard-main.errors.view.ts'
 import { emptyRevokeFormState, toRevokePayload } from '../dashboard-main.payload.ts'
-import { clockTimeDisplay, type AttendanceRecordDetail } from '../dashboard-main.view.ts'
+import { clockTimeDisplay, type AttendanceRecordDetail, type TodayPunchRecord } from '../dashboard-main.view.ts'
 
 const { t } = useI18n()
 const $t: TranslateMessage = t
 
-/** `kind` 只決定標題文案（「撤銷上班卡」／「撤銷下班卡」），業務上兩者呼叫同一支端點。 */
-const props = defineProps<{ record: AttendanceRecordDetail | null; kind: 'clock-in' | 'clock-out' }>()
+/**
+ * `kind` 只決定標題文案（「撤銷上班卡」／「撤銷下班卡」），業務上兩者呼叫同一支端點。
+ *
+ * `record` 是 {@link TodayPunchRecord}（只有 `id`／`clockedAt`），不是完整的
+ * {@link AttendanceRecordDetail}：呼叫端（`AttendanceTodayCard.vue`）手上的「今天這張卡」現在
+ * 可能來自 `list-own-by-date` 的列表項目（頁面載入時查出來），也可能來自 `create` 的完整回應
+ * （本次瀏覽階段內打卡），這個對話框只用得到這兩欄，收窄成兩者都滿足的形狀。
+ */
+const props = defineProps<{ record: TodayPunchRecord | null; kind: 'clock-in' | 'clock-out' }>()
 const emit = defineEmits<{ close: []; revoked: [detail: AttendanceRecordDetail] }>()
 
 const form = reactive(emptyRevokeFormState())

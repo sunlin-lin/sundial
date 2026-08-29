@@ -118,11 +118,30 @@ const PERMISSION_CODES = [
   'labor-pension.main.create',
   // Dashboard 打卡與撤銷（計畫 06 Stage 5，UI 定案 `docs/ui/10-ui-dashboard-attendance.md`）。
   // 兩碼逐字比對過 `0039_seed_permission_codes_attendance_records.sql`（f21／f22）。
-  // `attendance.records.get`／`.list-by-date`／`.revoke-other`／`.view-all` 不在這份清單裡：
-  // 這一輪 Dashboard 沒有任何 `can(...)` 呼叫點會判斷它們（`get`／`list-by-date` 沒有消費者，
-  // `revoke-other`／`view-all` 是他人撤銷與座標可見範圍的權限碼，屬於 Stage 6 每日全員打卡明細）。
   'attendance.records.create',
   'attendance.records.revoke',
+  // Dashboard「今日打卡狀態」重新整理後仍能還原（計畫 06 Stage 5 缺口二）。逐字比對過
+  // `0042_seed_permission_codes_attendance_records_list_own_by_date.sql`（f27）。這一碼配給
+  // 每一位一般員工的角色（範圍固定為 token 推出的本人，見該 migration 檔頭），因此可以在
+  // 呼叫 `attendance/records/list-own-by-date` 前用 `can(...)` 判斷，異常情況（例如角色設定漏配）
+  // 時安靜地維持「尚未上班」而不是讓呼叫必然吃一個 901。
+  'attendance.records.list-own-by-date',
+  // 每日全員打卡明細（計畫 06 §4.7、Stage 6，UI 定案 `docs/ui/23-ui-daily-attendance-records.md`）。
+  // 兩碼逐字比對過 `0039_seed_permission_codes_attendance_records.sql`（f25／f23）。
+  //
+  // **這一頁的查看權限碼用 `list-by-date`，不是 UI 定案文字裡舉例的 `view-all`**：`view-all`
+  // （f26）是 0039 seed 檔頭明講「不對應任何路由」的細粒度旗標，只給 `get` 端點在執行期比對
+  // 座標可不可見用（見 `attendance-record-visibility.ts`）——它從一開始就不是任何端點的權限碼，
+  // 因此加進這份清單會被下面的 `satisfies readonly ApiCommand[]` 直接擋下來編譯不過
+  // （`ApiCommand` 只涵蓋端點路徑機械推導出的字串，`view-all` 不在其中）。計畫 §4.7 本身也只把
+  // `view-all` 當作「例如」，明講「實作時可視情況共用或另開，這是實作細節不影響本計畫的分工判斷」，
+  // 選單項與 `.route.ts` 的 `meta.permission` 因此改掛 `list-by-date`——它才是這一頁真正會呼叫、
+  // 也真正是端點權限碼的那一支，與前端規範 §4.4「選單項只能掛讀取類動作」的判準一致（`list-by-date`
+  // 是查詢動作）。座標三種狀態（有權限／沒有 GPS／沒有權限）改由 `get` 回應鍵是否存在判斷
+  // （見 `attendance-daily-records.view.ts`），不靠前端另外呼叫 `can('attendance.records.view-all')`
+  // ——那一碼不在這份清單裡，前端本來就叫不到它。
+  'attendance.records.list-by-date',
+  'attendance.records.revoke-other',
 ] as const satisfies readonly ApiCommand[]
 
 /** 權限碼。全站判斷權限一律用這個型別，不用 `string`。 */

@@ -91,6 +91,7 @@ export const ZH_TW = {
   'menu.hr-operations': '人事作業',
   'menu.shifts-main': '班別設定',
   'menu.employees-main': '員工清單',
+  'menu.attendance-daily-records': '每日打卡明細',
 
   /**
    * 四種同步狀態，值取自後端的 `RegulatorySyncStatus`（1/2/3/4）。
@@ -597,6 +598,70 @@ export const ZH_TW = {
   'employees-detail.account.action.assign': '新增角色',
   'employees-detail.account.toast.role-assigned': '角色已新增。',
   'employees-detail.account.toast.role-revoked': '角色已移除。',
+
+  // ---------------------------------------------------------------------------------
+  // 每日全員打卡明細（`pages/attendance/daily-records/`，計畫 06 §4.7、Stage 6，
+  // UI 定案 `docs/ui/23-ui-daily-attendance-records.md`）。
+  // ---------------------------------------------------------------------------------
+
+  'attendance-daily-records.heading': '每日全員打卡明細',
+  'attendance-daily-records.description': '查看某一天全公司的打卡事件，並可對他人的打卡執行撤銷。',
+  'attendance-daily-records.retry': '重新載入',
+  'attendance-daily-records.empty': '目前沒有符合條件的打卡紀錄。',
+
+  'attendance-daily-records.filter.date': '日期',
+  'attendance-daily-records.filter.department': '部門',
+  'attendance-daily-records.filter.employee': '人員',
+  'attendance-daily-records.filter.employee-keyword-placeholder': '輸入員工編號或姓名',
+
+  'attendance-daily-records.column.employee-code': '員工編號',
+  'attendance-daily-records.column.employee-name': '姓名',
+  'attendance-daily-records.column.department': '部門',
+  'attendance-daily-records.column.attendance-type': '打卡類型',
+  'attendance-daily-records.column.clocked-at': '打卡時間',
+  'attendance-daily-records.column.location': '地點',
+  'attendance-daily-records.column.source': '來源',
+  'attendance-daily-records.column.status': '狀態',
+  'attendance-daily-records.column.action': '操作',
+
+  'attendance-daily-records.action.view-detail': '查看明細',
+  'attendance-daily-records.action.revoke': '撤銷',
+
+  /** 打卡類型（值域對齊後端 `db/schema/attendance-records.ts` 的 `AttendanceTypeCode`）。 */
+  'attendance-daily-records.type.clock-in': '上班',
+  'attendance-daily-records.type.clock-out': '下班',
+
+  /** 打卡來源（值域對齊後端 `AttendanceSourceTypeCode`）。 */
+  'attendance-daily-records.source.field': '現場打卡',
+  'attendance-daily-records.source.manual-correction': '人工補登',
+
+  'attendance-daily-records.status.active': '有效',
+  'attendance-daily-records.status.revoked': '已撤銷',
+
+  'attendance-daily-records.detail.title': '打卡明細',
+  'attendance-daily-records.detail.not-found': '找不到這筆打卡紀錄，可能已不存在或不屬於目前公司。',
+  'attendance-daily-records.detail.coordinates': '座標',
+  'attendance-daily-records.detail.coordinates-no-gps': '本筆未取得定位',
+  'attendance-daily-records.detail.coordinates-no-permission': '無權限檢視座標',
+  'attendance-daily-records.detail.accuracy-meters': '定位精準度',
+  'attendance-daily-records.unit.meters': '公尺',
+  'attendance-daily-records.detail.revoked-at': '撤銷時間',
+  'attendance-daily-records.detail.revoked-by': '撤銷人',
+  'attendance-daily-records.detail.revoke-reason': '撤銷原因',
+
+  'attendance-daily-records.revoke.title': '撤銷他人打卡',
+  'attendance-daily-records.revoke.target-employee': '員工',
+  'attendance-daily-records.revoke.target-type': '打卡類型',
+  'attendance-daily-records.revoke.target-clocked-at': '打卡時間',
+  'attendance-daily-records.revoke.target-location': '地點',
+  'attendance-daily-records.revoke.field.reason': '撤銷原因',
+  'attendance-daily-records.revoke.cancel': '取消',
+  'attendance-daily-records.revoke.submit': '撤銷',
+  'attendance-daily-records.revoke.confirm': '撤銷後這筆打卡將標記為已撤銷，並觸發當日出勤重新計算，確定要撤銷嗎？',
+  'attendance-daily-records.revoke.confirm-title': '請再次確認',
+  'attendance-daily-records.revoke.confirm-ok': '確定撤銷',
+  'attendance-daily-records.revoke.confirm-cancel': '取消',
+  'attendance-daily-records.toast.revoked': '已撤銷這筆打卡。',
 
   /** 前端自己要說的話，見檔頭的「唯一的例外」。 */
   'error.system': '系統發生錯誤，請稍後再試。',

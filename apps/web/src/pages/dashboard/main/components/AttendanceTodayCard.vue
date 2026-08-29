@@ -7,9 +7,14 @@
  * 直接呼叫、不透過頁面轉發——與 `ShiftListTable.vue` 的既有慣例相同：確認／打一支端點／
  * 通知重新整理，沒有表單欄位需要標紅時，繞一圈到 `.page.vue` 只是多一層轉發。
  *
- * **今日狀態的已知限制：只在本次瀏覽階段內可靠，見 `dashboard-main.view.ts` 檔頭。**
- * 後端 Stage 3／4 沒有提供「查詢本人今天打卡記錄」的端點，本元件無法在重新整理頁面後還原狀態，
- * 這不是本元件的判斷問題——已列入本輪回報的後端缺口。
+ * **今日狀態現在在頁面載入時就查得到，不再只在本次瀏覽階段內可靠**：`initialPunches`／
+ * `isLoadingPunches`／`punchesFailure` 由 `.page.vue` 呼叫 `attendanceRecordsListOwnByDate`
+ * 載入（理由與 `settings` 三個 props 相同——那支查詢與出勤設定一樣是「這張卡片能不能正確運作」
+ * 的前提資料，載入方式因此比照既有的 `settings` 三件套，不是本元件另開一組不相干的 loading／
+ * error 狀態，見 `dashboard-main.view.ts` 檔頭）。`initialPunches` 只在載入完成時同步進本地的
+ * `punches`；使用者在本次瀏覽中打卡或撤銷之後，`punches` 由 {@link punch}／{@link onRevoked}
+ * 就地更新，不會被稍後才 resolve 的初始載入蓋回去（`watch` 只在 `initialPunches` 這個 prop
+ * 本身改變時觸發，而它只在 `.page.vue` 的載入或重試完成時才會換一個新物件）。
  *
  * **GPS 權限被拒的處理**：{@link resolveCoordinates} 一律先嘗試 `navigator.geolocation`；
  * 拒絕或逾時時，`gps_required=false`（含公司從未設定過出勤設定的情況）仍照常送出打卡
@@ -18,7 +23,7 @@
  * 必須明講要去哪裡改。另外用 `navigator.permissions.query` 盡量提前偵測「已被封鎖」的狀態，
  * 顯示成一則常駐提示，而不是等使用者按下打卡才第一次告訴他。
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElAlert, ElButton, ElEmpty, ElMessage, ElSkeleton, ElTooltip } from 'element-plus'
 import { attendanceRecordsCreate, type AttendanceSettingsGetData } from '../../../../api/generated/api-client.ts'
@@ -44,6 +49,7 @@ import {
   workedHoursDisplay,
   workedMinutes,
   type AttendanceRecordDetail,
+  type TodayPunchRecord,
   type TodayPunches,
 } from '../dashboard-main.view.ts'
 import AttendanceRevokeDialog from './AttendanceRevokeDialog.vue'
@@ -56,6 +62,10 @@ const props = defineProps<{
   settings: AttendanceSettingsGetData | null
   isLoadingSettings: boolean
   settingsFailure: LoadFailure | null
+  /** `attendanceRecordsListOwnByDate` 載入完成時的今日打卡狀態；載入中或失敗時是 `emptyTodayPunches()`。 */
+  initialPunches: TodayPunches
+  isLoadingPunches: boolean
+  punchesFailure: LoadFailure | null
 }>()
 const emit = defineEmits<{ retry: [] }>()
 
@@ -70,8 +80,15 @@ const gpsEnabled = computed(() => props.settings?.gpsEnabled ?? true)
 const gpsRequired = computed(() => props.settings?.gpsRequired ?? false)
 const allowEmployeeCancellation = computed(() => props.settings?.allowEmployeeCancellation ?? true)
 
-// --- 今日打卡狀態（本次瀏覽階段內，見檔頭的限制說明） -----------------------------------
+// --- 今日打卡狀態：載入時由 `initialPunches` 帶入，之後本次瀏覽中的打卡／撤銷就地更新 ------
 const punches = ref<TodayPunches>(emptyTodayPunches())
+watch(
+  () => props.initialPunches,
+  (next) => {
+    punches.value = next
+  },
+  { immediate: true },
+)
 const status = computed(() => deriveTodayStatus(punches.value))
 const statusText = computed(() => todayStatusLabel(status.value, $t))
 const clockInTimeText = computed(() => clockTimeDisplay(punches.value.clockIn))
@@ -248,7 +265,7 @@ const onClockOut = (): void => {
 }
 
 // --- 撤銷：本卡片只決定「撤銷哪一筆」，送出流程在 AttendanceRevokeDialog.vue ---------------
-const revokeTarget = ref<AttendanceRecordDetail | null>(null)
+const revokeTarget = ref<TodayPunchRecord | null>(null)
 const revokeKind = ref<'clock-in' | 'clock-out'>('clock-in')
 
 const onRequestRevokeClockIn = (): void => {
@@ -294,7 +311,24 @@ const onRevoked = (detail: AttendanceRecordDetail): void => {
       <ElAlert type="error" show-icon :closable="false" :title="$t('error.system')" />
       <ElButton class="mt-3" @click="emit('retry')">{{ $t('dashboard.attendance.retry') }}</ElButton>
     </div>
-    <ElSkeleton v-else-if="isLoadingSettings" class="mt-4" :rows="3" animated />
+    <!--
+      今日打卡狀態的載入失敗／載入中比照上面 `settings` 的分支（見檔頭：兩者是同一張卡片
+      能不能正確運作的前提資料，不是兩組互不相干的狀態）。`isLoadingSettings` 已經在上面擋掉，
+      這裡只需要再判斷 `punches` 這一組。
+    -->
+    <ElAlert
+      v-else-if="punchesFailure?.kind === 'permission-denied'"
+      class="mt-4"
+      type="error"
+      show-icon
+      :closable="false"
+      :title="punchesFailure.message"
+    />
+    <div v-else-if="punchesFailure !== null" class="mt-4">
+      <ElAlert type="error" show-icon :closable="false" :title="$t('error.system')" />
+      <ElButton class="mt-3" @click="emit('retry')">{{ $t('dashboard.attendance.retry') }}</ElButton>
+    </div>
+    <ElSkeleton v-else-if="isLoadingSettings || isLoadingPunches" class="mt-4" :rows="3" animated />
     <div v-else>
       <ElAlert
         v-if="gpsRequired && geoPermissionBlocked"

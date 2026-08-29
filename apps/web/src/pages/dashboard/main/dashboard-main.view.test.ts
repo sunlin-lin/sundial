@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { EMPTY_DISPLAY } from '../../../shared/format/empty-display.ts'
+import type { AttendanceRecordsListOwnByDateData } from '../../../api/generated/api-client.ts'
 import {
   ATTENDANCE_TYPE_CLOCK_IN,
   ATTENDANCE_TYPE_CLOCK_OUT,
   clockTimeDisplay,
+  deriveTodayPunchesFromOwnList,
   deriveTodayStatus,
   emptyTodayPunches,
   todayStatusLabel,
@@ -106,5 +108,65 @@ describe('打卡類型常數', () => {
   test('對齊後端 db/schema/attendance-records.ts 的 AttendanceTypeCode', () => {
     expect(ATTENDANCE_TYPE_CLOCK_IN).toBe(1)
     expect(ATTENDANCE_TYPE_CLOCK_OUT).toBe(2)
+  })
+})
+
+describe('deriveTodayPunchesFromOwnList：由 list-own-by-date 的回應推導今天手上有哪兩張卡', () => {
+  type OwnListItem = AttendanceRecordsListOwnByDateData['data'][number]
+
+  /** 只填測試用得到的欄位；其餘欄位（`employmentId`／`workDate`／`sourceTypeCode`／`address`／
+   * `revokedBy`／`revokeReason`）對這支函式的判斷沒有影響。 */
+  const buildItem = (
+    overrides: Partial<Pick<OwnListItem, 'id' | 'attendanceTypeCode' | 'clockedAt' | 'revokedAt'>>,
+  ): OwnListItem => ({
+    id: 'record-1',
+    employmentId: 'employment-1',
+    workDate: '2026-08-28',
+    attendanceTypeCode: ATTENDANCE_TYPE_CLOCK_IN,
+    sourceTypeCode: 1,
+    clockedAt: '2026-08-28 09:00:00',
+    address: null,
+    revokedAt: null,
+    revokedBy: null,
+    revokeReason: null,
+    ...overrides,
+  })
+
+  test('空清單：兩張卡都是 null（尚未上班）', () => {
+    expect(deriveTodayPunchesFromOwnList([])).toEqual(emptyTodayPunches())
+  })
+
+  test('只有有效的上班卡', () => {
+    const item = buildItem({ id: 'clock-in-1', attendanceTypeCode: ATTENDANCE_TYPE_CLOCK_IN })
+    expect(deriveTodayPunchesFromOwnList([item])).toEqual({ clockIn: item, clockOut: null })
+  })
+
+  test('有效的上班卡與下班卡都在清單裡', () => {
+    const clockIn = buildItem({ id: 'clock-in-1', attendanceTypeCode: ATTENDANCE_TYPE_CLOCK_IN })
+    const clockOut = buildItem({
+      id: 'clock-out-1',
+      attendanceTypeCode: ATTENDANCE_TYPE_CLOCK_OUT,
+      clockedAt: '2026-08-28 18:00:00',
+    })
+    expect(deriveTodayPunchesFromOwnList([clockIn, clockOut])).toEqual({ clockIn, clockOut })
+  })
+
+  test('已撤銷的紀錄必須濾掉，不能被當成有效卡（回應含已撤銷紀錄）', () => {
+    const revokedClockIn = buildItem({
+      id: 'clock-in-revoked',
+      attendanceTypeCode: ATTENDANCE_TYPE_CLOCK_IN,
+      revokedAt: '2026-08-28 09:05:00',
+    })
+    expect(deriveTodayPunchesFromOwnList([revokedClockIn])).toEqual(emptyTodayPunches())
+  })
+
+  test('已撤銷的上班卡 ＋ 有效的重打上班卡：只採用有效那一筆', () => {
+    const revoked = buildItem({
+      id: 'clock-in-revoked',
+      attendanceTypeCode: ATTENDANCE_TYPE_CLOCK_IN,
+      revokedAt: '2026-08-28 09:05:00',
+    })
+    const valid = buildItem({ id: 'clock-in-valid', attendanceTypeCode: ATTENDANCE_TYPE_CLOCK_IN })
+    expect(deriveTodayPunchesFromOwnList([revoked, valid])).toEqual({ clockIn: valid, clockOut: null })
   })
 })

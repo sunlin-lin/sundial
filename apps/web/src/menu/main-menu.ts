@@ -95,6 +95,21 @@ export const MAIN_MENU: readonly MenuGroup[] = [
         routeName: 'employees-main',
         permissionCode: 'employees.main.list',
       },
+      /**
+       * 每日全員打卡明細（計畫 06 §4.7、Stage 6，UI 定案
+       * `docs/ui/23-ui-daily-attendance-records.md`）。
+       *
+       * `permissionCode` 用 `attendance.records.list-by-date`，與同目錄 `.route.ts` 的
+       * `meta.permission` 同一個值——這裡的檔頭與該檔一致地記著：UI 定案文字裡舉例的
+       * `attendance.records.view-all` 不對應任何端點，加進 `permission-code.ts` 的清單會被
+       * `satisfies readonly ApiCommand[]` 擋下來編譯不過，`list-by-date` 才是這一頁真正會呼叫
+       * 的查詢動作。
+       */
+      {
+        labelKey: 'menu.attendance-daily-records',
+        routeName: 'attendance-daily-records',
+        permissionCode: 'attendance.records.list-by-date',
+      },
     ],
   },
 ]
