@@ -349,6 +349,8 @@ export const ZH_TW = {
   'employees-main.column.name': '姓名',
   'employees-main.column.gender': '性別',
   'employees-main.column.job-title': '職稱',
+  'employees-main.column.action': '操作',
+  'employees-main.action.view': '查看並修改',
 
   // --- 新增員工（`pages/employees/onboarding/`，UI 定案 §2） ------------------------------
   'employees-onboarding.heading': '新增員工',
@@ -400,6 +402,90 @@ export const ZH_TW = {
   /** 扣繳方式代碼（值域對齊後端 `employee-withholding-settings.ts` 的 `WithholdingMethodCode`）。 */
   'employees-onboarding.withholding-method.1': '薪資所得扣繳稅額表',
   'employees-onboarding.withholding-method.2': '固定 5%',
+
+  // --- 修改員工（`pages/employees/detail/`，UI 定案 §3，計畫 05 Stage 6 第二段） ------------
+  'employees-detail.heading': '員工詳細資料',
+  'employees-detail.back': '返回員工清單',
+  'employees-detail.retry': '重新載入',
+  'employees-detail.not-found': '找不到這位員工，可能已被刪除或不屬於目前公司。',
+
+  'employees-detail.tab.basic': '基本資料',
+  'employees-detail.tab.employment': '任職資料',
+  'employees-detail.tab.organization': '組織資料',
+  'employees-detail.tab.withholding': '扣繳',
+  'employees-detail.tab.account': '帳號與角色',
+
+  'employees-detail.employment-status.active': '在職',
+  'employees-detail.employment-status.left': '離職',
+
+  // §3.1 基本資料：欄位標籤沿用 `employees-onboarding.field.*`（同一組欄位，理由見 `.view.ts` 檔頭）。
+  'employees-detail.basic.current-title': '目前資料（遮罩顯示，僅供比對）',
+  'employees-detail.basic.form-title': '修改',
+  'employees-detail.basic.sensitive-hint':
+    '身分證字號、出生日期、手機、Email、地址查詢時一律遮罩，後端也不接受遮罩值送回——修改任何欄位都必須在下方重新完整輸入這幾欄。',
+  'employees-detail.basic.action.save': '儲存',
+  'employees-detail.basic.toast.updated': '基本資料已更新。',
+
+  // §3.2 任職資料
+  'employees-detail.employment.column.hire-date': '到職日期',
+  'employees-detail.employment.column.type': '僱用類型',
+  'employees-detail.employment.column.status': '任職狀態',
+  'employees-detail.employment.column.leave-date': '離職日',
+  'employees-detail.employment.column.last-working-date': '最後工作日',
+  'employees-detail.employment.column.leave-reason': '離職原因代碼',
+  'employees-detail.employment.column.action': '操作',
+  'employees-detail.employment.empty': '目前沒有任職紀錄。',
+  'employees-detail.employment.action.create': '新增任職（回任）',
+  'employees-detail.employment.action.leave': '辦理離職',
+  'employees-detail.employment.dialog.create-title': '新增任職',
+  'employees-detail.employment.dialog.create-hint': '用於員工離職後重新回任；目前有在職中的任職時無法新增。',
+  'employees-detail.employment.dialog.leave-title': '辦理離職',
+  'employees-detail.employment.dialog.leave-notice':
+    '完成離職後，這位員工的登入帳號會被同步停用；帳號、角色與所有歷史紀錄都不會被刪除，日後回任時可以再次新增任職。',
+  'employees-detail.employment.field.leave-date': '離職日',
+  'employees-detail.employment.field.last-working-date': '最後工作日',
+  'employees-detail.employment.field.leave-reason-code': '離職原因代碼',
+  'employees-detail.employment.field.leave-reason-hint': '依公司內部代碼設定；未設定代碼時請與人資確認。',
+  'employees-detail.employment.toast.created': '任職紀錄已建立。',
+  'employees-detail.employment.toast.left': '離職已辦理完成，登入帳號已同步停用。',
+  'employees-detail.employment.form.cancel': '取消',
+  'employees-detail.employment.form.submit': '送出',
+
+  // §3.3 組織資料：部門／職稱／職務欄位標籤沿用 `employees-onboarding.field.*`。
+  'employees-detail.organization.no-active-employment': '這位員工目前沒有在職中的任職紀錄，無法維護組織資料。',
+  'employees-detail.organization.section.department': '部門異動',
+  'employees-detail.organization.section.job-title': '職稱異動',
+  'employees-detail.organization.section.job-positions': '職務異動',
+  'employees-detail.organization.column.effective-from': '生效日',
+  'employees-detail.organization.column.effective-to': '結束日',
+  'employees-detail.organization.column.current': '目前生效',
+  'employees-detail.organization.column.department': '部門',
+  'employees-detail.organization.column.job-title': '職稱',
+  'employees-detail.organization.column.job-positions': '職務',
+  'employees-detail.organization.empty': '目前沒有異動紀錄。',
+  'employees-detail.organization.action.add': '新增異動',
+  'employees-detail.organization.hint': '生效日通常應填未來日期；生效日之前仍會顯示目前的部門、職稱或職務。',
+  'employees-detail.organization.field.effective-from': '生效日',
+  'employees-detail.organization.field.effective-to': '結束日（選填）',
+  'employees-detail.organization.toast.department-created': '部門異動已建立。',
+  'employees-detail.organization.toast.job-title-created': '職稱異動已建立。',
+  'employees-detail.organization.toast.job-position-created': '職務異動已建立。',
+
+  // §3.4 扣繳
+  'employees-detail.withholding.column.method': '扣繳方式',
+  'employees-detail.withholding.column.effective-from': '生效日',
+  'employees-detail.withholding.column.effective-to': '結束日',
+  'employees-detail.withholding.column.current': '目前生效',
+  'employees-detail.withholding.empty': '目前沒有扣繳設定紀錄。',
+  'employees-detail.withholding.action.add': '新增扣繳設定',
+  'employees-detail.withholding.field.effective-from': '生效日',
+  'employees-detail.withholding.field.effective-to': '結束日（選填）',
+  'employees-detail.withholding.toast.created': '扣繳設定已建立。',
+
+  // §3.5 帳號與角色：本輪未實作，理由見 `EmployeeAccountRolesTab.vue` 檔頭與交付報告。
+  'employees-detail.account.blocked-title': '這個分頁目前無法使用',
+  'employees-detail.account.blocked-message':
+    '後端目前沒有任何端點能由員工查出對應的登入帳號（company user）：查詢角色指派、重設密碼都需要帳號 id，但員工明細不會回傳它，也沒有「以員工查帳號」的端點。這個分頁因此還不能運作，需要後端補上對應端點後才能接上。',
 
   /** 前端自己要說的話，見檔頭的「唯一的例外」。 */
   'error.system': '系統發生錯誤，請稍後再試。',

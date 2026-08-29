@@ -80,6 +80,26 @@ const PERMISSION_CODES = [
   // 與 `0027_onboarding_permission_codes.sql`（`employees.onboarding.create`）。
   'employees.main.list',
   'employees.onboarding.create',
+  // 修改員工與離職（計畫 05 Stage 6 第二段，UI 定案 `docs/ui/20-employee-list.md` §3.1～§3.4）。
+  // `employees.main.get`／`employees.main.update` 逐字比對過 `0009_seed_permission_codes_
+  // employees.sql`；`employments.*` 三碼與 `withholding.*` 一碼比對過
+  // `0026_seed_permission_codes_employments_withholding.sql`；`employments.department-histories.
+  // create` 比對過 `0030_seed_permission_codes_employments_department_histories_create.sql`；
+  // `employments.job-title-histories.create`／`employments.job-position-histories.create`
+  // 比對過 `0029_seed_permission_codes_job_titles_positions.sql`。
+  //
+  // **§3.5 帳號與角色不在這份清單裡**：後端沒有任何端點能由 `employeeId` 查出對應的
+  // `companyUserId`（`company-users/main` 只有 `reset-password`，`company-users/roles/list`
+  // 的 `companyUserId` 是選填的查詢條件而不是查詢入口），本輪因此沒有實作那個分頁的實際動作，
+  // 也就沒有會呼叫 `can(...)` 的消費者（見 `employees-detail.page.vue` 檔頭與交付報告）。
+  'employees.main.get',
+  'employees.main.update',
+  'employments.main.create',
+  'employments.main.leave',
+  'employments.department-histories.create',
+  'employments.job-title-histories.create',
+  'employments.job-position-histories.create',
+  'withholding.main.create',
 ] as const satisfies readonly ApiCommand[]
 
 /** 權限碼。全站判斷權限一律用這個型別，不用 `string`。 */

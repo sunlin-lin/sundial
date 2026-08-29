@@ -11,11 +11,13 @@
  * `identityNumberMasked`／`jobTitleName`——沒有部門、僱用類型、到職日、任職狀態、帳號狀態，
  * 也沒有任何一支查詢端點能在不新增端點的情況下批次補齊這五欄（逐列各打幾支端點會是
  * per-row 查詢，違反本專案的 N+1 政策，且部門／任職／帳號分屬三個不同模組，沒有一個能一次
- * 依「這一頁的這 20 個 id」批次回傳）。「操作／查看並進入修改」也還沒有東西可連——修改員工頁
- * 是下一段（UI §3）的工作，本頁不放一個連到不存在路由的按鈕。
+ * 依「這一頁的這 20 個 id」批次回傳）。
  *
  * 因此本頁**只做得出**：關鍵字查員工編號或姓名、顯示員工編號／姓名／目前有效職稱。
  * 這個落差已經在交付報告裡回報，不是本頁自己決定要少做。
+ *
+ * **「操作／查看並修改」本輪補上**：修改員工頁（`employees/detail`，UI §3）已經在計畫 05
+ * Stage 6 第二段落地，本頁的「操作」欄現在連得到它了。
  *
  * 呈現決策在 `.view.ts`，查詢組裝在 `.payload.ts`，動作可用性在 `.actions.ts`。
  */
@@ -41,7 +43,7 @@ import { toLoadFailure, type LoadFailure } from '../../../shared/api/load-failur
 import { useSignOut } from '../../../shared/api/use-sign-out.ts'
 import type { TranslateMessage } from '../../../shared/i18n/messages.ts'
 import { useAuthStore } from '../../../stores/auth.ts'
-import { canCreateEmployee } from './employees-main.actions.ts'
+import { canCreateEmployee, canViewEmployeeDetail } from './employees-main.actions.ts'
 import {
   defaultEmployeeListFilters,
   EMPLOYEE_LIST_PER_PAGE,
@@ -117,6 +119,10 @@ const goToCreate = (): void => {
   void router.push({ name: 'employees-onboarding' })
 }
 
+const goToDetail = (id: string): void => {
+  void router.push({ name: 'employees-detail', params: { id } })
+}
+
 onMounted(() => {
   load()
 })
@@ -176,6 +182,13 @@ onMounted(() => {
         <ElTableColumn prop="name" :label="$t('employees-main.column.name')" width="160" />
         <ElTableColumn prop="genderLabel" :label="$t('employees-main.column.gender')" width="96" />
         <ElTableColumn prop="jobTitleName" :label="$t('employees-main.column.job-title')" min-width="160" />
+        <ElTableColumn :label="$t('employees-main.column.action')" width="120">
+          <template #default="scope">
+            <ElButton v-if="canViewEmployeeDetail(auth.can)" link type="primary" @click="goToDetail(scope.row['id'])">
+              {{ $t('employees-main.action.view') }}
+            </ElButton>
+          </template>
+        </ElTableColumn>
       </ElTable>
       <ElPagination
         class="mt-4 justify-end"
