@@ -9,11 +9,11 @@ exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | �
 /departments/main/get | departments.main.get | authenticated | cmd,id,locale,rqTS
 /departments/main/tree | departments.main.tree | authenticated | cmd,locale,rqTS
 /departments/main/update | departments.main.update | authenticated | cmd,code,id,locale,name,parentId,rqTS,status
-/employees/main/create | employees.main.create | authenticated | address,birthday,cmd,employeeCode,gender,identityNumber,locale,name,phone,rqTS
 /employees/main/delete | employees.main.delete | authenticated | cmd,id,locale,rqTS
 /employees/main/get | employees.main.get | authenticated | cmd,id,locale,rqTS
 /employees/main/list | employees.main.list | authenticated | cmd,currentPage,locale,perPage,rqTS
 /employees/main/update | employees.main.update | authenticated | address,birthday,cmd,employeeCode,gender,id,identityNumber,locale,name,phone,rqTS
+/employees/onboarding/create | employees.onboarding.create | authenticated | address,birthday,cmd,departmentId,employeeCode,employmentTypeCode,gender,hireDate,identityNumber,initialPassword,locale,name,phone,roleIds,rqTS,username,withholdingMethodCode
 /employments/department-histories/list | employments.department-histories.list | authenticated | cmd,currentPage,employmentId,locale,perPage,rqTS
 /employments/main/create | employments.main.create | authenticated | cmd,employeeId,employmentTypeCode,hireDate,locale,rqTS
 /employments/main/get | employments.main.get | authenticated | cmd,id,locale,rqTS

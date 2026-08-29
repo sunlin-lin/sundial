@@ -11,7 +11,11 @@
  * **本層拿不到任何明文個資**：service 回來的型別上只有 `xxxMasked`（遮罩在 repository 解密的
  * 當下就做完了，見 `domain/employee-secrets.ts`）。因此 §5.1「對外回應一律遮罩」在這裡
  * 不是一條要記得遵守的規則，而是一個寫不出違反版本的事實。
- * 反方向（`create`／`update` 的 body）確實帶明文，那些值只往下傳給 service，**不進 log**。
+ * 反方向（`update` 的 body）確實帶明文，那些值只往下傳給 service，**不進 log**。
+ *
+ * **沒有 `handleEmployeeCreate`**：`/employees/main/create` 端點已移除（實作計畫
+ * `05-employee-onboarding.md` §4.2），`ProfileBody`／`toProfileInput` 仍然保留，是因為
+ * `update` 端點也用同一組個資欄位（差別只在多一個 `id`，見下方 `UpdateBody`）。
  */
 import { resolveServiceResult } from '../../../http/error-boundary.ts'
 import type { RequestSession } from '../../../http/request-context.ts'
@@ -27,7 +31,7 @@ import type {
   EmployeeSummary,
   GenderValue,
 } from './domain/employee-model.ts'
-import { createEmployee, deleteEmployee, getEmployee, listEmployees, updateEmployee } from './employees-main.service.ts'
+import { deleteEmployee, getEmployee, listEmployees, updateEmployee } from './employees-main.service.ts'
 
 /**
  * 由組裝點注入的相依。**公司範圍與操作者都不在裡面**——兩者只能來自每一次請求的已驗證身分
@@ -201,17 +205,6 @@ export const handleEmployeeGet = async (
   const identity = requireIdentity(context.requestContext.session)
   const result = await getEmployee(toEmployeeContext(dependencies, identity), { id: context.body.id })
   const outcome = resolveServiceResult(result, toNullableEmployeeDetailData)
-  context.set.status = outcome.status
-  return outcome.body
-}
-
-export const handleEmployeeCreate = async (
-  dependencies: EmployeesMainDependencies,
-  context: EndpointContext<ProfileBody>,
-): Promise<EndpointResult<EmployeeDetailData>> => {
-  const identity = requireIdentity(context.requestContext.session)
-  const result = await createEmployee(toEmployeeContext(dependencies, identity), toProfileInput(context.body))
-  const outcome = resolveServiceResult(result, toEmployeeDetailData)
   context.set.status = outcome.status
   return outcome.body
 }

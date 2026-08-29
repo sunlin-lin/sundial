@@ -6,16 +6,27 @@
  * §4.2「裸 db client 限資料存取層」那條規則會被繞過，而繞過的路徑在 import 語句上完全看不出來。
  * routes 由組裝點（`app/routes.ts`）直接掛載，不從這裡流出去。
  *
- * `main` 次目錄目前只有 {@link deactivateCompanyUser} 一支（實作計畫 `plans/05-employee-
- * onboarding.md` §7：離職時同步停用帳號，但不刪除帳號與角色歷史），供 `employments/main` 的
- * 離職動作呼叫。員工帳號的其餘動作（建立、重設密碼）留到之後的階段。
+ * `main` 次目錄現在有兩支業務動作（皆無對應端點，理由見 `main/company-users-main.service.ts`
+ * 檔頭）：{@link deactivateCompanyUser}（實作計畫 `plans/05-employee-onboarding.md` §7：離職時
+ * 同步停用帳號，但不刪除帳號與角色歷史），供 `employments/main` 的離職動作呼叫；
+ * {@link createCompanyUserInTransaction}（同計畫 Stage 4：新增登入帳號並加入公司），供
+ * `employees/onboarding` 呼叫。管理者重設密碼留到之後的階段。
  */
-export { deactivateCompanyUser, type CompanyUserDeactivation } from './main/company-users-main.service.ts'
+export {
+  createCompanyUserInTransaction,
+  deactivateCompanyUser,
+  type CompanyUserCreation,
+  type CompanyUserDeactivation,
+  type CreateCompanyUserInput,
+} from './main/company-users-main.service.ts'
+export { usernameTaken, CompanyUserErrorCode } from './main/company-users-main.errors.ts'
 export {
   assignRoles,
+  assignRolesInTransaction,
   listPermissionCodes,
   listRoleAssignments,
   revokeRoles,
+  revokeRolesInTransaction,
   type AssignedRole,
   type QueryRunner,
   type RoleAssignmentContext,

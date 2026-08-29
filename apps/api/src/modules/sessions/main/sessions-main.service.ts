@@ -98,3 +98,14 @@ export const revokeChainsOnReuse = (
   identity: VerifiedIdentity,
   reusedTicketId: string,
 ): Promise<RevocationOutcome> => revokeChainsOnReuseImpl(context, identity, reusedTicketId)
+
+/**
+ * 建立密碼 hash（§5.1）。零 IO 純函式，直接 re-export `domain/session-password.ts`。
+ *
+ * **新增於實作計畫 `05-employee-onboarding.md` Stage 4**：`employees/onboarding` 編排點要在
+ * 建立登入帳號時把建立者輸入的初始密碼算成 hash，而密碼雜湊的實作只能留在 `sessions` 這個
+ * 認證模組（本檔頭與 `domain/session-password.ts` 的說明一致：hash 只在這裡進出）。
+ * 跨大目錄一律走 `index.ts`（§0.3），因此這裡補上這個出口——原本只有測試與 `credentials/main/*`
+ * 用得到它，這裡是第二個呼叫者。
+ */
+export { hashPassword } from './domain/session-password.ts'

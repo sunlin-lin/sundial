@@ -11,6 +11,14 @@
  *
  * 測試資料隔離（§7.4）：每一條測試都用自己隨機產生的公司 ID，彼此看不到對方的員工，
  * 因此不需要 truncate，也不會產生「只在特定執行順序下失敗」的測試。
+ *
+ * **沒有 `/employees/main/create` 的測試**（實作計畫 `05-employee-onboarding.md` §4.2 定案）：
+ * 該端點已移除，新增員工唯一的路是 `/employees/onboarding/create`
+ * （`modules/employees/onboarding/__tests__/`）——那裡才是「建立員工」這個 HTTP 動作真正的
+ * 契約測試（envelope、`cmd`、遮罩、稽核全部涵蓋）。**本檔仍然需要建立員工作為 get／update／delete／
+ * list 的前置資料**，做法是直接呼叫業務動作 `createEmployee`（`employees-main.service.ts` 仍然
+ * export 它——§0.4 明文允許「沒有端點的業務動作」放入口檔）而不是繞過去直接寫資料庫（§7.3）：
+ * 呼叫服務層函式本來就是「正式流程」，只是不再有 HTTP 端點包著它。
  */
 import { Buffer } from 'node:buffer'
 import { beforeAll, describe, expect, test } from 'bun:test'
@@ -27,14 +35,8 @@ import type { AccessControlPorts, VerifiedIdentity } from '../../../../shared/ac
 import { fixedClock } from '../../../../shared/clock.ts'
 import { EmployeeErrorCode, EMPLOYEE_ENDPOINT_ERRORS, type EmployeeErrorDeclaration } from '../employees-main.errors.ts'
 import { employeesMainRoutes } from '../employees-main.routes.ts'
+import { createEmployee, type GenderValue } from '../employees-main.service.ts'
 
-/**
- * 直接讀環境變數組出資料庫設定，不走 `shared/config.ts`。
- *
- * `loadConfig()` 會一併要求 `ACCESS_TOKEN_SECRET`／`PORT` 這些與本測試完全無關的變數，
- * 少一個就會讓整批測試以一個看不出成因的訊息失敗。連的是不是測試資料庫由 `test-setup.ts`
- * 的 preload 守衛（§7.4），這裡不重複那道檢查。
- */
 const readTestDatabaseConfig = () => ({
   host: process.env['DB_HOST'] ?? '127.0.0.1',
   port: Number(process.env['DB_PORT'] ?? '3306'),
@@ -43,10 +45,6 @@ const readTestDatabaseConfig = () => ({
   database: process.env['DB_NAME'] ?? '',
 })
 
-/**
- * 測試專用的金鑰，**刻意不讀 `.env` 的開發金鑰**：測試要能在只設了資料庫連線的環境跑起來，
- * 而且金鑰換掉不該讓測試變紅——測試驗的是「明文沒有進資料庫」，不是某一把特定金鑰。
- */
 const testKey = (seed: number): string => Buffer.alloc(ENCRYPTION_KEY_BYTE_LENGTH, seed).toString('base64')
 const cipher = createFieldCipher(
   createKeyRing({ keys: `v1:${testKey(21)}`, activeKeyId: 'v1', blindIndexKey: testKey(22) }),
@@ -109,13 +107,7 @@ const accessControl: AccessControlPorts = {
   renewSession: () => Promise.resolve({ expiresIn: 7200, exp: clock.transportNow() }),
   loadPermissionCodes: () =>
     Promise.resolve(
-      new Set([
-        'employees.main.list',
-        'employees.main.get',
-        'employees.main.create',
-        'employees.main.update',
-        'employees.main.delete',
-      ]),
+      new Set(['employees.main.list', 'employees.main.get', 'employees.main.update', 'employees.main.delete']),
     ),
 }
 
@@ -174,7 +166,7 @@ const call = async <TData>(path: string, token: string, body: Record<string, unk
 }
 
 /** 建立一個公司與一位成員，回傳可用的 token。 */
-const registerCompany = async (): Promise<{ companyId: string; token: string }> => {
+const registerCompany = async (): Promise<{ companyId: string; companyUserId: string; token: string }> => {
   const companyId = crypto.randomUUID()
   const userId = crypto.randomUUID()
   const companyUserId = crypto.randomUUID()
@@ -231,7 +223,7 @@ const registerCompany = async (): Promise<{ companyId: string; token: string }> 
   })
 
   identityByToken.set(token, { sessionId: crypto.randomUUID(), userId, companyId, companyUserId })
-  return { companyId, token }
+  return { companyId, companyUserId, token }
 }
 
 /** 端點宣告的錯誤碼清單（§1.8.3）：測試中斷言到的碼必須落在裡面。 */
@@ -263,21 +255,45 @@ const profileBody = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
+/**
+ * 建立一位員工作為前置資料（§7.3：直接呼叫業務動作，不是繞過去寫資料庫）。
+ *
+ * 回傳形狀刻意比照 `call<EmployeeDetailShape>(...)` 的 `{ status, payload: { data } }`，
+ * 讓下面沿用既有斷言寫法的測試不必逐一改寫存取路徑。
+ */
+const createEmployeeFixture = async (
+  company: { readonly companyId: string; readonly companyUserId: string },
+  body: ReturnType<typeof profileBody>,
+): Promise<{ readonly status: 200; readonly payload: { readonly data: EmployeeDetailShape } }> => {
+  const result = await createEmployee(
+    { db: database, cipher, clock, companyId: company.companyId, operatorCompanyUserId: company.companyUserId },
+    {
+      employeeCode: body['employeeCode'] as string,
+      name: body['name'] as string,
+      gender: body['gender'] as GenderValue,
+      identityNumber: body['identityNumber'] as string,
+      birthday: body['birthday'] as string,
+      phone: body['phone'] as string,
+      email: (body['email'] as string | undefined) ?? null,
+      address: body['address'] as string,
+    },
+  )
+  if (!result.ok) throw new Error(`測試 fixture 建立員工失敗：${JSON.stringify(result.errors)}`)
+  return { status: 200, payload: { data: result.value } }
+}
+
 beforeAll(() => {
   database = createDatabase(readTestDatabaseConfig())
   app = buildTestApp(database)
 })
 
 describe('employees/main endpoints (integration)', () => {
-  test('建立員工成功，敏感欄位一律遮罩，並能由 get 與 list 讀回', async () => {
+  test('建立的員工敏感欄位一律遮罩，並能由 get 與 list 讀回', async () => {
     const company = await registerCompany()
     const body = profileBody()
 
-    const created = await call<EmployeeDetailShape>('/employees/main/create', company.token, body)
+    const created = await createEmployeeFixture(company, body)
 
-    expect(created.status).toBe(200)
-    expect(created.payload.code).toBe('200')
-    expect(created.payload.errors).toEqual([])
     expect(created.payload.data.employeeCode).toBe(body.employeeCode)
     expect(created.payload.data.name).toBe('王小明')
     expect(created.payload.data.gender).toBe('MALE')
@@ -289,25 +305,20 @@ describe('employees/main endpoints (integration)', () => {
     expect(created.payload.data.emailMasked).toBe('s***@example.com')
     expect(created.payload.data.addressMasked).toBe('台北市信義區***')
 
-    // 整包回應裡找不到任何一段明文。
-    const serialized = JSON.stringify(created.payload)
-    expect(serialized).not.toContain(body.identityNumber)
-    expect(serialized).not.toContain('1990-05-21')
-    expect(serialized).not.toContain('0912345678')
-    expect(serialized).not.toContain('someone@example.com')
-    expect(serialized).not.toContain('信義路五段')
-
-    // envelope 的尾段由出口層補上（§1.8.2），handler 一個字都沒填。
-    expect(created.payload.cmd).toBe('employees.main.create')
-    expect(created.payload.locale).toBe('zh-TW')
-    expect(created.payload.expiresIn).toBe(7200)
-
     const fetched = await call<EmployeeDetailShape | null>('/employees/main/get', company.token, {
       id: created.payload.data.id,
     })
     expect(fetched.status).toBe(200)
     expect(fetched.payload.data?.name).toBe('王小明')
     expect(fetched.payload.data?.identityNumberMasked).toBe(created.payload.data.identityNumberMasked)
+
+    // 整包 get 回應裡找不到任何一段明文（handler 拿不到明文，見 `employees-main.handler.ts` 檔頭）。
+    const serialized = JSON.stringify(fetched.payload)
+    expect(serialized).not.toContain(body.identityNumber)
+    expect(serialized).not.toContain('1990-05-21')
+    expect(serialized).not.toContain('0912345678')
+    expect(serialized).not.toContain('someone@example.com')
+    expect(serialized).not.toContain('信義路五段')
 
     const listed = await call<EmployeeListShape>('/employees/main/list', company.token, {
       keyword: body.employeeCode,
@@ -327,7 +338,7 @@ describe('employees/main endpoints (integration)', () => {
     const company = await registerCompany()
     const body = profileBody()
 
-    const created = await call<EmployeeDetailShape>('/employees/main/create', company.token, body)
+    const created = await createEmployeeFixture(company, body)
     const [row] = await database
       .select({
         identityNumberEncrypted: employees.identityNumberEncrypted,
@@ -365,7 +376,7 @@ describe('employees/main endpoints (integration)', () => {
 
     // 同一個明文在另一家公司再寫一次，密文位元組必然不同（隨機 IV），而 hash 必然相同。
     const otherCompany = await registerCompany()
-    const twin = await call<EmployeeDetailShape>('/employees/main/create', otherCompany.token, body)
+    const twin = await createEmployeeFixture(otherCompany, body)
     const [twinRow] = await database
       .select({
         identityNumberEncrypted: employees.identityNumberEncrypted,
@@ -397,7 +408,7 @@ describe('employees/main endpoints (integration)', () => {
   test('keyword 比對姓名，也比對員工編號', async () => {
     const company = await registerCompany()
     const name = `陳${crypto.randomUUID().slice(0, 6)}`
-    await call('/employees/main/create', company.token, profileBody({ name }))
+    await createEmployeeFixture(company, profileBody({ name }))
 
     const byName = await call<EmployeeListShape>('/employees/main/list', company.token, {
       keyword: name,
@@ -407,58 +418,101 @@ describe('employees/main endpoints (integration)', () => {
     expect(byName.payload.data.pagination.totalCount).toBe(1)
   })
 
-  test('員工編號重複回 409／300 與 employees.main.errors.code-duplicated，且不回聲既有員工', async () => {
+  test('員工編號重複回業務錯誤 employees.main.errors.code-duplicated，且不回聲既有員工', async () => {
     const company = await registerCompany()
     const employeeCode = uniqueCode('DUP')
+    const context = {
+      db: database,
+      cipher,
+      clock,
+      companyId: company.companyId,
+      operatorCompanyUserId: company.companyUserId,
+    }
 
-    await call('/employees/main/create', company.token, profileBody({ employeeCode, name: '第一位' }))
-    const second = await call('/employees/main/create', company.token, profileBody({ employeeCode, name: '第二位' }))
+    await createEmployeeFixture(company, profileBody({ employeeCode, name: '第一位' }))
+    const second = await createEmployee(context, {
+      employeeCode,
+      name: '第二位',
+      gender: 'MALE',
+      identityNumber: uniqueIdentityNumber(),
+      birthday: '1990-05-21',
+      phone: '0912345678',
+      email: null,
+      address: '台北市信義區信義路五段7號',
+    })
 
-    expect(second.status).toBe(409)
-    expect(second.payload.code).toBe('300')
-    expect(second.payload.errors).toHaveLength(1)
-    expect(second.payload.errors[0]?.code).toBe(EmployeeErrorCode.CodeDuplicated)
-    expect(declaredCodes(EMPLOYEE_ENDPOINT_ERRORS.create)).toContain(EmployeeErrorCode.CodeDuplicated)
+    expect(second.ok).toBe(false)
+    if (second.ok) throw new Error('預期建立失敗')
+    expect(second.errors).toHaveLength(1)
+    expect(second.errors[0]?.code).toBe(EmployeeErrorCode.CodeDuplicated)
     // §3.2：不得回聲是哪一筆既有資料重複——否則建立表單就變成反查工具。
-    expect(JSON.stringify(second.payload)).not.toContain('第一位')
+    expect(JSON.stringify(second.errors)).not.toContain('第一位')
   })
 
-  test('身分證重複回 409／300，且錯誤內容不含身分證本身', async () => {
+  test('身分證重複回業務錯誤，且錯誤內容不含身分證本身', async () => {
     const company = await registerCompany()
     const identityNumber = uniqueIdentityNumber()
+    const context = {
+      db: database,
+      cipher,
+      clock,
+      companyId: company.companyId,
+      operatorCompanyUserId: company.companyUserId,
+    }
 
-    await call('/employees/main/create', company.token, profileBody({ identityNumber }))
-    const second = await call('/employees/main/create', company.token, profileBody({ identityNumber }))
+    await createEmployeeFixture(company, profileBody({ identityNumber }))
+    const second = await createEmployee(context, {
+      employeeCode: uniqueCode('EMP'),
+      name: '王小明',
+      gender: 'MALE',
+      identityNumber,
+      birthday: '1990-05-21',
+      phone: '0912345678',
+      email: null,
+      address: '台北市信義區信義路五段7號',
+    })
 
-    expect(second.status).toBe(409)
-    expect(second.payload.code).toBe('300')
-    expect(second.payload.errors[0]?.code).toBe(EmployeeErrorCode.IdentityNumberDuplicated)
-    expect(declaredCodes(EMPLOYEE_ENDPOINT_ERRORS.create)).toContain(EmployeeErrorCode.IdentityNumberDuplicated)
+    expect(second.ok).toBe(false)
+    if (second.ok) throw new Error('預期建立失敗')
+    expect(second.errors[0]?.code).toBe(EmployeeErrorCode.IdentityNumberDuplicated)
     // §3.2 對敏感識別值的唯一性檢查：只回「無法建立」，且 §5.1 禁止把敏感值放進 errors[].data。
-    expect(JSON.stringify(second.payload)).not.toContain(identityNumber)
+    expect(JSON.stringify(second.errors)).not.toContain(identityNumber)
   })
 
   test('大小寫不同的同一個身分證也算重複（blind index 前先正規化）', async () => {
     const company = await registerCompany()
     const identityNumber = uniqueIdentityNumber()
+    const context = {
+      db: database,
+      cipher,
+      clock,
+      companyId: company.companyId,
+      operatorCompanyUserId: company.companyUserId,
+    }
 
-    await call('/employees/main/create', company.token, profileBody({ identityNumber }))
-    const second = await call(
-      '/employees/main/create',
-      company.token,
-      profileBody({ identityNumber: identityNumber.toLowerCase() }),
-    )
+    await createEmployeeFixture(company, profileBody({ identityNumber }))
+    const second = await createEmployee(context, {
+      employeeCode: uniqueCode('EMP'),
+      name: '王小明',
+      gender: 'MALE',
+      identityNumber: identityNumber.toLowerCase(),
+      birthday: '1990-05-21',
+      phone: '0912345678',
+      email: null,
+      address: '台北市信義區信義路五段7號',
+    })
 
-    expect(second.status).toBe(409)
-    expect(second.payload.errors[0]?.code).toBe(EmployeeErrorCode.IdentityNumberDuplicated)
+    expect(second.ok).toBe(false)
+    if (second.ok) throw new Error('預期建立失敗')
+    expect(second.errors[0]?.code).toBe(EmployeeErrorCode.IdentityNumberDuplicated)
   })
 
   test('修改員工：可以改員工編號，改到別人的編號則回 409', async () => {
     const company = await registerCompany()
-    const first = await call<EmployeeDetailShape>('/employees/main/create', company.token, profileBody())
+    const first = await createEmployeeFixture(company, profileBody())
     const takenCode = first.payload.data.employeeCode
 
-    const second = await call<EmployeeDetailShape>('/employees/main/create', company.token, profileBody())
+    const second = await createEmployeeFixture(company, profileBody())
     const renamed = uniqueCode('NEW')
 
     const okUpdate = await call<EmployeeDetailShape>('/employees/main/update', company.token, {
@@ -482,7 +536,7 @@ describe('employees/main endpoints (integration)', () => {
     const company = await registerCompany()
     const body = profileBody()
 
-    const created = await call<EmployeeDetailShape>('/employees/main/create', company.token, body)
+    const created = await createEmployeeFixture(company, body)
     const deleted = await call<{ id: string }>('/employees/main/delete', company.token, {
       id: created.payload.data.id,
     })
@@ -496,15 +550,14 @@ describe('employees/main endpoints (integration)', () => {
     expect(fetched.payload.data).toBeNull()
 
     // 同樣的編號與身分證可以再建一次——沿用單欄唯一鍵的話，這個編號會被永久佔住。
-    const recreated = await call<EmployeeDetailShape>('/employees/main/create', company.token, body)
-    expect(recreated.status).toBe(200)
+    const recreated = await createEmployeeFixture(company, body)
     expect(recreated.payload.data.employeeCode).toBe(body.employeeCode)
     expect(recreated.payload.data.id).not.toBe(created.payload.data.id)
   })
 
-  test('重複刪除同一位員工，第二次回 employees.main.errors.state-changed', async () => {
+  test('重複刪除同一位員工，第二次回 employees.main.errors.not-found', async () => {
     const company = await registerCompany()
-    const created = await call<EmployeeDetailShape>('/employees/main/create', company.token, profileBody())
+    const created = await createEmployeeFixture(company, profileBody())
 
     const first = await call('/employees/main/delete', company.token, { id: created.payload.data.id })
     expect(first.status).toBe(200)
@@ -540,7 +593,7 @@ describe('employees/main endpoints (integration)', () => {
   test('查詢類：以 B 公司身分讀 A 公司的員工，回應與「不存在」逐項相同', async () => {
     const companyA = await registerCompany()
     const companyB = await registerCompany()
-    const created = await call<EmployeeDetailShape>('/employees/main/create', companyA.token, profileBody())
+    const created = await createEmployeeFixture(companyA, profileBody())
 
     const crossCompany = await call('/employees/main/get', companyB.token, { id: created.payload.data.id })
     const notFound = await call('/employees/main/get', companyB.token, { id: crypto.randomUUID() })
@@ -558,7 +611,7 @@ describe('employees/main endpoints (integration)', () => {
   test('動作類：以 B 公司身分刪除 A 公司的員工，回應與「不存在」逐項相同', async () => {
     const companyA = await registerCompany()
     const companyB = await registerCompany()
-    const created = await call<EmployeeDetailShape>('/employees/main/create', companyA.token, profileBody())
+    const created = await createEmployeeFixture(companyA, profileBody())
 
     const crossCompany = await call('/employees/main/delete', companyB.token, { id: created.payload.data.id })
     const notFound = await call('/employees/main/delete', companyB.token, { id: crypto.randomUUID() })
@@ -581,7 +634,7 @@ describe('employees/main endpoints (integration)', () => {
     const companyA = await registerCompany()
     const companyB = await registerCompany()
     const body = profileBody()
-    await call('/employees/main/create', companyA.token, body)
+    await createEmployeeFixture(companyA, body)
 
     const listed = await call<EmployeeListShape>('/employees/main/list', companyB.token, {
       keyword: body.employeeCode,
@@ -612,31 +665,5 @@ describe('employees/main endpoints (integration)', () => {
     expect(response.status).toBe(401)
     expect(payload.code).toBe('900')
     expect(payload.expiresIn).toBeNull()
-  })
-
-  /**
-   * 格式不符的身分證在**進到 service 之前**就被 body schema 擋下（§1.8.0 的③）。
-   *
-   * 回的是 **400／`code='100'` 且 `errors` 為空**（§1.3）：schema 不符與 body 根本無法解析
-   * 是同一類——契約已經定義好，送成這樣代表呼叫端沒照契約來，那是開發期就該發現的問題，
-   * 不是要在執行期引導使用者的問題。出錯位置只進 log。
-   *
-   * 使用者層級的輸入問題（額度不足、狀態不允許）走的是另一條路：由 service 收集、以 `300`
-   * 回來並帶 `errors`（§3.1.1）。兩條路徑的分界就是這條測試在守的東西。
-   */
-  test('格式不符的身分證被 body schema 擋下，不會進到 service', async () => {
-    const company = await registerCompany()
-    const invalid = await call('/employees/main/create', company.token, profileBody({ identityNumber: '123' }))
-
-    expect(invalid.status).toBe(400)
-    expect(invalid.payload.code).toBe('100')
-    expect(invalid.payload.errors).toEqual([])
-
-    // 而且沒有任何一位員工被建立起來。
-    const listed = await call<EmployeeListShape>('/employees/main/list', company.token, {
-      perPage: 20,
-      currentPage: 1,
-    })
-    expect(listed.payload.data.pagination.totalCount).toBe(0)
   })
 })

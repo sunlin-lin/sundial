@@ -17,3 +17,8 @@
  */
 export * from './main/sessions-main.service.ts'
 export * from './main/sessions-main.errors.ts'
+
+/**
+ * `hashPassword` 已透過 `export * from './main/sessions-main.service.ts'` 匯出（見該檔），
+ * 這裡不重複宣告——`index.ts` 只允許 `export ... from`，`export *` 已經涵蓋它。
+ */

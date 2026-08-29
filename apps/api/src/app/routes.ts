@@ -28,7 +28,7 @@ import { publicGuard } from '../http/public-guard.ts'
 import { refreshGuard } from '../http/refresh-guard.ts'
 import { companyUsersRolesRoutes } from '../modules/company-users/routes.ts'
 import { departmentsMainRoutes } from '../modules/departments/routes.ts'
-import { employeesMainRoutes } from '../modules/employees/routes.ts'
+import { employeesMainRoutes, employeesOnboardingRoutes } from '../modules/employees/routes.ts'
 import { employmentsDepartmentHistoriesRoutes, employmentsMainRoutes } from '../modules/employments/routes.ts'
 import { permissionsMainRoutes } from '../modules/permissions/routes.ts'
 import { regulatoryDatasetsRoutes, regulatorySyncRoutes } from '../modules/regulatory/routes.ts'
@@ -99,6 +99,9 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
       .use(permissionsMainRoutes({ database }))
       .use(companyUsersRolesRoutes({ database, clock }))
       .use(employeesMainRoutes({ db: database, cipher, clock }))
+      // 到職編排（實作計畫 05-employee-onboarding.md Stage 4）：需要 cipher，理由與
+      // `employeesMainRoutes` 相同——它把 `employees.main.create` 這個業務動作包在同一個交易裡。
+      .use(employeesOnboardingRoutes({ db: database, cipher, clock }))
       // 班別主檔：不需要 cipher（班別沒有個資欄位），理由與 `regulatoryDatasetsRoutes` 不注入 clock
       // 是同一類決定——只給這個次實體真的用得到的相依。
       .use(shiftsMainRoutes({ db: database, clock }))

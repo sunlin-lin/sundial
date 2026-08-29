@@ -136,7 +136,11 @@ export const EMPLOYEE_ENDPOINT_ERRORS = {
   list: [],
   /** 查詢類：查無資料回 `data: null`，不是錯誤（§3.1.3）。跨公司存取同樣回 `null`（§3.2）。 */
   get: [],
-  create: [conflict(EmployeeErrorCode.CodeDuplicated), conflict(EmployeeErrorCode.IdentityNumberDuplicated)],
+  // 沒有 `create`：`/employees/main/create` 已移除（實作計畫 05-employee-onboarding.md §4.2）。
+  // `employeeCodeDuplicated`／`employeeIdentityNumberDuplicated` 這兩個錯誤仍然是
+  // `createEmployeeInTransaction` 真實會吐出的碼，只是現在透過 `/employees/onboarding/create`
+  // 這支端點對外露出——它們的宣告因此收斂進 `employees/onboarding/employees-onboarding.errors.ts`
+  // 的 `ONBOARDING_ENDPOINT_ERRORS.create`，不在這裡重複宣告一次。
   update: [
     unprocessable(EmployeeErrorCode.NotFound),
     conflict(EmployeeErrorCode.CodeDuplicated),

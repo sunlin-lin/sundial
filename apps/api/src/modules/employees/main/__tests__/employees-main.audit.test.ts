@@ -8,6 +8,15 @@
  * `requestContext` → `toEmployeeContext`）只有整條路徑跑過才驗得到。
  *
  * **不得 mock 掉 `recordAudit`**（§7.3）：這幾條測試的全部價值就在於驗真的有寫進去。
+ *
+ * **沒有「建立員工的稽核」測試**（實作計畫 `05-employee-onboarding.md` §4.2）：
+ * `/employees/main/create` 已移除，「建立員工這個動作會不會留下 `action='employees.main.create'`
+ * 的稽核」這個問題現在由 `employees/onboarding/__tests__/employees-onboarding.endpoints.test.ts`
+ * 從 `/employees/onboarding/create` 這個真正的 HTTP 入口驗證（那裡的身分推導路徑
+ * `identityGuard → requestContext → toOnboardingContext` 與這裡逐字同構）。**下面 update／delete
+ * 兩類測試仍然需要一位已存在的員工**，做法是直接呼叫業務動作 `createEmployee`
+ * （`employees-main.service.ts` 仍然 export 它，§0.4 允許「沒有端點的業務動作」）；
+ * update／delete 本身的稽核仍然是從 HTTP 打進去驗證的，不受影響。
  */
 import { Buffer } from 'node:buffer'
 import { beforeAll, describe, expect, test } from 'bun:test'
@@ -23,6 +32,7 @@ import { responseEnvelope } from '../../../../http/response-envelope.ts'
 import type { AccessControlPorts, VerifiedIdentity } from '../../../../shared/access-control.ts'
 import { fixedClock } from '../../../../shared/clock.ts'
 import { employeesMainRoutes } from '../employees-main.routes.ts'
+import { createEmployee, type GenderValue } from '../employees-main.service.ts'
 
 const readTestDatabaseConfig = () => ({
   host: process.env['DB_HOST'] ?? '127.0.0.1',
@@ -55,9 +65,7 @@ const accessControl: AccessControlPorts = {
   verifyAccessToken: (token) => Promise.resolve(identityByToken.get(token) ?? null),
   renewSession: () => Promise.resolve({ expiresIn: 7200, exp: clock.transportNow() }),
   loadPermissionCodes: () =>
-    Promise.resolve(
-      new Set(['employees.main.create', 'employees.main.update', 'employees.main.delete', 'employees.main.get']),
-    ),
+    Promise.resolve(new Set(['employees.main.update', 'employees.main.delete', 'employees.main.get'])),
 }
 
 const buildTestApp = (db: Database) =>
@@ -178,6 +186,34 @@ const profileBody = (overrides: Record<string, unknown> = {}) => ({
 })
 
 /**
+ * 建立一位員工作為 update／delete 稽核測試的前置資料（§7.3：直接呼叫業務動作）。
+ * 回傳形狀比照 `call<EmployeeDetailShape>(...)`，讓下面沿用既有斷言寫法。
+ */
+const createEmployeeFixture = async (
+  company: { readonly companyId: string; readonly companyUserId: string },
+  body: ReturnType<typeof profileBody>,
+): Promise<{ readonly status: 200; readonly payload: { readonly data: EmployeeDetailShape } }> => {
+  const result = await createEmployee(
+    { db: database, cipher, clock, companyId: company.companyId, operatorCompanyUserId: company.companyUserId },
+    {
+      employeeCode: body['employeeCode'] as string,
+      name: body['name'] as string,
+      gender: body['gender'] as GenderValue,
+      identityNumber: body['identityNumber'] as string,
+      birthday: body['birthday'] as string,
+      phone: body['phone'] as string,
+      email: (body['email'] as string | undefined) ?? null,
+      address: body['address'] as string,
+    },
+  )
+  if (!result.ok) throw new Error(`測試 fixture 建立員工失敗：${JSON.stringify(result.errors)}`)
+  return {
+    status: 200,
+    payload: { data: { id: result.value.id, employeeCode: result.value.employeeCode, name: result.value.name } },
+  }
+}
+
+/**
  * 顯式列出欄位而不是 `select()` 全撈（§2）。
  *
  * 用 `subjectId` 過濾就足夠精準：`employees.id` 是全域隨機 uuid，不會與其他測試撞在一起，
@@ -210,35 +246,13 @@ beforeAll(() => {
 })
 
 describe('employees/main 稽核整合（稽核計畫 §7 Stage 2）', () => {
-  test('建立員工：恰好新增一筆稽核，action／subject／actor 逐項正確', async () => {
-    const company = await registerCompany()
-    const body = profileBody()
-
-    const created = await call<EmployeeDetailShape>('/employees/main/create', company.token, body)
-    expect(created.status).toBe(200)
-
-    const rows = await readAuditLogs(created.payload.data.id)
-    expect(rows).toHaveLength(1)
-
-    const row = rows[0]
-    expect(row?.actorTypeCode).toBe(AuditActorType.CompanyUser)
-    expect(row?.actorCompanyUserId).toBe(company.companyUserId)
-    expect(row?.action).toBe('employees.main.create')
-    expect(row?.subjectTable).toBe('employees')
-    expect(row?.subjectId).toBe(created.payload.data.id)
-
-    const changes = parseChanges(row?.changes)
-    // 新增事件：employeeCode／name／gender 記前後值（before 為 null），identityNumber 等
-    // presence 級欄位只記 changed:true，且**不含**明文（§5.1、稽核計畫 §4.3）。
-    expect(changes).toContainEqual({ field: 'employeeCode', before: null, after: body.employeeCode })
-    expect(changes).toContainEqual({ field: 'identityNumber', changed: true })
-    expect(JSON.stringify(changes)).not.toContain(body.identityNumber)
-  })
+  // 沒有「建立員工：恰好新增一筆稽核」測試：`/employees/main/create` 已移除，等效覆蓋在
+  // `employees/onboarding/__tests__/employees-onboarding.endpoints.test.ts`（見本檔檔頭）。
 
   test('★ 改員工編號：changes 有 employeeCode 的前後值，且稽核恰好新增一筆', async () => {
     const company = await registerCompany()
     const body = profileBody({ employeeCode: 'E001' })
-    const created = await call<EmployeeDetailShape>('/employees/main/create', company.token, body)
+    const created = await createEmployeeFixture(company, body)
     const beforeCount = (await readAuditLogs(created.payload.data.id)).length
 
     const updated = await call<EmployeeDetailShape>('/employees/main/update', company.token, {
@@ -268,7 +282,7 @@ describe('employees/main 稽核整合（稽核計畫 §7 Stage 2）', () => {
   test('★ 只改姓名：changes 不含 identityNumber 等 presence 級欄位', async () => {
     const company = await registerCompany()
     const body = profileBody()
-    const created = await call<EmployeeDetailShape>('/employees/main/create', company.token, body)
+    const created = await createEmployeeFixture(company, body)
 
     const updated = await call<EmployeeDetailShape>('/employees/main/update', company.token, {
       id: created.payload.data.id,
@@ -288,7 +302,7 @@ describe('employees/main 稽核整合（稽核計畫 §7 Stage 2）', () => {
   test('刪除員工：changes 的 after 為 null，identityNumber 等仍只記 changed', async () => {
     const company = await registerCompany()
     const body = profileBody()
-    const created = await call<EmployeeDetailShape>('/employees/main/create', company.token, body)
+    const created = await createEmployeeFixture(company, body)
 
     const deleted = await call<{ id: string }>('/employees/main/delete', company.token, {
       id: created.payload.data.id,

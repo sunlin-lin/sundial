@@ -14,6 +14,15 @@
  * **對外的個資欄位一律是 `xxxMasked`**（§5.1）：本模組的 response schema 裡沒有
  * `identityNumber`／`birthday`／`phone`／`email`／`address` 任何一個未遮罩的名字，
  * 而且不是「這裡記得改名字」——service 回來的型別上就沒有明文（見 `domain/employee-model.ts`）。
+ *
+ * **沒有 `create`，這是破壞性變更**（實作計畫 `05-employee-onboarding.md` §4.2 定案）：
+ * 單頁新增員工上線後，系統會有兩條建立員工的路，其中一條（原本的 `/employees/main/create`）
+ * 只建人員主檔、不建任職與帳號——會產生「沒有任職、沒有帳號」的員工，而畫面上顯示成一列正常的
+ * 資料。新增員工唯一的路現在是 `/employees/onboarding/create`（`modules/employees/onboarding/`）。
+ * 業務動作 `createEmployeeInTransaction` 保留在 `employees-main.service.ts`，只被那支端點呼叫
+ * （§0.4：沒有端點的業務動作一樣放入口檔）；權限碼 `employees.main.create` 已在
+ * `drizzle/0027_onboarding_permission_codes.sql` 停用（`status = 'INACTIVE'`，不刪除那一列，
+ * 理由見該 migration 檔頭）。
  */
 import { Elysia, t } from 'elysia'
 import { requestContext } from '../../../http/request-context.ts'
@@ -31,7 +40,6 @@ import {
 } from '../../../shared/field-schemas.ts'
 import { EMPLOYEE_SORT_FIELDS } from './domain/employee-list-view.ts'
 import {
-  handleEmployeeCreate,
   handleEmployeeDelete,
   handleEmployeeGet,
   handleEmployeeList,
@@ -202,22 +210,6 @@ export const employeesMainRoutes = (dependencies: EmployeesMainDependencies) =>
       detail: {
         summary: '查詢單一員工（敏感欄位一律遮罩）',
         description: describeEmployeeErrors(EMPLOYEE_ENDPOINT_ERRORS.get),
-      },
-    })
-    .post('/employees/main/create', (context) => handleEmployeeCreate(dependencies, context), {
-      body: t.Object({
-        ...BaseRequest,
-        cmd: t.Literal('employees.main.create'),
-        ...EmployeeProfileFields,
-      }),
-      response: {
-        200: envelope(EmployeeDetailSchema),
-        ...BusinessFailureResponses,
-        ...CommonFailureResponses,
-      },
-      detail: {
-        summary: '新增員工',
-        description: describeEmployeeErrors(EMPLOYEE_ENDPOINT_ERRORS.create),
       },
     })
     .post('/employees/main/update', (context) => handleEmployeeUpdate(dependencies, context), {
