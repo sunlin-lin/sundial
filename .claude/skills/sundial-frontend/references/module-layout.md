@@ -113,6 +113,8 @@ components/**/*.vue           PascalCase，本頁私有子元件
 
 真實範例見 `apps/web/src/pages/regulatory/datasets/regulatory-datasets.route.ts`：`meta.permission` 要與 `menu/main-menu.ts` 對應項目的 `permissionCode` 完全一致——選單負責藏入口，`.route.ts` 負責擋直接貼網址與過期的書籤，兩邊不一致的後果不對稱（選單填錯讓有權限的人看不到入口；路由填錯才會擋錯人）。
 
+**這條、以及選單項的 `permissionCode` 只能是讀取類動作（不能是 `create`／`update`／`delete`）、`MenuGroup` 型別不得有獨立權限碼——這三條合起來是規範 §4.4，也是前端規範 §4 少數幾條真的有腳本在擋的規則**：`apps/api/scripts/check-menu-permission.ts`（`bun run check:menu-permission`，已串進 `bun run ci`）用 AST 掃描 `menu/` 與所有 `.route.ts`。細節見 `components-state-permission.md` §3.4。
+
 **唯一真的在擋的自我檢查**：`router/registry.ts` 用 `import.meta.glob('../pages/*/*/*.route.ts', { eager: true })` 蒐集路由，蒐集結果為 `0` 就直接 `throw`。這是**執行期**檢查（應用程式啟動時跑），不是 CI 掃描腳本；「registry 載入後的路由數必須等於檔案系統掃到的 `.route.ts` 數，且由兩種不同機制產生」這條規範寫的完整版本目前沒有實作，只有「不得是 0」這一半。
 
 ## 7. 單向分層相依
@@ -139,6 +141,6 @@ pages/<段1>/<段2>/     內的檔案只能被同目錄、以及 router/registry
 - [ ] 目錄底下的檔名只在 §3 的白名單內，沒有 `helpers.ts`／`utils.ts`／`impl/`
 - [ ] §1.3 四類邏輯各自進對應角色檔，沒有留在 `.vue` 的 `computed` 或模板裡
 - [ ] 每個角色檔有同層的 `.<角色>.test.ts`，沒有 `__tests__/` 子目錄
-- [ ] `meta.permission`（若有）與 `menu/main-menu.ts` 對應項目的 `permissionCode` 一致
+- [ ] `meta.permission`（若有）與 `menu/main-menu.ts` 對應項目的 `permissionCode` 一致，且該權限碼是讀取類動作（`bun run check:menu-permission` 會擋，見 §6）
 - [ ] 只在真的有第二個頁面使用時才把東西搬進 `shared/`
 - [ ] 沒有手寫 API 包裝層，直接用 `api/generated/` 的產生函式

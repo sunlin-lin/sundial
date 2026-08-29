@@ -28,6 +28,8 @@
 
 進入本頁需要 `attendance.records.view-all` 權限碼；沒有這個權限碼看不到選單項目，也不能直接呼叫 `attendance/records/list-by-date`。頁面內的撤銷操作另外檢查 `attendance.records.revoke-other`（見下方「撤銷操作」），兩個權限碼各自把關，只有查看權限的人進得了頁面但看不到撤銷按鈕。
 
+選單項掛的必須是 `attendance.records.view-all` 這個讀取類（顯示列表）權限碼，不能改掛 `attendance.records.revoke-other`——這是前端規範 §4.4 定案的規則：選單項的權限碼必須是「顯示這一頁資料」的那個動作，只有撤銷權限、沒有查看權限的人被放行進到頁面只會看到空白列表。本頁的 `.route.ts`（實作時）`meta.permission` 也必須是 `attendance.records.view-all`，與這裡的選單設定同一個值。
+
 ## 查詢條件
 
 | 查詢條件   | 規則                                                                                                                                 |

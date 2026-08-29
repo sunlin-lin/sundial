@@ -474,6 +474,22 @@ const canApprove = auth.user.roles.some((r) => r.code === 'MANAGER') // ❌
 
 **理由**　停用而不說明時，使用者唯一的行動是打電話問客服。本系統的操作限制幾乎都是狀態性的，說明原因才能讓使用者自行判斷下一步（例如去請有權限的人先解除那個前置狀態），而不是卡在原地。
 
+### 4.4 選單分組沒有權限碼；選單項只能掛讀取類權限碼；且必須與路由一致 ✅
+
+**規則**
+
+1. **選單分組（`menu/main-menu.ts` 的 `MenuGroup`）不得有獨立的權限碼。** 大目錄（例如「人事作業」）能不能出現，完全由「底下有沒有可見項目」推導——`visibleMenuGroups` 最後一步就是把 `items.length === 0` 的分組整組濾掉，`MenuGroup` 型別本來就沒有 `permissionCode` 欄位。
+2. **選單項（`MenuItem`）的 `permissionCode` 必須是「顯示這一頁資料」的那個動作**——讀取類（`list`／`overview`／`tree` 這種），不能是 `create`／`update`／`delete` 這種異動類動作。
+3. **選單項的 `permissionCode` 必須與該頁 `.route.ts` 的 `meta.permission` 是同一個值，且 `routeName` 對得上真的存在的路由。**
+
+**理由**
+
+1. 給分組一個獨立的權限碼，會產生兩種只能靠人記得同步兩處、不同步也不會報錯的錯誤形狀：**「有分組權限但底下每一項都沒權限」**——使用者看到一個點不進去的空分組，看起來像系統壞了；**反過來「沒有分組權限但有底下的功能」**——那個功能對這個角色而言等於不存在，而沒有人會想到要去檢查一個「分組層級」的權限碼。兩種錯誤都不影響型別檢查、不影響任何既有測試，純粹是「兩個地方各自維護一份判斷，遲早會漂移」的結構性風險。不給分組權限碼，這整類錯誤從結構上就不存在。
+2. 沒有列表權限的人看不到任何資料；只有修改權限的人若被放行進到頁面，看到的只會是一片空白（沒有列表可編輯）或一個打不開的表單。把入口露給他，是把「有權限」誤導成「能用」——使用者會以為自己拿到了一項功能，實際上連功能長什麼樣子都看不到，唯一能做的是回報「這個畫面壞了」。
+3. 這條原本只寫在 `menu/main-menu.ts` 的 `MenuItem.permissionCode` 檔頭註解裡，且指出兩邊填錯的後果不對稱：**選單這裡填錯，會讓有權限的人看不到入口（功能等於不存在）；`.route.ts` 那裡填錯，才會擋錯人（無權限的人反而進得去，或有權限的人被擋在外面）。** 兩種後果嚴重程度不同，因此兩邊都要顧，不能只顧其中一邊。
+
+**檢查**　`apps/api/scripts/check-menu-permission.ts`，`bun run check:menu-permission`（已串進 `bun run ci`）。走 AST 掃描：規則 1 檢查 `MenuGroup` 型別宣告是否長出 `permissionCode` 欄位；規則 2 用異動類動作的否定表列比對 `permissionCode` 最後一段（表列來源與已知抓不到什麼，見腳本檔頭）；規則 3 比對每個帶 `permissionCode` 的選單項與其 `routeName` 對應的 `.route.ts` 的 `meta.permission`。含掃描器自我檢查：掃到 0 個選單項或 0 支 `.route.ts` 即中止，並用內建樣本驗證判斷邏輯本身沒壞。
+
 ## 5. 樣式
 
 ### 5.1 Tailwind 與 Element Plus 的分工
@@ -817,6 +833,7 @@ rows.value = (await api.recordList(query)).data
 | 3.7 `exp` 僅供 log 與除錯：過期判斷邏輯中禁止引用                                                                                               | ESLint `no-restricted-syntax` + 掃描測試                                      |
 | 3.7 / 9.2 `exp` **禁止出現在任何顯示路徑**（`.vue` 模板與 script、format 函式的輸入或輸出）                                                     | 掃描測試                                                                      |
 | 4.1 只用權限原語，不認角色                                                                                                                      | 型別化權限碼 + 掃描測試                                                       |
+| 4.4 選單分組不得有權限碼；選單項的 `permissionCode` 只能是讀取類動作；且必須與對應 `.route.ts` 的 `meta.permission` 一致                        | 掃描測試（AST，含掃描器自我檢查）                                             |
 | 5.2 顏色／間距走 token                                                                                                                          | stylelint + 掃描測試                                                          |
 | 5.3 禁 `!important` 與 `:deep(.el-`                                                                                                             | stylelint + 掃描測試                                                          |
 | 6.1 驗證規則來自 OpenAPI schema                                                                                                                 | 型別（OpenAPI 產生）+ 掃描測試                                                |
@@ -836,4 +853,4 @@ rows.value = (await api.recordList(query)).data
 | 9.1 表單標籤、禁 `div` 當按鈕                                                                                                                   | `eslint-plugin-vuejs-accessibility`                                           |
 | 9.2 禁裸中文字串、禁直接格式化、禁 `new Date()` 換算時區、業務時間不得帶時區偏移（帶偏移僅限 `rqTS`／`rspTS`／`exp`，且這三者**一律不上畫面**） | 掃描測試 + `no-restricted-syntax`                                             |
 
-共 46 條規則可自動化檢查。**新增規範時的原則：先問「這條能不能寫成檢查」，能就寫成檢查，不能才寫進文件。**
+共 47 條規則可自動化檢查。**新增規範時的原則：先問「這條能不能寫成檢查」，能就寫成檢查，不能才寫進文件。**

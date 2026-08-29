@@ -1,6 +1,6 @@
 # 測試規範與自動化檢查現況
 
-對應 `docs/dev-standards-frontend.md` §8、§10，以及通用規範 §7。摘要：本專案**不寫 `.vue` 元件測試**，值得測的邏輯先抽成純函式（見 `components-state-permission.md` §1.3）；規範 §10 那張「46 條可自動化檢查」的表，經逐條打開對應腳本／設定檔核對後，**真正在跑的不到十條**，其餘標 ✅ 的規則目前是靠 review。本檔是那次核對的完整記錄，SKILL.md 的表是它的摘要。
+對應 `docs/dev-standards-frontend.md` §8、§10，以及通用規範 §7。摘要：本專案**不寫 `.vue` 元件測試**，值得測的邏輯先抽成純函式（見 `components-state-permission.md` §1.3）；規範 §10 那張「47 條可自動化檢查」的表，經逐條打開對應腳本／設定檔核對後，**真正在跑的不到十條**，其餘標 ✅ 的規則目前是靠 review。本檔是那次核對的完整記錄，SKILL.md 的表是它的摘要。
 
 ## 目錄
 
@@ -55,7 +55,7 @@ bun test apps/web/src
 bun run ci
 ```
 
-`ci` 的實際串接：`check && typecheck && gen:api && typecheck:web && check:layers && check:i18n && check:audit-policy && check:audit-transaction && check:migration-journal && check:n-plus-one && check:dataset-code && check:number-cast && check:tz-leak && test`。注意 `check:layers`（dependency-cruiser）雖然排在鏈裡，但**它只掃 `apps/api/src`**（`depcruise --config .dependency-cruiser.cjs apps/api/src`）——這一步跑綠，證明的是後端的分層規則，跟前端無關。`check:i18n`／`check:audit-policy`／`check:audit-transaction`／`check:migration-journal`／`check:n-plus-one`／`check:dataset-code` 全部是純後端腳本，前端改動不會觸發任何反應。
+`ci` 的實際串接：`check && typecheck && gen:api && typecheck:web && check:layers && check:i18n && check:audit-policy && check:audit-transaction && check:migration-journal && check:n-plus-one && check:dataset-code && check:number-cast && check:tz-leak && check:menu-permission && test`。注意 `check:layers`（dependency-cruiser）雖然排在鏈裡，但**它只掃 `apps/api/src`**（`depcruise --config .dependency-cruiser.cjs apps/api/src`）——這一步跑綠，證明的是後端的分層規則，跟前端無關。`check:i18n`／`check:audit-policy`／`check:audit-transaction`／`check:migration-journal`／`check:n-plus-one`／`check:dataset-code` 全部是純後端腳本，前端改動不會觸發任何反應；`check:menu-permission` 雖然放在 `apps/api/scripts/`（與其餘 `check:*` 腳本同一個慣例位置），但它掃的是 `apps/web/src/menu/` 與 `apps/web/src/pages/**/*.route.ts`，前端改動會觸發它。
 
 **沒有 CI、也沒有 git hook**：repo 沒有 `.github/workflows/*.yml`，也沒有 `.husky/`。`bun run ci` 是一條純手動指令，送交前必須自己跑，沒有機制會替你擋。
 
@@ -65,16 +65,17 @@ bun run ci
 
 ### 3.1 真的在跑的
 
-| 規則                                                                     | 實作現況                                                                                                                                                                                                                                                    |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| §3.7／§9.2 `exp` 外洩、帶時區標記字面值、遊蕩的 `new Date(`／`Date.now(` | `apps/api/scripts/check-tz-leak.ts`，`bun run check:tz-leak`。掃 `apps/web/src`，含掃描器自我檢查（掃到 0 檔、`pages/` 或 `shared/format/` 計數 0 都中止；內建樣本驗證判斷邏輯本身沒壞）。                                                                  |
-| §9.2 金額／費率禁 `Number(` 一類轉型                                     | `apps/api/scripts/check-number-cast.ts`，`bun run check:number-cast`。**只掃 `pages/` 與 `shared/components/` 兩個目錄**，含自我檢查。                                                                                                                      |
-| §3.1 產生的 client 必須注入統一 client、產生物必須存在                   | `apps/api/scripts/check-api-artifacts.ts`，`bun run check:api-artifacts`（`typecheck:web` 的前置步驟）。驗四個產生物檔案存在、`api-client.ts` import 統一 client、不含 `fetch(`／`axios`／`XMLHttpRequest`／`sendBeacon`、端點函式數＝`callApi(` 呼叫次數。 |
-| §1.1／§3.4（部分）                                                       | `vue-tsc`（兩份 tsconfig）＋ ESLint 的 `@typescript-eslint/no-floating-promises`／`require-await`（`error`，見 `eslint.config.js` 的 `apps/web` 區塊）。                                                                                                    |
-| §3.1 禁止 `import axios`                                                 | ESLint `no-restricted-imports`，`apps/web/src/shared/api/http-transport.ts` 本身例外。                                                                                                                                                                      |
-| §3.1 single-flight refresh                                               | `apps/web/src/shared/api/client.test.ts`，`bun test` 涵蓋。**全文少數靠行為斷言而非靜態掃描的檢查**：mock 底層傳輸，斷言三支併發過期請求只打出一次 refresh。                                                                                                |
-| §0.12 registry 路由數不得為 0                                            | `apps/web/src/router/registry.ts` 的執行期自我檢查（`import.meta.glob` 結果為 0 就 `throw`）。不是 CI 腳本，是應用程式啟動時的檢查。                                                                                                                        |
-| Prettier                                                                 | `bun run check` 的後半，全 repo 含 `apps/web`。                                                                                                                                                                                                             |
+| 規則                                                                                                       | 實作現況                                                                                                                                                                                                                                                      |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| §3.7／§9.2 `exp` 外洩、帶時區標記字面值、遊蕩的 `new Date(`／`Date.now(`                                   | `apps/api/scripts/check-tz-leak.ts`，`bun run check:tz-leak`。掃 `apps/web/src`，含掃描器自我檢查（掃到 0 檔、`pages/` 或 `shared/format/` 計數 0 都中止；內建樣本驗證判斷邏輯本身沒壞）。                                                                    |
+| §9.2 金額／費率禁 `Number(` 一類轉型                                                                       | `apps/api/scripts/check-number-cast.ts`，`bun run check:number-cast`。**只掃 `pages/` 與 `shared/components/` 兩個目錄**，含自我檢查。                                                                                                                        |
+| §3.1 產生的 client 必須注入統一 client、產生物必須存在                                                     | `apps/api/scripts/check-api-artifacts.ts`，`bun run check:api-artifacts`（`typecheck:web` 的前置步驟）。驗四個產生物檔案存在、`api-client.ts` import 統一 client、不含 `fetch(`／`axios`／`XMLHttpRequest`／`sendBeacon`、端點函式數＝`callApi(` 呼叫次數。   |
+| §1.1／§3.4（部分）                                                                                         | `vue-tsc`（兩份 tsconfig）＋ ESLint 的 `@typescript-eslint/no-floating-promises`／`require-await`（`error`，見 `eslint.config.js` 的 `apps/web` 區塊）。                                                                                                      |
+| §3.1 禁止 `import axios`                                                                                   | ESLint `no-restricted-imports`，`apps/web/src/shared/api/http-transport.ts` 本身例外。                                                                                                                                                                        |
+| §3.1 single-flight refresh                                                                                 | `apps/web/src/shared/api/client.test.ts`，`bun test` 涵蓋。**全文少數靠行為斷言而非靜態掃描的檢查**：mock 底層傳輸，斷言三支併發過期請求只打出一次 refresh。                                                                                                  |
+| §0.12 registry 路由數不得為 0                                                                              | `apps/web/src/router/registry.ts` 的執行期自我檢查（`import.meta.glob` 結果為 0 就 `throw`）。不是 CI 腳本，是應用程式啟動時的檢查。                                                                                                                          |
+| §4.4 選單分組無權限碼／選單項只能掛讀取類權限碼／`permissionCode` 與 `.route.ts` 的 `meta.permission` 一致 | `apps/api/scripts/check-menu-permission.ts`，`bun run check:menu-permission`（已串進 `ci`，緊接在 `check:tz-leak` 之後）。走 AST 掃 `menu/` 與所有 `.route.ts`，含掃描器自我檢查（掃到 0 個選單項或 0 支 `.route.ts` 都中止；內建樣本驗證判斷邏輯本身沒壞）。 |
+| Prettier                                                                                                   | `bun run check` 的後半，全 repo 含 `apps/web`。                                                                                                                                                                                                               |
 
 ### 3.2 規範標 ✅、但目前沒有對應程式碼的
 

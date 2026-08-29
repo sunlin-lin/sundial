@@ -10,7 +10,7 @@ description: Sundial 前端（apps/web）的開發規範與實作指引，涵蓋
 這個 repo 的頁面程式碼異常自我說明——每個檔案的檔頭都寫了「為什麼這樣做」。照著 `apps/web/src/pages/regulatory/datasets/` 或 `apps/web/src/pages/shifts/main/` 抄兩三個既有頁面，Composition API 怎麼寫、Element Plus 跟 Tailwind 怎麼分工、四態怎麼做、錯誤怎麼分類，大部分都推得出來。**這份文件不重複那些讀程式碼就學得會的東西**，只放三種讀既有程式碼推不出來、猜不到、寫錯也不會有紅字的東西：
 
 1. **§0.4 頁面目錄檔名白名單**——本文件槓桿最大的一條規則，見下一節。
-2. **哪些規則有工具在擋、哪些沒有**——規範 §10 標 ✅ 的 46 條裡，真正在跑的不到十條，其餘寫錯了不會出現任何紅字。
+2. **哪些規則有工具在擋、哪些沒有**——規範 §10 標 ✅ 的 47 條裡，真正在跑的不到十條，其餘寫錯了不會出現任何紅字。
 3. **只有跨頁面才看得出來的邊界**——「頁面目錄互不 import」「`shared/` 要先有第二個使用者才准放東西」這類規則，單一頁面內部看不出違規，需要兩個頁面才顯形。
 
 一般 Vue 撰寫慣例在各份 `references/*.md` 裡只保留看不出來的那一小段，展開的部分請直接讀範例頁，不要指望這份文件重講一次。
@@ -45,7 +45,7 @@ description: Sundial 前端（apps/web）的開發規範與實作指引，涵蓋
 
 ## 什麼有工具擋、什麼只能靠自己
 
-規範 §10 那張表列了 46 條「可自動化檢查」，**但這個「✅」是規範作者的意圖，不是現況查證**——下面每一列都是打開對應的腳本、設定檔或 `package.json` 逐條核對過的結果，不是照抄規範的標記。
+規範 §10 那張表列了 47 條「可自動化檢查」，**但這個「✅」是規範作者的意圖，不是現況查證**——下面每一列都是打開對應的腳本、設定檔或 `package.json` 逐條核對過的結果，不是照抄規範的標記。
 
 **真的會擋你的：**
 
@@ -59,6 +59,7 @@ description: Sundial 前端（apps/web）的開發規範與實作指引，涵蓋
 | Prettier（`bun run check` 的後半）        | 全 repo 格式，含 `apps/web`。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `bun test`（`shared/api/client.test.ts`） | **single-flight refresh 是全文少數靠行為斷言而非靜態掃描的檢查**（§3.1）：mock 底層傳輸（`replaceTransport`），同時發三支會遇到 access token 過期的請求，斷言只打出一次 `/sessions/main/refresh` 且三支都拿到成功結果。                                                                                                                                                                                                                                                                                      |
 | `router/registry.ts` 的執行期自我檢查     | 不是獨立掃描腳本，是 registry 模組載入時的檢查：`import.meta.glob('../pages/*/*/*.route.ts')` 蒐集結果為 `0` 就直接 `throw`，讓「一條路由都蒐集不到」表現成應用程式啟動就炸，而不是安靜地變成一片空白。                                                                                                                                                                                                                                                                                                      |
+| `check:menu-permission`                   | 前端規範 §4.4：`menu/main-menu.ts` 的 `MenuGroup` 不得長出 `permissionCode` 欄位；選單項的 `permissionCode` 不得是異動類動作（`create`／`update`／`delete` 這種，判準是否定表列，來源見腳本檔頭）；每個帶 `permissionCode` 的選單項必須與其 `routeName` 對應的 `.route.ts` 的 `meta.permission` 一致。走 AST 掃 `menu/` 與所有 `.route.ts`，含掃描器自我檢查（掃到 0 個選單項或 0 支 `.route.ts` 都中止；內建樣本驗證判斷邏輯本身沒壞）。                                                                    |
 
 **沒有工具擋、寫錯不會報錯的（節錄，完整對照見 `references/testing-and-checks.md`）：**
 

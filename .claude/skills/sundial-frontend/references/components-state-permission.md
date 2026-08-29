@@ -176,3 +176,11 @@ const canApprove = auth.user.roles.some((r) => r.code === 'MANAGER') // ❌
 | 有權限但資料未就緒     | 停用 + loading，不顯示錯誤 |
 
 禁止以停用取代隱藏（滿畫面永遠按不了的按鈕）、以隱藏取代停用（按鈕突然消失，使用者不知發生什麼事）、無說明的停用。這幾條全部靠 review，沒有掃描腳本。
+
+### 3.4 選單分組沒有權限碼；選單項只能掛讀取類權限碼；且必須與路由一致（§4.4，**這條真的有工具擋**）
+
+`menu/main-menu.ts` 的 `MenuGroup`（大目錄，例如「人事作業」）**型別上沒有 `permissionCode` 欄位**，這不是疏漏——分組能不能出現完全由「底下有沒有可見項目」推導（`visibleMenuGroups` 最後一步就是把 `items.length === 0` 的分組整組濾掉）。給分組一個獨立權限碼，會出現「有分組權限但底下全部沒權限」（空分組打不開）與「沒有分組權限但有底下的功能」（功能等於不存在）兩種只能靠人工同步、不同步也不會報錯的錯誤。
+
+`MenuItem.permissionCode` 只能掛**讀取類動作**（`list`／`overview`／`tree` 這種），不能是 `create`／`update`／`delete` 這種異動類動作——只有修改權限、沒有讀取權限的人，被放行進到頁面只會看到空白（沒有列表可編輯），把入口露給他是把「有權限」誤導成「能用」。而且**必須與該頁 `.route.ts` 的 `meta.permission` 是同一個值**（`main-menu.ts` 檔頭已寫明兩邊填錯的後果不對稱：選單填錯讓有權限的人看不到入口，路由填錯才會擋錯人）。
+
+新增或修改帶 `permissionCode` 的選單項時，這三件事**不是靠 review**——`apps/api/scripts/check-menu-permission.ts`（`bun run check:menu-permission`，已串進 `bun run ci`）會用 AST 掃描擋住：異動類動作的判準是否定表列（來源是逐一讀過 `apps/api/drizzle/*_seed_permission_codes_*.sql`，已知抓不到日後新增、但取名不在表列裡的異動動作，見腳本檔頭）；`permissionCode` 與路由 `meta.permission` 的比對是逐項核對；`MenuGroup` 是否長出 `permissionCode` 欄位也在掃描範圍內。這是前端規範 §4 少數幾條**真的有腳本在擋**的規則，不必再靠自己核對。

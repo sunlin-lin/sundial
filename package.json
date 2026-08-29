@@ -31,6 +31,8 @@
     "check:number-cast": "bun run apps/api/scripts/check-number-cast.ts",
     "//check:tz-leak": "前端規範 §9.2／§3.7 的三條規則：exp 不得出現在顯示路徑、頁面不得處理帶時區標記的時間字面值、format 模組以外禁止 new Date(／Date.now(。三條合成一支是因為它們是同一個故事的三個時間點（源頭／攜帶／終點，見檔頭），共用同一組檔案清單與同一次 AST 走訪。判準怎麼收成機械可判定的形狀、Math.exp 這唯一的例外、以及每一條的偽陽性代價，完整寫在 apps/api/scripts/check-tz-leak.ts 檔頭。",
     "check:tz-leak": "bun run apps/api/scripts/check-tz-leak.ts",
+    "//check:menu-permission": "使用者定案的三條規則（大目錄沒有權限碼／選單項只能掛讀取類權限碼／選單項的 permissionCode 必須與對應 .route.ts 的 meta.permission 相同）：`menu/main-menu.ts` 的型別與檔頭註解本來就這樣寫，但沒有任何工具在擋，寫錯只有那個角色的使用者會在畫面上遇到，CI 永遠是綠的。走 AST 掃 `menu/` 與所有 `.route.ts`，異動類動作的判準是否定表列（來源與抓不到什麼見腳本檔頭）。排在 `check:tz-leak` 之後，理由與其餘 check:* 相同：純靜態掃描，放在一起讓「規範掃描」這一段在 ci 裡連續。理由與判準完整寫在 apps/api/scripts/check-menu-permission.ts 檔頭。",
+    "check:menu-permission": "bun run apps/api/scripts/check-menu-permission.ts",
     "//check:live-sources": "刻意不在 `ci` 裡：它會真的打政府端點，而 CI 環境未必有外網——串進去之後第一次紅燈的原因會與那次 PR 無關，處置幾乎必然是「先關掉」，然後永遠關著。該由有外網的環境跑：一支排程（與同步排程錯開）或一個標明「需要外網」的專屬 job。它沒有寬容模式（連不上就失敗）。真正的防線是排程同步本身（政府改格式時同步會 status=3 並留下 error_message），這支只是讓人在排程跑之前先知道；停掉它失去的是提前量，不是偵測能力。理由完整寫在 apps/api/scripts/check-live-sources.ts 檔頭。",
     "check:live-sources": "bun run apps/api/scripts/check-live-sources.ts",
     "//gen:api": "API 契約的產生鏈（§1.7）：載入 app 定義 → 輸出 openapi.json → 由它產生前端型別與 API client。**必須能在後端未啟動、資料庫未連線的情況下執行**——它只 import app 定義，不 listen、不連 DB、不讀 .env。理由完整寫在 apps/api/scripts/generate-api.ts 檔頭。產生物一律不進版控，禁止手動修改。",
@@ -45,7 +47,7 @@
     "seed:dev": "bun run --filter @sundial/api seed:dev",
     "backfill:plaintext": "bun run --filter @sundial/api backfill:plaintext",
     "//ci": "`gen:api` 排在 `typecheck:web` 之前，而且刻意排在**不需要 DB service 的位置**（§1.7 明文要求它在沒有 DB service 的 job 中執行）：這一輪跑得過，就等於證明了「只要有原始碼就產得出契約」。反過來若它被挪到需要 DB 的 job 裡，那個要求會在沒有任何人察覺的情況下失效——指令照樣是綠的，只是不再證明任何事。",
-    "ci": "bun run check && bun run typecheck && bun run gen:api && bun run typecheck:web && bun run check:layers && bun run check:i18n && bun run check:audit-policy && bun run check:audit-transaction && bun run check:migration-journal && bun run check:n-plus-one && bun run check:dataset-code && bun run check:number-cast && bun run check:tz-leak && bun run test"
+    "ci": "bun run check && bun run typecheck && bun run gen:api && bun run typecheck:web && bun run check:layers && bun run check:i18n && bun run check:audit-policy && bun run check:audit-transaction && bun run check:migration-journal && bun run check:n-plus-one && bun run check:dataset-code && bun run check:number-cast && bun run check:tz-leak && bun run check:menu-permission && bun run test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
