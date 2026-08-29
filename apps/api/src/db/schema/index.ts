@@ -74,8 +74,14 @@ export {
   AttendanceSourceTypeCode,
   type AttendanceSourceTypeCodeValue,
 } from './attendance-records.ts'
+export {
+  attendanceResults,
+  AttendanceResultStatusCode,
+  type AttendanceResultStatusCodeValue,
+} from './attendance-results.ts'
 
 import { attendanceRecords } from './attendance-records.ts'
+import { attendanceResults } from './attendance-results.ts'
 import { attendanceSettings } from './attendance-settings.ts'
 import { auditLogs } from './audit-logs.ts'
 import { companyUserRoles } from './company-user-roles.ts'
@@ -220,6 +226,14 @@ export type CompanyScopedTable =
    * `employees`／`employee_employments`／`company_users`，因此**必須排在這三張表之前**清空。
    */
   | typeof attendanceRecords
+  /**
+   * `attendance_results` 有 `company_id`，因此屬於這個聯集（實作計畫 `plans/06-attendance.md`
+   * §4.1、§5 Stage 4）。**字典本身沒有 `company_id` 欄位**，新增理由見 `db/schema/
+   * attendance-results.ts` 檔頭第 1 點。**沒有任何其他表以外鍵指向它**（它是判定結果的終點，
+   * 不是誰的依賴來源），它自己只以外鍵指向 `companies`／`employees`，因此**必須排在這兩張表
+   * 之前**清空——與 `attendanceRecords` 是同一種依賴形狀，放在它旁邊即可。
+   */
+  | typeof attendanceResults
 
 /**
  * 對「窮舉一個聯集的所有成員」做編譯期檢查的小工具，供下方 {@link companyScopedTablesInDeleteOrder} 使用。
@@ -304,6 +318,9 @@ export const companyScopedTablesInDeleteOrder = exhaustiveCompanyScopedTables<Co
   // 三者之前清空（companyUsers 本來就排在本陣列最後，這裡只需要早於 employeeEmployments／
   // employees 即可）。
   attendanceRecords,
+  // 出勤判定結果：複合外鍵指向 employees，必須排在它之前清空；與 attendanceRecords 同一種
+  // 依賴形狀（見上方型別聯集的註解），彼此之間互不依賴。
+  attendanceResults,
   employeeEmployments,
   employees,
   shiftDefinitions,

@@ -281,6 +281,20 @@
       "when": 1788014276572,
       "tag": "0039_seed_permission_codes_attendance_records",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1788016362724,
+      "tag": "0040_create_attendance_results",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1788016388231,
+      "tag": "0041_seed_permission_codes_attendance_results",
+      "breakpoints": true
     }
   ]
 }

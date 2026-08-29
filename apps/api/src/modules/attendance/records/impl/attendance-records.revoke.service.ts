@@ -16,10 +16,18 @@
  *
  * **不需要 `FOR UPDATE`**：撤銷是條件式 `UPDATE`（`WHERE revoked_at IS NULL AND id = ?`），
  * 影響列數為 0 就回衝突，不需要額外上鎖（計畫 §4.5）。
+ *
+ * **撤銷成功後，在同一筆交易內呼叫 Stage 4 的重算**（計畫 §4.3.1：兩種撤銷之後都要重算
+ * `attendance_results`，沒有差別；09／10 的驗收明文要求）。呼叫 `recalculateAttendanceResultForWorkDay`
+ * 而不是自己開一筆新交易——撤銷與重算若各自開交易，會出現「撤銷已 COMMIT、重算那筆交易卻失敗」
+ * 的縫隙，見該函式檔頭。直接 import 同一個大目錄底下 `results` 次目錄的 `*.service.ts`，不經過
+ * `modules/attendance/index.ts`（那是給其他大目錄用的出口），比照本檔已經在用的
+ * `../../settings/attendance-settings.service.ts` 同一種同大目錄內的引用方式。
  */
 import type { TransactionRunner } from '../../../../db/client.ts'
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import { AttendanceTypeCode } from '../../../../db/schema/index.ts'
+import { recalculateAttendanceResultForWorkDay } from '../../results/attendance-results.service.ts'
 import { isPeriodLocked } from '../domain/attendance-record-period-lock.ts'
 import type { AttendanceRecordsContext } from '../domain/attendance-record-context.ts'
 import type { AttendanceRecordDetail, RevokeOwnAttendanceRecordInput } from '../domain/attendance-record-model.ts'
@@ -75,6 +83,15 @@ const revokeOwnAttendanceRecordInTransaction = async (
     now,
   })
   if (affectedRows === 0) return fail([attendanceRecordAlreadyRevoked()])
+
+  // ★ 同一筆交易內重算（見檔頭）：撤銷影響的是 record.employeeId／record.workDate 這一天的判定，
+  // 不是撤銷者自己的今天——撤銷本人過去某一天的打卡時，重算對象一樣是那一天，不是「現在」。
+  await recalculateAttendanceResultForWorkDay(
+    tx,
+    context.companyId,
+    { employeeId: record.employeeId, workDate: record.workDate },
+    now,
+  )
 
   const updated = await findAttendanceRecordDetail(tx, context.companyId, input.recordId)
   if (updated === null) {

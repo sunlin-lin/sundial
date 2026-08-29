@@ -6,6 +6,7 @@ exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | �
 /attendance/records/list-by-date | attendance.records.list-by-date | authenticated | cmd,currentPage,date,locale,perPage,rqTS
 /attendance/records/revoke | attendance.records.revoke | authenticated | cmd,locale,reason,recordId,rqTS
 /attendance/records/revoke-other | attendance.records.revoke-other | authenticated | cmd,locale,reason,recordId,rqTS
+/attendance/results/recalculate-no-schedule | attendance.results.recalculate-no-schedule | authenticated | cmd,locale,rqTS
 /attendance/settings/get | attendance.settings.get | authenticated | cmd,locale,rqTS
 /attendance/settings/update | attendance.settings.update | authenticated | allowCorrectionRequest,allowEmployeeCancellation,cmd,correctionRequiresApproval,gpsEnabled,gpsRequired,locale,requireClockInBeforeClockOut,rqTS
 /company-users/main/activate | company-users.main.activate | authenticated | cmd,employeeId,locale,rqTS

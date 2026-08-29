@@ -21,6 +21,7 @@ import type { TransactionRunner } from '../../../../db/client.ts'
 import { buildAuditChanges, recordAudit } from '../../../audit/index.ts'
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import { AttendanceTypeCode } from '../../../../db/schema/index.ts'
+import { recalculateAttendanceResultForWorkDay } from '../../results/attendance-results.service.ts'
 import { isPeriodLocked } from '../domain/attendance-record-period-lock.ts'
 import type { AttendanceRecordsContext } from '../domain/attendance-record-context.ts'
 import type {
@@ -95,6 +96,15 @@ const revokeOtherAttendanceRecordInTransaction = async (
     effectiveDate: record.workDate,
     now,
   })
+
+  // ★ 同一筆交易內重算（計畫 §4.3.1：兩種撤銷之後都要重算，沒有差別；理由見
+  // `attendance-records.revoke.service.ts` 檔頭「撤銷成功後……」那一段，這裡不重複）。
+  await recalculateAttendanceResultForWorkDay(
+    tx,
+    context.companyId,
+    { employeeId: record.employeeId, workDate: record.workDate },
+    now,
+  )
 
   const updated = await findAttendanceRecordDetail(tx, context.companyId, input.recordId)
   if (updated === null) {

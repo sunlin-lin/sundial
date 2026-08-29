@@ -11,11 +11,13 @@
  */
 import { randomBytes } from 'node:crypto'
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { Elysia } from 'elysia'
 import { createDatabase, type Database } from '../../../../db/client.ts'
 import {
   attendanceRecords,
+  attendanceResults,
+  AttendanceResultStatusCode,
   attendanceSettings,
   AttendanceSourceTypeCode,
   AttendanceTypeCode,
@@ -312,6 +314,24 @@ const registerCompany = async (): Promise<{
   return { companyId, registerEmployee }
 }
 
+const readAttendanceResult = async (companyId: string, employeeId: string, workDate: string) => {
+  const rows = await database
+    .select({
+      workedMinutes: attendanceResults.workedMinutes,
+      scheduledMinutes: attendanceResults.scheduledMinutes,
+      resultStatusCode: attendanceResults.resultStatusCode,
+    })
+    .from(attendanceResults)
+    .where(
+      and(
+        eq(attendanceResults.companyId, companyId),
+        eq(attendanceResults.employeeId, employeeId),
+        eq(attendanceResults.workDate, workDate),
+      ),
+    )
+  return rows[0] ?? null
+}
+
 const readAuditLogs = (companyId: string, subjectId: string) =>
   database
     .select({
@@ -425,6 +445,40 @@ describe('attendance/records endpoints (integration)', () => {
     expect(logs.length).toBe(0)
   })
 
+  test('revoke：撤銷成功後同一筆交易內重算 attendance_results（計畫 §4.3.1）', async () => {
+    const { companyId, registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+
+    const clockIn = await call<{ id: string; workDate: string }>('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 1,
+    })
+    const clockOut = await call<{ id: string }>('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 2,
+    })
+    const workDate = clockIn.payload.data.workDate
+
+    // 撤銷下班卡：只剩一張有效上班卡，worked_minutes 算不出一組完整時間，應為 0。
+    await call('/attendance/records/revoke', employee.token, {
+      recordId: clockOut.payload.data.id,
+      reason: '先撤銷下班卡',
+    })
+    const afterRevokeClockOut = await readAttendanceResult(companyId, employee.employeeId, workDate)
+    expect(afterRevokeClockOut).not.toBeNull()
+    expect(afterRevokeClockOut?.resultStatusCode).toBe(AttendanceResultStatusCode.NoSchedule)
+    expect(afterRevokeClockOut?.workedMinutes).toBe(0)
+    expect(afterRevokeClockOut?.scheduledMinutes).toBe(0)
+
+    // 再撤銷上班卡：當天完全沒有有效打卡，重算後仍是一筆 NO_SCHEDULE、worked_minutes=0 的紀錄
+    // ——不是刪掉這筆判定結果（判定結果本身不因來源卡被撤銷而消失，只是重算成「這天沒有紀錄」）。
+    await call('/attendance/records/revoke', employee.token, {
+      recordId: clockIn.payload.data.id,
+      reason: '再撤銷上班卡',
+    })
+    const afterRevokeBoth = await readAttendanceResult(companyId, employee.employeeId, workDate)
+    expect(afterRevokeBoth).not.toBeNull()
+    expect(afterRevokeBoth?.workedMinutes).toBe(0)
+  })
+
   test('revoke：撤銷別人的記錄視同找不到（不接受 employeeId，範圍由 token 推出）', async () => {
     const { registerEmployee } = await registerCompany()
     const employeeA = await registerEmployee()
@@ -476,6 +530,25 @@ describe('attendance/records endpoints (integration)', () => {
       before: null,
       after: '主管代為撤銷',
     })
+  })
+
+  test('revoke-other：撤銷成功後同一筆交易內重算 attendance_results（計畫 §4.3.1，與 revoke 同一條規則）', async () => {
+    const { companyId, registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+    const reviewer = await registerEmployee({ permissionCodes: ['attendance.records.revoke-other'] })
+
+    const created = await call<{ id: string; workDate: string }>('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 1,
+    })
+    await call('/attendance/records/revoke-other', reviewer.token, {
+      recordId: created.payload.data.id,
+      reason: '主管代為撤銷',
+    })
+
+    const result = await readAttendanceResult(companyId, employee.employeeId, created.payload.data.workDate)
+    expect(result).not.toBeNull()
+    expect(result?.resultStatusCode).toBe(AttendanceResultStatusCode.NoSchedule)
+    expect(result?.workedMinutes).toBe(0)
   })
 
   test('revoke-other：沒有權限碼時回 403', async () => {

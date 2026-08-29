@@ -26,7 +26,11 @@ import { Elysia } from 'elysia'
 import { identityGuard } from '../http/identity-guard.ts'
 import { publicGuard } from '../http/public-guard.ts'
 import { refreshGuard } from '../http/refresh-guard.ts'
-import { attendanceRecordsRoutes, attendanceSettingsRoutes } from '../modules/attendance/routes.ts'
+import {
+  attendanceRecordsRoutes,
+  attendanceResultsRoutes,
+  attendanceSettingsRoutes,
+} from '../modules/attendance/routes.ts'
 import { companyUsersMainRoutes, companyUsersRolesRoutes } from '../modules/company-users/routes.ts'
 import { departmentsMainRoutes } from '../modules/departments/routes.ts'
 import { dependentsMainRoutes } from '../modules/dependents/routes.ts'
@@ -149,6 +153,9 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
       .use(attendanceSettingsRoutes({ db: database, clock }))
       // 打卡與撤銷：不需要 cipher（座標與地址為明文欄位，計畫 §4.2）。實作計畫 06-attendance.md §5 Stage 3。
       .use(attendanceRecordsRoutes({ db: database, clock }))
+      // 出勤判定結果：不需要 cipher（沒有個資欄位）。實作計畫 06-attendance.md §4.1、§5 Stage 4——
+      // 本階段只開重算全部 NO_SCHEDULE 紀錄一支端點，查詢類端點排在 Stage 7。
+      .use(attendanceResultsRoutes({ db: database, clock }))
   )
 }
 
