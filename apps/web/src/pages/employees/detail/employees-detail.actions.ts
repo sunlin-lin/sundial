@@ -12,6 +12,8 @@ import type {
   EmploymentLeaveFormState,
   JobPositionHistoryFormState,
   JobTitleHistoryFormState,
+  ResetPasswordFormState,
+  RoleAssignFormState,
   WithholdingCreateFormState,
 } from './employees-detail.payload.ts'
 import type { PermissionCode } from '../../../shared/permission/permission-code.ts'
@@ -112,4 +114,43 @@ export const canSubmitWithholdingCreateForm = (input: {
 }): boolean => {
   if (input.isSubmitting) return false
   return input.form.withholdingMethodCode !== 0 && input.form.effectiveFrom !== ''
+}
+
+// --- §3.5 帳號與角色 ----------------------------------------------------------------------
+
+export const canAssignRole = (can: Can): boolean => can('company-users.roles.create')
+
+export const canSubmitRoleAssignForm = (input: {
+  readonly isSubmitting: boolean
+  readonly form: RoleAssignFormState
+}): boolean => {
+  if (input.isSubmitting) return false
+  return input.form.roleIds.length > 0
+}
+
+/**
+ * 「移除」這顆按鈕何時可按：權限之外，還要求撤銷後至少留一個有效角色——把後端
+ * `company-users.roles.errors.last-role-required` 的判定提前到畫面上（§3.3「有權限但當下狀態
+ * 不允許 → 停用 ＋ tooltip 說明」）。**這不是取代後端檢查**：後端在同一筆交易內用鎖定列 ＋
+ * 條件式 UPDATE 做真正的判定（`role-assignment-plan.ts` 的 `planRoleRevocation`），這裡只是不讓
+ * 使用者按下一顆註定被拒絕的按鈕；兩個人同時各自嘗試撤掉對方看不到的最後一個角色時，
+ * 後端仍然是唯一真正擋下來的地方（呼叫端仍然要處理後端回來的 `409`，見對應元件）。
+ */
+export const canRevokeRole = (can: Can, activeRoleCount: number): boolean =>
+  can('company-users.roles.revoke') && activeRoleCount > 1
+
+export const canResetPassword = (can: Can): boolean => can('company-users.main.reset-password')
+
+/**
+ * 密碼長度上下限取自 `company-users-main.routes.ts` 的 `NewPassword` schema
+ * （`minLength: 8, maxLength: 128`），不是前端另訂一套（前端規範 §6.1：驗證規則必須來自
+ * OpenAPI schema）。
+ */
+export const canSubmitResetPasswordForm = (input: {
+  readonly isSubmitting: boolean
+  readonly form: ResetPasswordFormState
+}): boolean => {
+  if (input.isSubmitting) return false
+  const length = input.form.newPassword.length
+  return length >= 8 && length <= 128
 }

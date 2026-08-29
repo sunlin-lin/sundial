@@ -10,6 +10,9 @@ exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | �
 /departments/main/get | departments.main.get | authenticated | cmd,id,locale,rqTS
 /departments/main/tree | departments.main.tree | authenticated | cmd,locale,rqTS
 /departments/main/update | departments.main.update | authenticated | cmd,code,id,locale,name,parentId,rqTS,status
+/dependents/main/create | dependents.main.create | authenticated | birthday,cmd,effectiveDate,employeeId,identityNumber,isCohabiting,isDisabled,isStudent,isUnableToWork,locale,name,relationshipCode,rqTS
+/dependents/main/list | dependents.main.list | authenticated | cmd,currentPage,employeeId,locale,perPage,rqTS
+/dependents/main/terminate | dependents.main.terminate | authenticated | cmd,endDate,id,locale,rqTS
 /employees/main/delete | employees.main.delete | authenticated | cmd,id,locale,rqTS
 /employees/main/get | employees.main.get | authenticated | cmd,id,locale,rqTS
 /employees/main/list | employees.main.list | authenticated | cmd,currentPage,locale,perPage,rqTS
@@ -35,6 +38,8 @@ exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | �
 /job-titles/main/get | job-titles.main.get | authenticated | cmd,id,locale,rqTS
 /job-titles/main/list | job-titles.main.list | authenticated | cmd,currentPage,locale,perPage,rqTS
 /job-titles/main/update | job-titles.main.update | authenticated | cmd,code,id,locale,name,rqTS,status
+/labor-pension/main/create | labor-pension.main.create | authenticated | cmd,effectiveFrom,employeeId,locale,rqTS,voluntaryContributionRate
+/labor-pension/main/list | labor-pension.main.list | authenticated | cmd,currentPage,employeeId,locale,perPage,rqTS
 /permissions/main/tree | permissions.main.tree | authenticated | cmd,locale,rqTS
 /regulatory/datasets/get | regulatory.datasets.get | authenticated | cmd,id,locale,rqTS
 /regulatory/datasets/list | regulatory.datasets.list | authenticated | cmd,currentPage,datasetCode,locale,perPage,rqTS

@@ -41,6 +41,15 @@ export type {
  *
  * 刻意**沒有**眷屬、勞退自願提繳率——這兩項依實作計畫 §8 屬於 Stage 7，UI 定案也明說眷屬可以
  * 「建立員工後補登」，不在本輪範圍內。
+ *
+ * **Stage 7 落地後仍然維持這個決定，不是還沒排到。** 計畫把眷屬與勞退自願提繳率放在 §3.3
+ * 「可建立後補登」，與 §3.1／§3.2（擋住整個新增流程的必填欄位、依公司設定但仍在同一個表單分節
+ * 的職稱／職務）刻意分屬不同段落；§4.1 列出「所有會被編排進同一筆業務的 service 動作」時，
+ * 也沒有把 `dependents`／`labor-pension` 排進去。兩者因此維持獨立模組
+ * （`modules/dependents/`、`modules/labor-pension/`），有自己的 `create`／`list`（眷屬另有
+ * `terminate`）端點，不接進 `createOnboardingInTransaction` 的那個交易——UI 若要在「新增員工」
+ * 同一頁支援眷屬與勞退，走的是「先呼叫 onboarding 成功、再分別呼叫這兩支端點」，不要求原子性
+ * （UI 定案 §2.4 的「任一失敗時整筆取消」只涵蓋員工、任職、帳號及角色四項，沒有提到眷屬或勞退）。
  */
 export type CreateOnboardingInput = {
   // ---- 基本資料（→ employees.main.create） ----

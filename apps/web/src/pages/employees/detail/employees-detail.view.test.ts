@@ -1,13 +1,33 @@
 import { describe, expect, test } from 'bun:test'
 import {
   activeOnly,
+  assignableRoleOptions,
+  companyUserIdOf,
   employmentStatusLabel,
   employmentStatusTagType,
   employmentTypeLabel,
   formatOpenCode,
   isCurrentlyEffective,
   withholdingMethodLabel,
+  type AssignableRoleItem,
+  type EmployeeSummary,
+  type RoleAssignmentItem,
 } from './employees-detail.view.ts'
+
+const buildEmployee = (companyUserId?: string | null): EmployeeSummary => ({
+  id: 'emp-1',
+  employeeCode: 'A001',
+  name: '王小明',
+  gender: 'MALE',
+  identityNumberMasked: 'A1****6789',
+  birthdayMasked: '****-01-01',
+  phoneMasked: '09****5678',
+  emailMasked: null,
+  addressMasked: '****',
+  createdAt: '2026-01-01 00:00:00',
+  updatedAt: '2026-01-01 00:00:00',
+  ...(companyUserId === undefined ? {} : { companyUserId }),
+})
 
 const $t = (key: string): string => key
 
@@ -58,5 +78,48 @@ describe('isCurrentlyEffective', () => {
   test('effectiveTo 為 null 代表沒有結束日，today 只要不早於 effectiveFrom 就算生效', () => {
     expect(isCurrentlyEffective('2026-01-01', null, '2099-01-01')).toBe(true)
     expect(isCurrentlyEffective('2026-01-01', null, '2025-01-01')).toBe(false)
+  })
+})
+
+describe('assignableRoleOptions', () => {
+  const managerRole: AssignableRoleItem = {
+    id: 'role-2',
+    code: 'MANAGER',
+    name: '主管',
+    status: 'ACTIVE',
+    isSystem: false,
+  }
+  const roles: AssignableRoleItem[] = [
+    { id: 'role-1', code: 'HR', name: '人資', status: 'ACTIVE', isSystem: false },
+    managerRole,
+  ]
+
+  test('排除這個帳號已經有效指派的角色', () => {
+    const assignments: RoleAssignmentItem[] = [
+      {
+        id: 'assignment-1',
+        companyUserId: 'company-user-1',
+        roleId: 'role-1',
+        roleCode: 'HR',
+        roleName: '人資',
+        assignedAt: '2026-01-01 00:00:00',
+        assignedByName: '王小明',
+        revokedAt: null,
+        revokedByName: null,
+      },
+    ]
+    expect(assignableRoleOptions(roles, assignments)).toEqual([managerRole])
+  })
+
+  test('沒有任何指派時回傳完整字典', () => {
+    expect(assignableRoleOptions(roles, [])).toEqual(roles)
+  })
+})
+
+describe('companyUserIdOf', () => {
+  test('有值時原樣回傳，缺席或 null 一律收斂成 null', () => {
+    expect(companyUserIdOf(buildEmployee('company-user-1'))).toBe('company-user-1')
+    expect(companyUserIdOf(buildEmployee(null))).toBeNull()
+    expect(companyUserIdOf(buildEmployee())).toBeNull()
   })
 })

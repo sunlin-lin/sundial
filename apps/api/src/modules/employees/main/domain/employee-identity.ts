@@ -1,23 +1,8 @@
 /**
- * 身分證字號的正規化（零 IO 純函式）。
- *
- * **為什麼要有這一步：** 重複檢查靠 blind index（`identity_number_hash`），
- * 而 HMAC 是逐位元組計算的——`a123456789` 與 `A123456789` 會算出兩個完全不同的雜湊，
- * 於是同一個人可以被建立兩次，而唯一鍵**一次也擋不到**。使用者不會知道自己輸入的大小寫
- * 決定了系統認不認得他，這種重複也不會有任何地方報錯。
- *
- * **為什麼不做在 `blindIndex()` 裡：** 什麼算「同一個值」是各欄位的業務規則
- * ——身分證要轉大寫、Email 要轉小寫、地址則兩者都不該做。塞進通用的雜湊函式，
- * 等於讓一個不知道自己在雜湊什麼的函式替所有欄位決定相等定義，而那個決定在呼叫端看不見。
+ * 身分證字號的正規化。**本檔的函式本體已搬到 `shared/identity-normalization.ts`**
+ * （實作計畫 `plans/05-employee-onboarding.md` §8 Stage 7）：`modules/dependents/main/`
+ * 新增後成為第二個真實呼叫者，抽成 shared 讓兩邊共用同一份正規化規則，不再各自演化
+ * （完整理由見該檔檔頭）。本檔保留為單純 re-export，避免動到既有的 import 路徑
+ * （`employee-secrets.ts`／`employees-main.update.service.ts`／既有測試）。
  */
-
-/**
- * 身分證字號正規化：去掉前後空白、英文字母一律轉大寫。
- *
- * **正規化後的值同時用於加密與 blind index**，不是只用在雜湊上：兩者存不同形狀的話，
- * 解密回來的明文與拿去算雜湊的值就不是同一個東西，日後任何「重新計算全表雜湊」的維護作業
- * （換索引金鑰、修雜湊演算法）都會算出對不上的結果。
- *
- * `toUpperCase()` 不指定 locale：身分證字號是 ASCII 英數，不會踩到土耳其語 `i` 那類地區性規則。
- */
-export const normalizeIdentityNumber = (identityNumber: string): string => identityNumber.trim().toUpperCase()
+export { normalizeIdentityNumber } from '../../../../shared/identity-normalization.ts'

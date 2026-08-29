@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  canAssignRole,
   canCreateDepartmentHistory,
   canCreateEmployment,
   canCreateJobPositionHistory,
@@ -7,12 +8,16 @@ import {
   canCreateWithholding,
   canEditBasicInfo,
   canLeaveEmployment,
+  canResetPassword,
+  canRevokeRole,
   canSubmitBasicInfoForm,
   canSubmitDepartmentHistoryForm,
   canSubmitEmploymentCreateForm,
   canSubmitEmploymentLeaveForm,
   canSubmitJobPositionHistoryForm,
   canSubmitJobTitleHistoryForm,
+  canSubmitResetPasswordForm,
+  canSubmitRoleAssignForm,
   canSubmitWithholdingCreateForm,
 } from './employees-detail.actions.ts'
 import {
@@ -21,6 +26,8 @@ import {
   emptyEmploymentLeaveFormState,
   emptyJobPositionHistoryFormState,
   emptyJobTitleHistoryFormState,
+  emptyResetPasswordFormState,
+  emptyRoleAssignFormState,
   emptyWithholdingCreateFormState,
   toBasicInfoFormState,
 } from './employees-detail.payload.ts'
@@ -148,5 +155,44 @@ describe('canSubmitWithholdingCreateForm', () => {
         form: { ...empty, withholdingMethodCode: 1, effectiveFrom: '2026-01-01' },
       }),
     ).toBe(true)
+  })
+})
+
+describe('canAssignRole／canResetPassword', () => {
+  test('各自對應自己的權限碼', () => {
+    expect(canAssignRole(allow('company-users.roles.create'))).toBe(true)
+    expect(canAssignRole(denyAll)).toBe(false)
+    expect(canResetPassword(allow('company-users.main.reset-password'))).toBe(true)
+    expect(canResetPassword(denyAll)).toBe(false)
+  })
+})
+
+describe('canSubmitRoleAssignForm', () => {
+  test('至少選一個角色才能送出，送出中不能再送出', () => {
+    const empty = emptyRoleAssignFormState()
+    expect(canSubmitRoleAssignForm({ isSubmitting: false, form: empty })).toBe(false)
+    expect(canSubmitRoleAssignForm({ isSubmitting: false, form: { roleIds: ['role-1'] } })).toBe(true)
+    expect(canSubmitRoleAssignForm({ isSubmitting: true, form: { roleIds: ['role-1'] } })).toBe(false)
+  })
+})
+
+describe('canRevokeRole', () => {
+  test('UI 定案 §3.5「系統禁止移除最後一個角色」：剩餘角色數為 1 時，即使有權限也不能按', () => {
+    const allowRevoke = allow('company-users.roles.revoke')
+    expect(canRevokeRole(allowRevoke, 2)).toBe(true)
+    expect(canRevokeRole(allowRevoke, 1)).toBe(false)
+    expect(canRevokeRole(denyAll, 2)).toBe(false)
+  })
+})
+
+describe('canSubmitResetPasswordForm', () => {
+  test('長度需落在 8～128（後端 NewPassword schema），送出中不能再送出', () => {
+    const empty = emptyResetPasswordFormState()
+    expect(canSubmitResetPasswordForm({ isSubmitting: false, form: empty })).toBe(false)
+    expect(canSubmitResetPasswordForm({ isSubmitting: false, form: { newPassword: '1234567' } })).toBe(false)
+    expect(canSubmitResetPasswordForm({ isSubmitting: false, form: { newPassword: '12345678' } })).toBe(true)
+    expect(canSubmitResetPasswordForm({ isSubmitting: false, form: { newPassword: 'a'.repeat(128) } })).toBe(true)
+    expect(canSubmitResetPasswordForm({ isSubmitting: false, form: { newPassword: 'a'.repeat(129) } })).toBe(false)
+    expect(canSubmitResetPasswordForm({ isSubmitting: true, form: { newPassword: '12345678' } })).toBe(false)
   })
 })

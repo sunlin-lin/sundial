@@ -9,6 +9,10 @@
  * （`.errors.view.ts` 定位），這裡不另抄一份 schema 的 `maxLength`／`pattern`／`minimum`。
  */
 import type {
+  CompanyUsersMainResetPasswordInput,
+  CompanyUsersRolesCreateInput,
+  CompanyUsersRolesListInput,
+  CompanyUsersRolesRevokeInput,
   EmployeesMainGetData,
   EmployeesMainUpdateInput,
   EmploymentsDepartmentHistoriesCreateInput,
@@ -366,4 +370,64 @@ export const toWithholdingListQuery = (employeeId: string, currentPage: number):
   currentPage,
   perPage: HISTORY_LIST_PER_PAGE,
   sort: HISTORY_LIST_SORT_ECHO,
+})
+
+// ============================================================================================
+// §3.5 帳號與角色：新增角色
+// ============================================================================================
+
+export type RoleAssignFormState = { roleIds: string[] }
+
+export const emptyRoleAssignFormState = (): RoleAssignFormState => ({ roleIds: [] })
+
+export const toRoleAssignPayload = (companyUserId: string, form: RoleAssignFormState): CompanyUsersRolesCreateInput => {
+  if (form.roleIds.length === 0) throw new Error('roleIds 未選取，呼叫端必須先過 canSubmitRoleAssignForm 才能送出')
+
+  return { companyUserId, roleIds: form.roleIds }
+}
+
+// ============================================================================================
+// §3.5 帳號與角色：移除角色
+// ============================================================================================
+
+/**
+ * 撤銷一個角色。**這裡沒有表單狀態**：畫面是角色清單裡逐列的「移除」按鈕，不是一份使用者填寫的
+ * 表單，直接由那一列的 `roleId` 組 payload 即可，理由與 `toEmploymentLeavePayload` 之類「表單值
+ * → payload」的其餘函式不同構——沒有值需要轉換，只是把呼叫端已經知道的兩個 id 包成請求形狀。
+ */
+export const toRoleRevokePayload = (companyUserId: string, roleId: string): CompanyUsersRolesRevokeInput => ({
+  companyUserId,
+  roleIds: [roleId],
+})
+
+// ============================================================================================
+// §3.5 帳號與角色：重設密碼
+// ============================================================================================
+
+export type ResetPasswordFormState = { newPassword: string }
+
+export const emptyResetPasswordFormState = (): ResetPasswordFormState => ({ newPassword: '' })
+
+export const toResetPasswordPayload = (
+  companyUserId: string,
+  form: ResetPasswordFormState,
+): CompanyUsersMainResetPasswordInput => ({ companyUserId, newPassword: form.newPassword })
+
+// ============================================================================================
+// §3.5 帳號與角色：角色指派清單查詢
+// ============================================================================================
+
+export const ROLE_ASSIGNMENT_LIST_PER_PAGE = 20
+/** 與後端 `DEFAULT_ASSIGNMENT_SORT`（`role-assignment-sort.ts`）一致：最近指派的排前面。 */
+export const ROLE_ASSIGNMENT_LIST_SORT = { field: 'assignedAt', order: 'desc' } as const
+
+export type RoleAssignmentListQuery = CompanyUsersRolesListInput & { readonly sort: typeof ROLE_ASSIGNMENT_LIST_SORT }
+
+/** 只查這個帳號未撤銷的指派——已撤銷的歷史不在這個分頁的畫面範圍內（沒有畫面會用到）。 */
+export const toRoleAssignmentListQuery = (companyUserId: string, currentPage: number): RoleAssignmentListQuery => ({
+  companyUserId,
+  includeRevoked: false,
+  currentPage,
+  perPage: ROLE_ASSIGNMENT_LIST_PER_PAGE,
+  sort: ROLE_ASSIGNMENT_LIST_SORT,
 })

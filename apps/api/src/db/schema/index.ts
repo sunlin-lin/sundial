@@ -58,6 +58,14 @@ export { jobTitles, JobTitleStatus, type JobTitleStatusValue } from './job-title
 export { jobPositions, JobPositionStatus, type JobPositionStatusValue } from './job-positions.ts'
 export { employeeJobTitleHistories } from './employee-job-title-histories.ts'
 export { employeeJobPositionHistories } from './employee-job-position-histories.ts'
+export {
+  employeeDependents,
+  DependentStatus,
+  type DependentStatusValue,
+  DependentRelationshipCode,
+  type DependentRelationshipCodeValue,
+} from './employee-dependents.ts'
+export { employeeLaborPensionSettings } from './employee-labor-pension-settings.ts'
 
 import { auditLogs } from './audit-logs.ts'
 import { companyUserRoles } from './company-user-roles.ts'
@@ -68,6 +76,8 @@ import { employeeEmployments } from './employee-employments.ts'
 import { employeeJobPositionHistories } from './employee-job-position-histories.ts'
 import { employeeJobTitleHistories } from './employee-job-title-histories.ts'
 import { employeeWithholdingSettings } from './employee-withholding-settings.ts'
+import { employeeDependents } from './employee-dependents.ts'
+import { employeeLaborPensionSettings } from './employee-labor-pension-settings.ts'
 import { employees } from './employees.ts'
 import { jobPositions } from './job-positions.ts'
 import { jobTitles } from './job-titles.ts'
@@ -174,6 +184,18 @@ export type CompanyScopedTable =
   | typeof jobPositions
   | typeof employeeJobTitleHistories
   | typeof employeeJobPositionHistories
+  /**
+   * `employee_dependents`／`employee_labor_pension_settings` 都有 `company_id`，因此屬於這個聯集
+   * （實作計畫 `plans/05-employee-onboarding.md` §3.3、§8 Stage 7）。**兩張表字典本身都沒有
+   * `company_id` 欄位**，新增理由與加入方式與其餘 `employee_*` 系列表同構，寫在各自的
+   * `db/schema/employee-*.ts` 檔頭第 1 點，這裡不重複。
+   *
+   * **排序（見下方陣列）：兩張都只以複合外鍵指向 `employees`（`employee_labor_pension_settings`
+   * 另外指向 `company_users`，見該檔），因此都必須排在 `employees` 之前**——與
+   * `employeeWithholdingSettings` 是同一種依賴形狀，放在它旁邊即可，彼此之間互不依賴。
+   */
+  | typeof employeeDependents
+  | typeof employeeLaborPensionSettings
 
 /**
  * 對「窮舉一個聯集的所有成員」做編譯期檢查的小工具，供下方 {@link companyScopedTablesInDeleteOrder} 使用。
@@ -248,6 +270,12 @@ export const companyScopedTablesInDeleteOrder = exhaustiveCompanyScopedTables<Co
   employeeJobPositionHistories,
   employeeDepartmentHistories,
   employeeWithholdingSettings,
+  // 兩張新表（Stage 7）與 employeeWithholdingSettings 是同一種依賴形狀：都只指向 employees
+  // （employeeLaborPensionSettings 另外指向 companyUsers，但 companyUsers 排在本陣列最後，
+  // 子表先於父表清空不受影響），因此排在 employees 之前即可，彼此之間與 employeeWithholdingSettings
+  // 之間都互不依賴（順序無關）。
+  employeeDependents,
+  employeeLaborPensionSettings,
   employeeEmployments,
   employees,
   shiftDefinitions,

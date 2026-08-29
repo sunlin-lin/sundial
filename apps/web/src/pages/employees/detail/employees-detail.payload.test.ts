@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   EMPLOYMENT_LIST_SORT,
   HISTORY_LIST_SORT_ECHO,
+  ROLE_ASSIGNMENT_LIST_SORT,
   toBasicInfoFormState,
   toBasicInfoUpdatePayload,
   toDepartmentHistoryListQuery,
@@ -11,6 +12,10 @@ import {
   toEmploymentListQuery,
   toJobPositionHistoryPayload,
   toJobTitleHistoryPayload,
+  toResetPasswordPayload,
+  toRoleAssignmentListQuery,
+  toRoleAssignPayload,
+  toRoleRevokePayload,
   toWithholdingCreatePayload,
   type BasicInfoFormState,
   type DepartmentHistoryFormState,
@@ -18,6 +23,8 @@ import {
   type EmploymentLeaveFormState,
   type JobPositionHistoryFormState,
   type JobTitleHistoryFormState,
+  type ResetPasswordFormState,
+  type RoleAssignFormState,
   type WithholdingCreateFormState,
 } from './employees-detail.payload.ts'
 
@@ -204,5 +211,46 @@ describe('列表查詢型別', () => {
     const query = toDepartmentHistoryListQuery('employment-1', 1)
     expect(query.sort).toEqual(HISTORY_LIST_SORT_ECHO)
     expect(query.employmentId).toBe('employment-1')
+  })
+})
+
+describe('toRoleAssignPayload', () => {
+  test('roleIds 空陣列就送出時丟出錯誤', () => {
+    const form: RoleAssignFormState = { roleIds: [] }
+    expect(() => toRoleAssignPayload('company-user-1', form)).toThrow()
+  })
+
+  test('齊全時組出完整 payload', () => {
+    const form: RoleAssignFormState = { roleIds: ['role-1', 'role-2'] }
+    const payload = toRoleAssignPayload('company-user-1', form)
+    expect(payload).toEqual({ companyUserId: 'company-user-1', roleIds: ['role-1', 'role-2'] })
+  })
+})
+
+describe('toRoleRevokePayload', () => {
+  test('由 companyUserId 與單一 roleId 組出 payload（沒有表單狀態）', () => {
+    const payload = toRoleRevokePayload('company-user-1', 'role-1')
+    expect(payload).toEqual({ companyUserId: 'company-user-1', roleIds: ['role-1'] })
+  })
+})
+
+describe('toResetPasswordPayload', () => {
+  test('由 companyUserId 與表單值組出 payload', () => {
+    const form: ResetPasswordFormState = { newPassword: 'new-secret-1' }
+    const payload = toResetPasswordPayload('company-user-1', form)
+    expect(payload).toEqual({ companyUserId: 'company-user-1', newPassword: 'new-secret-1' })
+  })
+})
+
+describe('toRoleAssignmentListQuery', () => {
+  test('固定排序（最近指派在前）、只查未撤銷的指派', () => {
+    const query = toRoleAssignmentListQuery('company-user-1', 1)
+    expect(query).toEqual({
+      companyUserId: 'company-user-1',
+      includeRevoked: false,
+      currentPage: 1,
+      perPage: 20,
+      sort: ROLE_ASSIGNMENT_LIST_SORT,
+    })
   })
 })

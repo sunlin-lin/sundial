@@ -28,6 +28,7 @@ import { publicGuard } from '../http/public-guard.ts'
 import { refreshGuard } from '../http/refresh-guard.ts'
 import { companyUsersMainRoutes, companyUsersRolesRoutes } from '../modules/company-users/routes.ts'
 import { departmentsMainRoutes } from '../modules/departments/routes.ts'
+import { dependentsMainRoutes } from '../modules/dependents/routes.ts'
 import { employeesMainRoutes, employeesOnboardingRoutes } from '../modules/employees/routes.ts'
 import {
   employmentsDepartmentHistoriesRoutes,
@@ -37,6 +38,7 @@ import {
 } from '../modules/employments/routes.ts'
 import { jobPositionsMainRoutes } from '../modules/job-positions/routes.ts'
 import { jobTitlesMainRoutes } from '../modules/job-titles/routes.ts'
+import { laborPensionMainRoutes } from '../modules/labor-pension/routes.ts'
 import { permissionsMainRoutes } from '../modules/permissions/routes.ts'
 import { regulatoryDatasetsRoutes, regulatorySyncRoutes } from '../modules/regulatory/routes.ts'
 import { rolesMainRoutes } from '../modules/roles/routes.ts'
@@ -129,6 +131,11 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
       .use(jobPositionsMainRoutes({ db: database, clock }))
       // 扣繳設定：同樣不需要 cipher。
       .use(withholdingMainRoutes({ db: database, clock }))
+      // 勞退自願提繳率：同樣不需要 cipher（沒有個資欄位）。實作計畫 05-employee-onboarding.md Stage 7。
+      .use(laborPensionMainRoutes({ db: database, clock }))
+      // 眷屬：需要 cipher（身分證字號比照員工加密＋blind index，見
+      // `modules/dependents/main/domain/dependent-context.ts`）。同一計畫 Stage 7。
+      .use(dependentsMainRoutes({ db: database, cipher, clock }))
       // 法規資料集：**刻意不注入 clock**（實作計畫 §4.2）。這四支端點的時間維度只有呼叫端送來的
       // `asOfDate`，拿得到 clock 就寫得出「沒帶就用今天」，而那會讓補算去年 12 月的薪資
       // 抓到今年的費率，算出一個完全合理的數字。也沒有公司範圍——法規三表是平台全域資料。

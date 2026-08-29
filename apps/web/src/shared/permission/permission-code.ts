@@ -88,10 +88,6 @@ const PERMISSION_CODES = [
   // `employments.job-title-histories.create`／`employments.job-position-histories.create`
   // 比對過 `0029_seed_permission_codes_job_titles_positions.sql`。
   //
-  // **§3.5 帳號與角色不在這份清單裡**：後端沒有任何端點能由 `employeeId` 查出對應的
-  // `companyUserId`（`company-users/main` 只有 `reset-password`，`company-users/roles/list`
-  // 的 `companyUserId` 是選填的查詢條件而不是查詢入口），本輪因此沒有實作那個分頁的實際動作，
-  // 也就沒有會呼叫 `can(...)` 的消費者（見 `employees-detail.page.vue` 檔頭與交付報告）。
   'employees.main.get',
   'employees.main.update',
   'employments.main.create',
@@ -100,6 +96,19 @@ const PERMISSION_CODES = [
   'employments.job-title-histories.create',
   'employments.job-position-histories.create',
   'withholding.main.create',
+  // §3.5 帳號與角色（計畫 05 Stage 6 第三段）：`employees.main.get` 現在回 `companyUserId`，
+  // 這三碼因此接上了消費者（`AccountRoleAssignmentSection.vue`／`AccountResetPasswordSection.vue`
+  // 分別呼叫 `canAssignRole`／`canRevokeRole`／`canResetPassword`）。逐字比對過
+  // `0003_seed_permission_codes_company_users.sql`（`company-users.roles.create`／`.revoke`）、
+  // `0031_seed_permission_codes_company_users_main.sql`（`company-users.main.reset-password`）。
+  //
+  // **`roles.main.list`／`company-users.roles.list` 不在這份清單裡**：兩者都只是清單查詢
+  // （可指派角色字典、目前角色指派），與 `employments.main.list`（同檔案已經確立的先例，同樣
+  // 不在清單裡）同構——這一輪沒有任何 `can(...)` 呼叫點會判斷這兩碼，兩支端點各自的 `901`
+  // 由 `toLoadFailure` 分流處理，不需要前端另外用 `can` 決定要不要發出查詢。
+  'company-users.roles.create',
+  'company-users.roles.revoke',
+  'company-users.main.reset-password',
 ] as const satisfies readonly ApiCommand[]
 
 /** 權限碼。全站判斷權限一律用這個型別，不用 `string`。 */

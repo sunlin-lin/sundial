@@ -482,10 +482,32 @@ export const ZH_TW = {
   'employees-detail.withholding.field.effective-to': '結束日（選填）',
   'employees-detail.withholding.toast.created': '扣繳設定已建立。',
 
-  // §3.5 帳號與角色：本輪未實作，理由見 `EmployeeAccountRolesTab.vue` 檔頭與交付報告。
-  'employees-detail.account.blocked-title': '這個分頁目前無法使用',
-  'employees-detail.account.blocked-message':
-    '後端目前沒有任何端點能由員工查出對應的登入帳號（company user）：查詢角色指派、重設密碼都需要帳號 id，但員工明細不會回傳它，也沒有「以員工查帳號」的端點。這個分頁因此還不能運作，需要後端補上對應端點後才能接上。',
+  // §3.5 帳號與角色
+  'employees-detail.account.no-active-account':
+    '這位員工目前沒有有效的登入帳號（尚未建立帳號，或帳號已因離職而停用）。',
+
+  'employees-detail.account.section.status': '帳號狀態',
+  'employees-detail.account.status.active': '啟用中',
+  'employees-detail.account.status.no-toggle-hint':
+    '帳號停用只會在辦理員工離職時由系統自動執行；目前沒有提供管理者另外啟用或停用帳號的功能。',
+
+  'employees-detail.account.section.reset-password': '重設密碼',
+  'employees-detail.account.field.new-password': '新密碼',
+  'employees-detail.account.field.new-password-hint': '長度需為 8～128 個字元；重設後不會寄送 Email、簡訊或系統通知。',
+  'employees-detail.account.action.reset-password': '重設密碼',
+  'employees-detail.account.toast.password-reset': '密碼已重設。',
+
+  'employees-detail.account.section.roles': '角色指派',
+  'employees-detail.account.roles-empty': '這個帳號目前沒有任何角色。',
+  'employees-detail.account.column.role': '角色',
+  'employees-detail.account.column.assigned-at': '指派時間',
+  'employees-detail.account.column.assigned-by': '指派者',
+  'employees-detail.account.action.revoke': '移除',
+  'employees-detail.account.hint.last-role': '每個帳號至少要保留一個角色，無法移除最後一個。',
+  'employees-detail.account.field.role-ids': '新增角色',
+  'employees-detail.account.action.assign': '新增角色',
+  'employees-detail.account.toast.role-assigned': '角色已新增。',
+  'employees-detail.account.toast.role-revoked': '角色已移除。',
 
   /** 前端自己要說的話，見檔頭的「唯一的例外」。 */
   'error.system': '系統發生錯誤，請稍後再試。',

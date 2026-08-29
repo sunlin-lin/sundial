@@ -1,40 +1,45 @@
 <script setup lang="ts">
 /**
- * §3.5 帳號與角色（本頁私有子元件，§1.5）。**本輪沒有實作實際功能，只顯示說明訊息。**
+ * §3.5 帳號與角色（本頁私有子元件，§1.5）。
  *
- * UI 定案要求這個分頁能管理登入帳號狀態、重設密碼、增加／移除角色，對應端點是
- * `company-users/main/reset-password` 與 `company-users/roles/list`／`create`／`revoke`。
- * 但這三支端點全部要求 `companyUserId`，而**目前的 API 表面完全沒有辦法由 `employeeId` 查出
- * 對應的 `companyUserId`**：
+ * `companyUserId` 由 `.page.vue` 往下傳：`employees.main.get` 現在回這一欄（`null` 代表這位
+ * 員工目前沒有有效的登入帳號——從未透過 onboarding 建立，或帳號已因離職而被停用；兩種情形對
+ * 這個分頁而言是同一件事：沒有 id 就沒有東西可以查詢或送出，這是合理的畫面狀態，不是錯誤，
+ * 因此用 `ElAlert type="info"` 而不是錯誤樣式呈現）。
  *
- * - `employees.main.get` 的回應（`EmployeeSummarySchema`）沒有這個欄位。
- * - `company-users/main` 只有一支端點 `reset-password`，沒有 `get`／`list`。
- * - `company-users/roles/list` 的 `companyUserId` 是**選填**的查詢條件（拿掉就查全公司），
- *   不是「用員工反查帳號」的入口；就算不帶這個條件把全公司的角色指派都撈出來，回應裡的
- *   `assignedByName` 是「執行指派這個動作的人」，不是「被指派角色的這位員工」，一樣拼不回這位員工。
+ * 兩個子區塊各自獨立打自己的 API、各自處理自己的 loading／錯誤——「帳號狀態與重設密碼」
+ * （`AccountResetPasswordSection.vue`）與「角色指派」（`AccountRoleAssignmentSection.vue`），
+ * 理由與 `EmployeeOrganizationTab.vue` 底下三個 History 子元件同構。
  *
- * 這條連結只存在後端內部（`company_users` 表有 `employee_id` 外鍵，`company-users/main/impl/
- * find-active-by-employee.repository.ts` 用得到，但那是離職流程內部呼叫，沒有對外的 HTTP 端點）。
- * 因此這個分頁目前**畫不出任何一顆能動的按鈕**——沒有 id 就沒有東西可以查詢或送出，
- * 硬做一個「猜」的方案（例如拿員工姓名去比對某個列表）在多人同名或帳號名稱與員工姓名不同時
- * 會查到別人的帳號，那是比「這個功能不能用」更糟的結果。已在交付報告回報，需要後端補上
- * 對應的查詢端點（或在 `employees.main.get`／`employments.main.get` 之類的回應中带出
- * `companyUserId`）才能接上。
+ * **帳號啟用／停用沒有做成這裡的功能**：後端 `company-users/main` 目前只有 `reset-password`
+ * 一支對外端點，啟用／停用只在離職流程內部發生，沒有給管理者的對外端點可以呼叫——已在交付
+ * 報告回報這個缺口，細節見 `AccountResetPasswordSection.vue` 檔頭。
  */
 import { useI18n } from 'vue-i18n'
 import { ElAlert } from 'element-plus'
 import type { TranslateMessage } from '../../../../shared/i18n/messages.ts'
+import type { PermissionCode } from '../../../../shared/permission/permission-code.ts'
+import AccountResetPasswordSection from './AccountResetPasswordSection.vue'
+import AccountRoleAssignmentSection from './AccountRoleAssignmentSection.vue'
 
 const { t } = useI18n()
 const $t: TranslateMessage = t
+
+defineProps<{ companyUserId: string | null; can: (code: PermissionCode) => boolean }>()
 </script>
 
 <template>
-  <ElAlert
-    type="warning"
-    show-icon
-    :closable="false"
-    :title="$t('employees-detail.account.blocked-title')"
-    :description="$t('employees-detail.account.blocked-message')"
-  />
+  <section>
+    <ElAlert
+      v-if="companyUserId === null"
+      type="info"
+      show-icon
+      :closable="false"
+      :title="$t('employees-detail.account.no-active-account')"
+    />
+    <div v-else class="space-y-6">
+      <AccountResetPasswordSection :company-user-id="companyUserId" :can="can" />
+      <AccountRoleAssignmentSection :company-user-id="companyUserId" :can="can" />
+    </div>
+  </section>
 </template>

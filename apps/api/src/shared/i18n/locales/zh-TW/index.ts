@@ -10,10 +10,12 @@
  */
 import { COMPANY_USERS } from './company-users.ts'
 import { DEPARTMENTS } from './departments.ts'
+import { DEPENDENTS } from './dependents.ts'
 import { EMPLOYEES } from './employees.ts'
 import { EMPLOYMENTS } from './employments.ts'
 import { JOB_POSITIONS } from './job-positions.ts'
 import { JOB_TITLES } from './job-titles.ts'
+import { LABOR_PENSION } from './labor-pension.ts'
 import { PERMISSIONS } from './permissions.ts'
 import { PLATFORM } from './platform.ts'
 import { REGULATORY } from './regulatory.ts'
@@ -42,6 +44,8 @@ export const ZH_TW_ERRORS = {
   withholding: WITHHOLDING,
   'job-titles': JOB_TITLES,
   'job-positions': JOB_POSITIONS,
+  dependents: DEPENDENTS,
+  'labor-pension': LABOR_PENSION,
 } as const
 
 /** 平台層訊息樹（envelope 頂層 `msg` 在非 `300` 路徑上用的那幾句）。理由見 `platform.ts` 檔頭。 */

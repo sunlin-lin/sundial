@@ -256,6 +256,50 @@ export const AUDIT_FIELD_POLICY = {
       effectiveTo: AuditFieldLevel.Value,
     },
   },
+  /**
+   * 眷屬新增、修改及終止（資料字典明列；實作計畫 `plans/05-employee-onboarding.md` §6、
+   * §8 Stage 7）。`source` 指向 {@link DependentAuditSnapshot}，同時涵蓋 `create`／`terminate`
+   * 兩個動作各自會用到的欄位——與 `employee_employments` 的 `EmploymentAuditSnapshot`
+   * （同時涵蓋 `create`／`leave`）同一種形狀，理由同構：`create` 時 `endDate` 恆為 `null`、
+   * `status` 恆為 `ACTIVE`，`terminate` 只改動 `endDate`／`status`。
+   *
+   * **`identityNumber`／`birthday` 是 `presence` 級，判準與 `employees` 逐字相同**：
+   * 業務欄位對應到 `employee_dependents` 的 `*_encrypted` 欄位者，一律 `presence`
+   * ——理由完整寫在上面 `employees.fields` 的同名說明，不重複。其餘欄位（姓名、關係代碼、
+   * 四個資格布林值、生效日、結束日、狀態）都不是加密欄位，記值不擴大任何外洩面，
+   * 而且正是「這個人什麼時候開始／結束列入扶養、資格條件何時變動」這種需要前後值才回答得出來
+   * 的問題。
+   */
+  employee_dependents: {
+    source: 'modules/dependents/main/domain/dependent-model.ts#DependentAuditSnapshot',
+    fields: {
+      name: AuditFieldLevel.Value,
+      identityNumber: AuditFieldLevel.Presence,
+      birthday: AuditFieldLevel.Presence,
+      relationshipCode: AuditFieldLevel.Value,
+      isStudent: AuditFieldLevel.Value,
+      isDisabled: AuditFieldLevel.Value,
+      isUnableToWork: AuditFieldLevel.Value,
+      isCohabiting: AuditFieldLevel.Value,
+      effectiveDate: AuditFieldLevel.Value,
+      endDate: AuditFieldLevel.Value,
+      status: AuditFieldLevel.Value,
+    },
+  },
+  /**
+   * 扣繳方式與勞退自願提繳率異動（資料字典明列；實作計畫 `plans/05-employee-onboarding.md` §6、
+   * §8 Stage 7）。形狀與 `employee_withholding_settings` 完全同構——鎖粒度、期間重疊的處置、
+   * 稽核欄位都跟扣繳設定一樣，差別只在多一個不需要稽核的 `createdBy`（設定者本身不是「被改動的
+   * 欄位」，與 `employee_job_title_histories` 不記 `employmentId` 是同一個理由）。
+   */
+  employee_labor_pension_settings: {
+    source: 'modules/labor-pension/main/domain/labor-pension-model.ts#LaborPensionSettingAuditSnapshot',
+    fields: {
+      voluntaryContributionRate: AuditFieldLevel.Value,
+      effectiveFrom: AuditFieldLevel.Value,
+      effectiveTo: AuditFieldLevel.Value,
+    },
+  },
 } as const satisfies Readonly<Record<string, AuditTablePolicy>>
 
 /**

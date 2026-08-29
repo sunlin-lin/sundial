@@ -12,10 +12,12 @@
  * 不在本段動另一頁沒被要求變動的檔案（見交付報告）。
  */
 import type {
+  CompanyUsersRolesListData,
   DepartmentsMainTreeData,
   EmployeesMainGetData,
   EmploymentsMainListData,
   JobTitlesMainListData,
+  RolesMainListData,
 } from '../../../api/generated/api-client.ts'
 import { EMPTY_DISPLAY } from '../../../shared/format/empty-display.ts'
 import type { MessageKey } from '../../../shared/i18n/messages.ts'
@@ -26,6 +28,13 @@ export type EmployeeSummary = NonNullable<EmployeesMainGetData>
 
 /** `emailMasked` 是選填欄位、可能是 `null`（員工沒有留 Email）；空值呈現交給這裡，不留在模板內判斷（§1.4）。 */
 export const emailMaskedDisplay = (employee: EmployeeSummary): string => employee.emailMasked ?? EMPTY_DISPLAY
+
+/**
+ * `companyUserId` 在 schema 上宣告成 `t.Optional`（相容性考量，見 `employees-main.routes.ts`
+ * 的 `EmployeeDetailSchema` 檔頭），但 handler 沒有任何分支會省略它——這裡把 `undefined` 收斂成
+ * `null`，讓 §3.5 分頁只需要處理「有沒有這個 id」一種形狀，不必再多判斷一種空值。
+ */
+export const companyUserIdOf = (employee: EmployeeSummary): string | null => employee.companyUserId ?? null
 
 /** 部門樹的一個節點；`ElTreeSelect` 直接吃這個形狀。 */
 export type DepartmentTreeNode = DepartmentsMainTreeData[number]
@@ -104,3 +113,28 @@ export const formatOpenCode = (value: number | null): string => (value === null 
  */
 export const isCurrentlyEffective = (effectiveFrom: string, effectiveTo: string | null, today: string): boolean =>
   effectiveFrom <= today && (effectiveTo === null || today <= effectiveTo)
+
+// ============================================================================================
+// §3.5 帳號與角色
+// ============================================================================================
+
+/** 角色指派清單單筆（`company-users/roles/list` 回應，只查未撤銷的）。 */
+export type RoleAssignmentItem = CompanyUsersRolesListData['data'][number]
+
+/** 可指派角色字典單筆（`roles/main/list` 回應，只查啟用中的角色）。 */
+export type AssignableRoleItem = RolesMainListData['data'][number]
+
+/**
+ * 「新增角色」下拉可選的角色：從角色字典裡排除這個帳號已經有效指派的那些。
+ *
+ * 不排除的話，使用者選到一個已經指派的角色，送出後必定被後端的 `already-assigned`（409）擋下來
+ * ——排除是體驗優化，不是安全邊界，後端仍然會再檢查一次（§3.1／§3.2 前端隱藏不等於權限控制，
+ * 這裡是同一個道理：不等於業務規則控制）。
+ */
+export const assignableRoleOptions = (
+  allRoles: readonly AssignableRoleItem[],
+  activeAssignments: readonly RoleAssignmentItem[],
+): readonly AssignableRoleItem[] => {
+  const assignedRoleIds = new Set(activeAssignments.map((assignment) => assignment.roleId))
+  return allRoles.filter((role) => !assignedRoleIds.has(role.id))
+}

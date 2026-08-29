@@ -12,9 +12,9 @@
  * 用來掛部門／職稱／職務異動的 `employmentId`——兩個分頁本來就在談同一件事，狀態因此只存一份，
  * 由這裡往下傳，不是各自各打一次 `list`。
  *
- * **§3.5 帳號與角色本輪沒有實際功能**：後端沒有任何端點能由 `employeeId` 查出對應的
- * `companyUserId`（見 `EmployeeAccountRolesTab.vue` 檔頭），因此那個分頁只顯示說明訊息，
- * 已在交付報告回報這個缺口。
+ * **§3.5 帳號與角色**：`employees.main.get` 現在回 `companyUserId`（可為 `null`），本頁把它
+ * 原樣往下傳給 `EmployeeAccountRolesTab.vue`，該分頁自己判斷 `null` 時要顯示的畫面狀態。
+ * 帳號啟用／停用沒有對外端點這件事仍然存在，細節與交付報告見該分頁與其子元件的檔頭。
  */
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -34,7 +34,7 @@ import EmployeeEmploymentTab from './components/EmployeeEmploymentTab.vue'
 import EmployeeOrganizationTab from './components/EmployeeOrganizationTab.vue'
 import EmployeeWithholdingTab from './components/EmployeeWithholdingTab.vue'
 import { EMPLOYMENT_LIST_PER_PAGE, toEmploymentListQuery } from './employees-detail.payload.ts'
-import type { EmployeeSummary, EmploymentItem } from './employees-detail.view.ts'
+import { companyUserIdOf, type EmployeeSummary, type EmploymentItem } from './employees-detail.view.ts'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -223,7 +223,7 @@ onMounted(() => {
       </ElTabPane>
 
       <ElTabPane :label="$t('employees-detail.tab.account')">
-        <EmployeeAccountRolesTab />
+        <EmployeeAccountRolesTab :company-user-id="companyUserIdOf(employee)" :can="auth.can" />
       </ElTabPane>
     </ElTabs>
   </AppShell>
