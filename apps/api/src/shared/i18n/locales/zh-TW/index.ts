@@ -11,12 +11,14 @@
 import { COMPANY_USERS } from './company-users.ts'
 import { DEPARTMENTS } from './departments.ts'
 import { EMPLOYEES } from './employees.ts'
+import { EMPLOYMENTS } from './employments.ts'
 import { PERMISSIONS } from './permissions.ts'
 import { PLATFORM } from './platform.ts'
 import { REGULATORY } from './regulatory.ts'
 import { ROLES } from './roles.ts'
 import { SESSIONS } from './sessions.ts'
 import { SHIFTS } from './shifts.ts'
+import { WITHHOLDING } from './withholding.ts'
 
 /**
  * 業務錯誤碼的訊息樹（§1.3）。**這棵樹的 key 攤平之後就是 `ErrorCode` 聯集**（見 `../../messages.ts`）。
@@ -34,6 +36,8 @@ export const ZH_TW_ERRORS = {
   regulatory: REGULATORY,
   shifts: SHIFTS,
   departments: DEPARTMENTS,
+  employments: EMPLOYMENTS,
+  withholding: WITHHOLDING,
 } as const
 
 /** 平台層訊息樹（envelope 頂層 `msg` 在非 `300` 路徑上用的那幾句）。理由見 `platform.ts` 檔頭。 */

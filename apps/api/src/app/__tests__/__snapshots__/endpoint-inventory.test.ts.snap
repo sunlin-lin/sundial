@@ -14,6 +14,11 @@ exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | �
 /employees/main/get | employees.main.get | authenticated | cmd,id,locale,rqTS
 /employees/main/list | employees.main.list | authenticated | cmd,currentPage,locale,perPage,rqTS
 /employees/main/update | employees.main.update | authenticated | address,birthday,cmd,employeeCode,gender,id,identityNumber,locale,name,phone,rqTS
+/employments/department-histories/list | employments.department-histories.list | authenticated | cmd,currentPage,employmentId,locale,perPage,rqTS
+/employments/main/create | employments.main.create | authenticated | cmd,employeeId,employmentTypeCode,hireDate,locale,rqTS
+/employments/main/get | employments.main.get | authenticated | cmd,id,locale,rqTS
+/employments/main/leave | employments.main.leave | authenticated | cmd,id,lastWorkingDate,leaveDate,leaveReasonCode,locale,rqTS
+/employments/main/list | employments.main.list | authenticated | cmd,currentPage,locale,perPage,rqTS
 /permissions/main/tree | permissions.main.tree | authenticated | cmd,locale,rqTS
 /regulatory/datasets/get | regulatory.datasets.get | authenticated | cmd,id,locale,rqTS
 /regulatory/datasets/list | regulatory.datasets.list | authenticated | cmd,currentPage,datasetCode,locale,perPage,rqTS
@@ -37,5 +42,7 @@ exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | �
 /shifts/main/delete | shifts.main.delete | authenticated | cmd,id,locale,rqTS
 /shifts/main/get | shifts.main.get | authenticated | cmd,id,locale,rqTS
 /shifts/main/list | shifts.main.list | authenticated | cmd,currentPage,locale,perPage,rqTS
-/shifts/main/update | shifts.main.update | authenticated | breaks,cmd,code,description,id,isActive,isFlexible,locale,name,rqTS,workPeriods,workTypeCode"
+/shifts/main/update | shifts.main.update | authenticated | breaks,cmd,code,description,id,isActive,isFlexible,locale,name,rqTS,workPeriods,workTypeCode
+/withholding/main/create | withholding.main.create | authenticated | cmd,effectiveFrom,employeeId,locale,rqTS,withholdingMethodCode
+/withholding/main/list | withholding.main.list | authenticated | cmd,currentPage,employeeId,locale,perPage,rqTS"
 `;

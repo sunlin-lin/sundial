@@ -29,10 +29,12 @@ import { refreshGuard } from '../http/refresh-guard.ts'
 import { companyUsersRolesRoutes } from '../modules/company-users/routes.ts'
 import { departmentsMainRoutes } from '../modules/departments/routes.ts'
 import { employeesMainRoutes } from '../modules/employees/routes.ts'
+import { employmentsDepartmentHistoriesRoutes, employmentsMainRoutes } from '../modules/employments/routes.ts'
 import { permissionsMainRoutes } from '../modules/permissions/routes.ts'
 import { regulatoryDatasetsRoutes, regulatorySyncRoutes } from '../modules/regulatory/routes.ts'
 import { rolesMainRoutes } from '../modules/roles/routes.ts'
 import { shiftsMainRoutes } from '../modules/shifts/routes.ts'
+import { withholdingMainRoutes } from '../modules/withholding/routes.ts'
 import {
   sessionsMainAuthenticatedRoutes,
   sessionsMainPublicRoutes,
@@ -103,6 +105,11 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
       // 部門主檔：同樣不需要 cipher（部門沒有個資欄位，也刻意不含部門主管欄位，見
       // `db/schema/departments.ts` 檔頭）。
       .use(departmentsMainRoutes({ db: database, clock }))
+      // 任職主檔與部門歷史：不需要 cipher（兩者都沒有個資欄位，`employee_id` 只是識別碼）。
+      .use(employmentsMainRoutes({ db: database, clock }))
+      .use(employmentsDepartmentHistoriesRoutes({ db: database, clock }))
+      // 扣繳設定：同樣不需要 cipher。
+      .use(withholdingMainRoutes({ db: database, clock }))
       // 法規資料集：**刻意不注入 clock**（實作計畫 §4.2）。這四支端點的時間維度只有呼叫端送來的
       // `asOfDate`，拿得到 clock 就寫得出「沒帶就用今天」，而那會讓補算去年 12 月的薪資
       // 抓到今年的費率，算出一個完全合理的數字。也沒有公司範圍——法規三表是平台全域資料。

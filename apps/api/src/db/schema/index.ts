@@ -41,11 +41,27 @@ export { shiftDefinitions, ShiftWorkType, type ShiftWorkTypeValue } from './shif
 export { shiftWorkPeriods } from './shift-work-periods.ts'
 export { shiftBreaks } from './shift-breaks.ts'
 export { departments, DepartmentStatus, type DepartmentStatusValue } from './departments.ts'
+export {
+  employeeEmployments,
+  EmploymentStatus,
+  type EmploymentStatusValue,
+  EmploymentTypeCode,
+  type EmploymentTypeCodeValue,
+} from './employee-employments.ts'
+export { employeeDepartmentHistories } from './employee-department-histories.ts'
+export {
+  employeeWithholdingSettings,
+  WithholdingMethodCode,
+  type WithholdingMethodCodeValue,
+} from './employee-withholding-settings.ts'
 
 import { auditLogs } from './audit-logs.ts'
 import { companyUserRoles } from './company-user-roles.ts'
 import { companyUsers } from './company-users.ts'
 import { departments } from './departments.ts'
+import { employeeDepartmentHistories } from './employee-department-histories.ts'
+import { employeeEmployments } from './employee-employments.ts'
+import { employeeWithholdingSettings } from './employee-withholding-settings.ts'
 import { employees } from './employees.ts'
 import { refreshTokens } from './refresh-tokens.ts'
 import { rolePermissions } from './role-permissions.ts'
@@ -110,6 +126,21 @@ export type CompanyScopedTable =
    * 這裡的順序只需要管「哪些其他表參照了 `departments`」。
    */
   | typeof departments
+  /**
+   * `employee_employments`／`employee_department_histories`／`employee_withholding_settings`
+   * 三張都有 `company_id`，因此屬於這個聯集（實作計畫 `plans/05-employee-onboarding.md` Stage 3）。
+   * **三張表字典本身都沒有 `company_id` 欄位**，這裡新增的理由與加入的方式完全同構，寫在各自的
+   * `db/schema/employee-*.ts` 檔頭第 1 點，這裡不重複。
+   *
+   * **排序（見下方陣列）：`employeeDepartmentHistories`／`employeeWithholdingSettings` 必須排在
+   * `employeeEmployments` 之前，`employeeEmployments` 必須排在 `employees` 之前**——三張表都以
+   * 複合外鍵指向被參照端，`companyScopedTablesInDeleteOrder` 清理整間公司時，子表必須先於父表被
+   * 清空，否則撞外鍵違反（`departments`／`shift_definitions` 那次事故的同一個成因，見下方陣列的
+   * 註解）。`employeeDepartmentHistories` 另外參照 `departments`，因此也必須排在它之前。
+   */
+  | typeof employeeEmployments
+  | typeof employeeDepartmentHistories
+  | typeof employeeWithholdingSettings
 
 /**
  * 對「窮舉一個聯集的所有成員」做編譯期檢查的小工具，供下方 {@link companyScopedTablesInDeleteOrder} 使用。
@@ -174,6 +205,13 @@ export const companyScopedTablesInDeleteOrder = exhaustiveCompanyScopedTables<Co
   companyUserRoles,
   rolePermissions,
   refreshTokens,
+  // 三張新表必須排在 employees（也早於 departments、employeeEmployments）之前：見上方型別聯集的
+  // 排序註解。employeeDepartmentHistories 同時參照 employeeEmployments 與 departments，因此必須
+  // 排在兩者之前；employeeWithholdingSettings 與 employeeEmployments 都只參照 employees，因此都
+  // 必須排在 employees 之前，兩者之間互不依賴（順序無關）。
+  employeeDepartmentHistories,
+  employeeWithholdingSettings,
+  employeeEmployments,
   employees,
   shiftDefinitions,
   departments,

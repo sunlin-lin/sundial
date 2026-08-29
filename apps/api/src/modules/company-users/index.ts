@@ -6,10 +6,11 @@
  * §4.2「裸 db client 限資料存取層」那條規則會被繞過，而繞過的路徑在 import 語句上完全看不出來。
  * routes 由組裝點（`app/routes.ts`）直接掛載，不從這裡流出去。
  *
- * TODO(company-users/main 落地時): 員工帳號本身的動作（建立、停用、重設密碼）會是
- * `./main/company-users-main.service.ts`，屆時在下面加一段同形狀的 re-export 即可
- * ——本檔的形狀已經預留好，不需要重排。
+ * `main` 次目錄目前只有 {@link deactivateCompanyUser} 一支（實作計畫 `plans/05-employee-
+ * onboarding.md` §7：離職時同步停用帳號，但不刪除帳號與角色歷史），供 `employments/main` 的
+ * 離職動作呼叫。員工帳號的其餘動作（建立、重設密碼）留到之後的階段。
  */
+export { deactivateCompanyUser, type CompanyUserDeactivation } from './main/company-users-main.service.ts'
 export {
   assignRoles,
   listPermissionCodes,

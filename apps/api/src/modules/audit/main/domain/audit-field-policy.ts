@@ -143,6 +143,12 @@ export const AUDIT_FIELD_POLICY = {
     source: 'modules/audit/main/domain/audit-company-users-content.ts#CompanyUsersAuditContent',
     fields: {
       /**
+       * 帳號在公司內的狀態。**新增於計畫 `05-employee-onboarding.md` Stage 3**：離職流程停用帳號時
+       * 記錄前後狀態（`ACTIVE` → `INACTIVE`）。記值不記密——狀態本身不是敏感資料，
+       * 而「這個帳號什麼時候被停用」正是資料字典要求稽核的內容。
+       */
+      status: AuditFieldLevel.Value,
+      /**
        * 角色 id 陣列不是敏感資料（角色本身就是可見的組織資訊），記值才能回答「這個成員被指派／
        * 撤銷了哪些角色」——這正是資料字典要求稽核的內容（計畫 §1：「誰在什麼時候把某個角色指派
        * 給某人／撤銷」）。序列化成字串的理由見 `audit-company-users-content.ts`。
@@ -161,6 +167,53 @@ export const AUDIT_FIELD_POLICY = {
        * `domain/audit-company-users-content.ts` 的 `reusedTokenId` 檔頭。
        */
       reusedTokenId: AuditFieldLevel.Value,
+    },
+  },
+  /**
+   * 任職異動與離職操作（實作計畫 `plans/05-employee-onboarding.md` Stage 3、資料字典明列的
+   * 「任職資料與離職操作」）。`source` 指向 service 層的稽核快照型別，不是 `EmploymentDetail`
+   * ——理由與 `employees` 的 `EmployeeProfileInput` 相同：拿輸出型別當來源，會把不該記的推導值
+   * （`id`／`employeeId`／`createdAt`／`updatedAt`）也混進定義域。
+   *
+   * 全部欄位都是 `value` 級：沒有一欄是個資或加密欄位，僱用型態、日期、狀態代碼記值不擴大任何
+   * 外洩面，而且正是「這個人什麼時候到職、什麼時候離職、為什麼離職」這種需要前後值才回答得出來
+   * 的問題。
+   */
+  employee_employments: {
+    source: 'modules/employments/main/domain/employment-model.ts#EmploymentAuditSnapshot',
+    fields: {
+      employmentTypeCode: AuditFieldLevel.Value,
+      employmentNatureCode: AuditFieldLevel.Value,
+      hireDate: AuditFieldLevel.Value,
+      leaveDate: AuditFieldLevel.Value,
+      lastWorkingDate: AuditFieldLevel.Value,
+      leaveReasonCode: AuditFieldLevel.Value,
+      status: AuditFieldLevel.Value,
+    },
+  },
+  /**
+   * 部門異動（資料字典明列「部門、職稱及職務異動」）。目前只有 `create`（新增一筆部門歷史）
+   * 會呼叫，沒有個資欄位，全部記值。
+   */
+  employee_department_histories: {
+    source:
+      'modules/employments/department-histories/domain/department-history-model.ts#DepartmentHistoryAuditSnapshot',
+    fields: {
+      departmentId: AuditFieldLevel.Value,
+      effectiveFrom: AuditFieldLevel.Value,
+      effectiveTo: AuditFieldLevel.Value,
+    },
+  },
+  /**
+   * 扣繳方式異動（資料字典明列「扣繳方式與勞退自願提繳率異動」）。扣繳方式代碼與生效期間都不是
+   * 個資，全部記值——「這位員工的扣繳方式什麼時候從哪個代碼改成哪個代碼」正是稽核要回答的問題。
+   */
+  employee_withholding_settings: {
+    source: 'modules/withholding/main/domain/withholding-model.ts#WithholdingSettingAuditSnapshot',
+    fields: {
+      withholdingMethodCode: AuditFieldLevel.Value,
+      effectiveFrom: AuditFieldLevel.Value,
+      effectiveTo: AuditFieldLevel.Value,
     },
   },
 } as const satisfies Readonly<Record<string, AuditTablePolicy>>

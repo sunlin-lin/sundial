@@ -30,6 +30,14 @@
  */
 export type CompanyUsersAuditContent = {
   /**
+   * 帳號在公司內的狀態（`ACTIVE`／`INACTIVE`）。**新增於實作計畫 `plans/05-employee-onboarding.md`
+   * Stage 3**：離職流程（`modules/employments/main/impl/employments-main.leave.service.ts`）
+   * 辦理離職時同步停用該員工的公司帳號，資料字典明列「帳號啟用、停用…要留稽核」。
+   * 與 `roleIds`／`revokedTokenIds`／`reusedTokenId` 同一個模式——這個主體上發生的事，
+   * 記的是「這一列的狀態欄位」，因此用 `value` 級（狀態本身不是敏感資料）。
+   */
+  readonly status: string | null
+  /**
    * 角色指派／撤銷後，序列化的角色 id 陣列（`JSON.stringify`，排序過）。
    * `null` 代表這個方向（前或後）沒有任何有效角色。
    */

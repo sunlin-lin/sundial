@@ -176,6 +176,20 @@
       "when": 1787931751839,
       "tag": "0024_seed_permission_codes_departments",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1787963039951,
+      "tag": "0025_create_employments_department_histories_withholding",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1787963067811,
+      "tag": "0026_seed_permission_codes_employments_withholding",
+      "breakpoints": true
     }
   ]
 }
