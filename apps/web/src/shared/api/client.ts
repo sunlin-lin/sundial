@@ -10,21 +10,12 @@
  * 對外只回 `data`，失敗一律拋型別化錯誤；頁面碰不到 `rspTS`／`locale`／`msg`／`exp`。
  */
 import { forgetAccessToken, readAccessToken, rememberAccessToken } from './access-token.ts'
-import {
-  AuthRequiredError,
-  BusinessRuleError,
-  PermissionDeniedError,
-  SystemFailureError,
-} from './api-error.ts'
+import { AuthRequiredError, BusinessRuleError, PermissionDeniedError, SystemFailureError } from './api-error.ts'
 import { parseResponseEnvelope, WEB_FLOW_CODE, type ResponseEnvelope } from './envelope.ts'
 import { axiosTransport, type Transport } from './http-transport.ts'
 import { isRecord, readNonEmptyString } from './record-shape.ts'
 import { currentRequestTimestamp } from './request-timestamp.ts'
-import {
-  clearSessionDeadline,
-  isSessionDeadlinePassed,
-  renewSessionDeadline,
-} from './session-deadline.ts'
+import { clearSessionDeadline, isSessionDeadlinePassed, renewSessionDeadline } from './session-deadline.ts'
 
 /** 介面語言（後端規範 §1.3 的 `locale`）。目前只有 zh-TW。 */
 const LOCALE = 'zh-TW'
@@ -80,10 +71,7 @@ export const replaceTransport = (next: Transport): void => {
 
 // --- 送出與拆解 -------------------------------------------------------------
 
-const sendEnvelope = async (
-  path: string,
-  body: Readonly<Record<string, unknown>>,
-): Promise<ResponseEnvelope> => {
+const sendEnvelope = async (path: string, body: Readonly<Record<string, unknown>>): Promise<ResponseEnvelope> => {
   const response = await transport({ path, body, accessToken: readAccessToken() })
   const envelope = parseResponseEnvelope(response.payload)
 
@@ -101,10 +89,7 @@ const sendEnvelope = async (
   return envelope
 }
 
-const buildRequestEnvelope = (
-  command: string,
-  body: Readonly<Record<string, unknown>>,
-): Record<string, unknown> => ({
+const buildRequestEnvelope = (command: string, body: Readonly<Record<string, unknown>>): Record<string, unknown> => ({
   // 三個基底欄位由 client 自動補上，頁面不得自己組（§3.1）。
   rqTS: currentRequestTimestamp(),
   cmd: command,

@@ -184,12 +184,7 @@ onMounted(() => {
     <ElForm v-if="datasetOptions.length > 0" class="mt-6" @submit.prevent>
       <ElFormItem :label="$t('regulatory-sync.filter.dataset')">
         <ElRadioGroup v-model="datasetCode" :disabled="isLoading" @change="onDatasetChanged">
-          <ElRadio
-            v-for="option in datasetOptions"
-            :key="option.code"
-            :value="option.code"
-            :border="true"
-          >
+          <ElRadio v-for="option in datasetOptions" :key="option.code" :value="option.code" :border="true">
             {{ option.name }}
           </ElRadio>
         </ElRadioGroup>
@@ -230,25 +225,13 @@ onMounted(() => {
       -->
       <ElTable :data="rows" row-key="id" class="w-full" :border="true">
         <ElTableColumn prop="dataset" :label="$t('regulatory-sync.column.dataset')" width="150" />
-        <ElTableColumn
-          prop="startedAt"
-          :label="$t('regulatory-sync.column.started-at')"
-          width="145"
-        />
-        <ElTableColumn
-          prop="finishedAt"
-          :label="$t('regulatory-sync.column.finished-at')"
-          width="145"
-        />
+        <ElTableColumn prop="startedAt" :label="$t('regulatory-sync.column.started-at')" width="145" />
+        <ElTableColumn prop="finishedAt" :label="$t('regulatory-sync.column.finished-at')" width="145" />
 
         <!-- 狀態同時有文字與顏色：§9.1 禁止只用顏色表達狀態。 -->
         <ElTableColumn :label="$t('regulatory-sync.column.status')" width="96">
           <template #default="scope">
-            <ElTag
-              :type="scope.row['statusTone']"
-              :effect="scope.row['statusEffect']"
-              disable-transitions
-            >
+            <ElTag :type="scope.row['statusTone']" :effect="scope.row['statusEffect']" disable-transitions>
               {{ scope.row['statusLabel'] }}
             </ElTag>
           </template>

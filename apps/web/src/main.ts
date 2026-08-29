@@ -19,11 +19,7 @@ import './shared/design/tokens.css'
 
 import App from './App.vue'
 import { router, LOGIN_ROUTE_NAME } from './router/router.ts'
-import {
-  setAuthRequiredHandler,
-  setPermissionDeniedHandler,
-  setSystemFailureHandler,
-} from './shared/api/client.ts'
+import { setAuthRequiredHandler, setPermissionDeniedHandler, setSystemFailureHandler } from './shared/api/client.ts'
 import { i18n, type TranslateMessage } from './shared/i18n/messages.ts'
 import { useAuthStore } from './stores/auth.ts'
 
@@ -128,6 +124,8 @@ setPermissionDeniedHandler((message) => {
  */
 setSystemFailureHandler((failure) => {
   ElMessage.error(translate('error.system'))
+  // 見上方 TODO：接上正式錯誤回報服務前的暫代做法，不是遺留的除錯輸出。
+  // eslint-disable-next-line no-console
   console.error('[api] 系統錯誤', {
     diagnosticCode: failure.diagnosticCode,
     exp: failure.expForLog,

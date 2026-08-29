@@ -41,5 +41,4 @@ import type { PermissionCode } from './permission-code.ts'
  * @param code 要判斷的權限碼。**這一側才是型別化的**（§4.1）：打錯字是編譯錯誤，
  *   而不是一個永遠回 false 的判斷。
  */
-export const hasPermission = (granted: readonly string[], code: PermissionCode): boolean =>
-  granted.includes(code)
+export const hasPermission = (granted: readonly string[], code: PermissionCode): boolean => granted.includes(code)

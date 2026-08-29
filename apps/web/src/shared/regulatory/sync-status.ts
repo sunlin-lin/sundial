@@ -55,5 +55,4 @@ const SYNC_STATUS_PRESENTATIONS = {
   4: { labelKey: 'regulatory.sync-status.no-change', tone: 'info', effect: 'light' },
 } as const satisfies Record<SyncStatusCode, SyncStatusPresentation>
 
-export const syncStatusPresentation = (code: SyncStatusCode): SyncStatusPresentation =>
-  SYNC_STATUS_PRESENTATIONS[code]
+export const syncStatusPresentation = (code: SyncStatusCode): SyncStatusPresentation => SYNC_STATUS_PRESENTATIONS[code]

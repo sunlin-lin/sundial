@@ -76,13 +76,7 @@ export const OTHER_TABLE_COLUMNS = {
   // 健保補充保險費。三筆 record 各自只有其中一個數值欄有值，另一欄顯示「沒有值」——
   // 那是正確的：費率那一筆沒有金額，門檻那兩筆沒有費率。
   10: (translate) => [
-    enumColumn(
-      'item',
-      'regulatory-datasets.field.item',
-      170,
-      SUPPLEMENTARY_PREMIUM_ITEM_LABELS,
-      translate,
-    ),
+    enumColumn('item', 'regulatory-datasets.field.item', 170, SUPPLEMENTARY_PREMIUM_ITEM_LABELS, translate),
     rateColumn('rate', 'regulatory-datasets.field.rate', 110),
     amountColumn('amount', 'regulatory-datasets.field.amount', 130),
   ],

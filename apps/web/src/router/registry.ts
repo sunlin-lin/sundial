@@ -17,14 +17,9 @@ import type { RouteRecordRaw } from 'vue-router'
  * `.page.vue` 拉進入口 chunk**，而型別對、測試綠、畫面一切正常——唯一的症狀是 bundle
  * 從幾百 KB 變成幾 MB，而那個數字沒有人在每次 PR 上看。
  */
-const routeModules = import.meta.glob<{ readonly route: RouteRecordRaw }>(
-  '../pages/*/*/*.route.ts',
-  { eager: true },
-)
+const routeModules = import.meta.glob<{ readonly route: RouteRecordRaw }>('../pages/*/*/*.route.ts', { eager: true })
 
-export const routes: readonly RouteRecordRaw[] = Object.values(routeModules).map(
-  (module) => module.route,
-)
+export const routes: readonly RouteRecordRaw[] = Object.values(routeModules).map((module) => module.route)
 
 // 掃描器／registry 的自我檢查（通用規範 §7.2、前端規範 §0.12）。
 // 蒐集結果為 0 時必須直接失敗：glob 命不中的時候不會有任何東西報錯，

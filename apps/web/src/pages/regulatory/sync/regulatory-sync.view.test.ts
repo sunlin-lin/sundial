@@ -86,11 +86,7 @@ describe('表格的列怎麼組', () => {
   })
 
   test('資料集名稱是整包回應共用的同一個字串，不是逐列查表——狀態同樣已經翻成文字', () => {
-    const [row] = toDisplayRows(
-      [buildRow({ datasetCode: 5, statusCode: 3 })],
-      echoTranslate,
-      '健保費負擔金額表',
-    )
+    const [row] = toDisplayRows([buildRow({ datasetCode: 5, statusCode: 3 })], echoTranslate, '健保費負擔金額表')
     expect(row?.dataset).toBe('健保費負擔金額表')
     expect(row?.statusLabel).toBe('regulatory.sync-status.failed')
     expect(row?.statusTone).toBe('danger')

@@ -20,11 +20,7 @@
  */
 import { PermissionDeniedError } from './api-error.ts'
 
-export type LoadFailure =
-  | { readonly kind: 'permission-denied'; readonly message: string }
-  | { readonly kind: 'system' }
+export type LoadFailure = { readonly kind: 'permission-denied'; readonly message: string } | { readonly kind: 'system' }
 
 export const toLoadFailure = (error: unknown): LoadFailure =>
-  error instanceof PermissionDeniedError
-    ? { kind: 'permission-denied', message: error.message }
-    : { kind: 'system' }
+  error instanceof PermissionDeniedError ? { kind: 'permission-denied', message: error.message } : { kind: 'system' }

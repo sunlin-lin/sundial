@@ -130,5 +130,4 @@ export const formatDateTime = (value: string | null | undefined): string => slic
  * formatYearMonth('2026-08-26')   // '2026-08'
  * ```
  */
-export const formatYearMonth = (value: string | null | undefined): string =>
-  sliceBusinessTime(value, YEAR_MONTH_LENGTH)
+export const formatYearMonth = (value: string | null | undefined): string => sliceBusinessTime(value, YEAR_MONTH_LENGTH)

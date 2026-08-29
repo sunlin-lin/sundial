@@ -65,8 +65,7 @@ export const useAuthStore = defineStore('auth', () => {
    * `?? []` 那一支涵蓋「還沒登入」與「探測還沒回來」：兩者都應該是「什麼都不能」。
    * 反過來寫成「拿不到身分就一律允許」會讓啟動的那幾百毫秒內整份選單全部亮著再一項項消失。
    */
-  const can = (code: PermissionCode): boolean =>
-    hasPermission(identity.value?.permissionCodes ?? [], code)
+  const can = (code: PermissionCode): boolean => hasPermission(identity.value?.permissionCodes ?? [], code)
 
   const signIn = (next: SignedInIdentity): void => {
     identity.value = next

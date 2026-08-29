@@ -49,6 +49,8 @@ export const ZH_TW = {
   'menu.system-settings': '系統設定',
   'menu.regulatory-datasets': '法規資料集',
   'menu.regulatory-sync': '法規資料同步歷程',
+  'menu.hr-operations': '人事作業',
+  'menu.shifts-main': '班別設定',
 
   /**
    * 四種同步狀態，值取自後端的 `RegulatorySyncStatus`（1/2/3/4）。
@@ -62,8 +64,7 @@ export const ZH_TW = {
   'regulatory.sync-status.no-change': '無異動',
 
   'regulatory-sync.heading': '法規資料同步歷程',
-  'regulatory-sync.description':
-    '每一次自動同步的結果。政府法規全國一份，這一頁不分公司，所有公司看到的是同一份紀錄。',
+  'regulatory-sync.description': '每一次自動同步的結果。政府法規全國一份，這一頁不分公司，所有公司看到的是同一份紀錄。',
   'regulatory-sync.filter.dataset': '資料集',
   'regulatory-sync.column.dataset': '資料集',
   'regulatory-sync.column.started-at': '開始時間',
@@ -205,6 +206,126 @@ export const ZH_TW = {
   'regulatory-datasets.supplementary.rate': '補充保險費率',
   'regulatory-datasets.supplementary.charge-lower-bound': '單次給付計費下限',
   'regulatory-datasets.supplementary.single-payment-upper-limit': '單次給付計費上限',
+
+  // ---------------------------------------------------------------------------------
+  // 班別設定（計畫 04、docs/ui/22-ui-shift-settings.md）。
+  // ---------------------------------------------------------------------------------
+
+  'shifts-main.heading': '班別設定',
+  'shifts-main.description':
+    '定義「一天怎麼上班」：工作時段、休息時段。應工作分鐘由系統依時段與休息計算，不能手動輸入。',
+
+  'shifts-main.filter.keyword': '代碼或名稱',
+  'shifts-main.filter.keyword-placeholder': '輸入班別代碼或名稱',
+  'shifts-main.filter.work-type': '工作類型',
+  'shifts-main.filter.overnight': '跨日',
+  'shifts-main.filter.flexible': '彈性',
+  'shifts-main.filter.status': '狀態',
+  'shifts-main.filter.all': '全部',
+  'shifts-main.filter.yes': '是',
+  'shifts-main.filter.no': '否',
+  'shifts-main.filter.status-active': '啟用',
+  'shifts-main.filter.status-inactive': '停用',
+
+  /** 工時管理方式（計畫 §5.1、§10）：值固定為 1–4，不是可以任意擴充的清單。 */
+  'shifts-main.work-type.1': '一般',
+  'shifts-main.work-type.2': '輪班',
+  'shifts-main.work-type.3': '彈性',
+  'shifts-main.work-type.4': '責任制',
+
+  /** 日偏移的呈現（計畫 §4.2、前端規範必做事項 2）：`endDayOffset=1` 不直接顯示數字。 */
+  'shifts-main.day-offset.next': '隔日',
+
+  'shifts-main.break.paid': '有薪',
+  'shifts-main.break.unpaid': '無薪',
+  'shifts-main.unit.hours': '小時',
+
+  'shifts-main.column.code': '班別代碼',
+  'shifts-main.column.name': '名稱',
+  'shifts-main.column.work-type': '工作類型',
+  'shifts-main.column.work-periods': '工作時段',
+  'shifts-main.column.breaks': '休息時段',
+  'shifts-main.column.required-hours': '應工作時數',
+  'shifts-main.column.overnight': '跨日',
+  'shifts-main.column.flexible': '彈性',
+  'shifts-main.column.status': '狀態',
+  'shifts-main.column.actions': '操作',
+
+  'shifts-main.status.active': '啟用',
+  'shifts-main.status.inactive': '停用',
+  'shifts-main.yes': '是',
+  'shifts-main.no': '否',
+
+  'shifts-main.action.create': '新增班別',
+  'shifts-main.action.edit': '編輯',
+  'shifts-main.action.copy': '複製',
+  'shifts-main.action.delete': '刪除',
+  'shifts-main.action.activate': '啟用',
+  'shifts-main.action.deactivate': '停用',
+  'shifts-main.retry': '重新載入',
+  'shifts-main.empty': '目前沒有符合條件的班別。',
+
+  'shifts-main.confirm.title': '請確認',
+  'shifts-main.confirm.delete': '確定要刪除這個班別嗎？刪除後這個班別不會再出現在清單中。',
+  'shifts-main.confirm.activate': '確定要啟用這個班別嗎？',
+  'shifts-main.confirm.deactivate': '確定要停用這個班別嗎？停用後，這個班別預設不會出現在清單中。',
+  'shifts-main.confirm.ok': '確定',
+  'shifts-main.confirm.cancel': '取消',
+
+  'shifts-main.toast.created': '班別已建立。',
+  'shifts-main.toast.updated': '班別已更新。',
+  'shifts-main.toast.copied': '班別已複製。',
+  'shifts-main.toast.deleted': '班別已刪除。',
+  'shifts-main.toast.activated': '班別已啟用。',
+  'shifts-main.toast.deactivated': '班別已停用。',
+
+  'shifts-main.dialog.create-title': '新增班別',
+  'shifts-main.dialog.edit-title': '修改班別',
+  'shifts-main.dialog.load-failed': '載入班別內容失敗，請關閉後重試。',
+
+  'shifts-main.field.code': '班別代碼',
+  'shifts-main.field.name': '名稱',
+  'shifts-main.field.work-type': '工作類型',
+  'shifts-main.field.flexible': '彈性班',
+  'shifts-main.field.description': '說明',
+  'shifts-main.field.description-hint':
+    '這張表的規則是停用舊班別、複製建立新班別，半年後同一家公司會累積出多個相近的班別；分辨它們靠的就是這裡的說明。',
+  'shifts-main.field.is-active': '啟用',
+  'shifts-main.field.required-hours-preview': '應工作時數（預覽）',
+  'shifts-main.field.required-hours-preview-hint': '依目前輸入的時段即時試算，僅供參考；送出後以後端計算的結果為準。',
+
+  'shifts-main.periods.heading': '工作時段',
+  'shifts-main.periods.add': '新增時段',
+  'shifts-main.periods.remove': '刪除',
+  'shifts-main.periods.start-time': '開始時間',
+  'shifts-main.periods.end-time': '結束時間',
+  'shifts-main.periods.end-day': '結束日',
+  'shifts-main.periods.same-day': '當日',
+  'shifts-main.periods.next-day': '隔日',
+  'shifts-main.periods.empty': '至少要有一段工作時段。',
+
+  'shifts-main.breaks.heading': '休息時段',
+  'shifts-main.breaks.add': '新增休息',
+  'shifts-main.breaks.remove': '刪除',
+  'shifts-main.breaks.start-time': '開始時間',
+  'shifts-main.breaks.end-time': '結束時間',
+  'shifts-main.breaks.is-paid': '有薪',
+  'shifts-main.breaks.empty': '沒有休息時段。',
+
+  'shifts-main.form.submit': '儲存',
+  'shifts-main.form.cancel': '取消',
+
+  'shifts-main.copy.title': '複製班別',
+  'shifts-main.copy.description': '工作類型、彈性、時段與休息一律取自來源班別；說明請重新填寫，不會帶入來源的說明。',
+  'shifts-main.copy.field.code': '新班別代碼',
+  'shifts-main.copy.field.name': '新班別名稱',
+  'shifts-main.copy.field.description': '說明',
+  'shifts-main.copy.field.is-active': '啟用',
+  'shifts-main.copy.submit': '複製',
+  'shifts-main.copy.cancel': '取消',
+
+  /** 前端唯一的表單驗證文案：只做「必填」（§6.1，格式與長度一律交給後端的 300 錯誤）。 */
+  'shifts-main.validation.required': '必填',
 
   /** 前端自己要說的話，見檔頭的「唯一的例外」。 */
   'error.system': '系統發生錯誤，請稍後再試。',

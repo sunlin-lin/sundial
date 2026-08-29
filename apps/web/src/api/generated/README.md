@@ -22,11 +22,11 @@
 
 `bun run gen:api` 會在這個目錄寫下三個檔案：
 
-| 檔案 | 內容 |
-|---|---|
-| `api-types.ts` | 由 `openapi.json` 轉譯出來的 TypeScript 型別（`openapi-typescript`，純轉譯，沒有執行期行為）。 |
-| `api-guard.ts` | 執行期形狀檢查。回應是外部邊界，型別保證不了對面實際回什麼（通用規範 §2.2）。 |
-| `api-client.ts` | 每支端點一個函式，**簽章只有一個參數**（那包業務欄位）；傳輸交給 `shared/api/client.ts`。 |
+| 檔案            | 內容                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| `api-types.ts`  | 由 `openapi.json` 轉譯出來的 TypeScript 型別（`openapi-typescript`，純轉譯，沒有執行期行為）。 |
+| `api-guard.ts`  | 執行期形狀檢查。回應是外部邊界，型別保證不了對面實際回什麼（通用規範 §2.2）。                  |
+| `api-client.ts` | 每支端點一個函式，**簽章只有一個參數**（那包業務欄位）；傳輸交給 `shared/api/client.ts`。      |
 
 同時會在 repo 根目錄寫下 `openapi.json`（同樣不進版控）。
 

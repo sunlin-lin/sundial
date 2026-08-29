@@ -81,9 +81,7 @@ export const parseResponseEnvelope = (payload: unknown): ResponseEnvelope | null
   if (expiresIn !== null && typeof expiresIn !== 'number') return null
   if (exp !== null && typeof exp !== 'string') return null
 
-  const errors = rawErrors
-    .map(toEnvelopeError)
-    .filter((error): error is EnvelopeError => error !== null)
+  const errors = rawErrors.map(toEnvelopeError).filter((error): error is EnvelopeError => error !== null)
 
   return { code, msg, errors, data: payload['data'] ?? null, expiresIn, exp }
 }

@@ -41,13 +41,7 @@ const CONTENT_MAX_HEIGHT = 520
 </script>
 
 <template>
-  <ElTable
-    :data="tableRows"
-    row-key="rowKey"
-    class="w-full"
-    :border="true"
-    :max-height="CONTENT_MAX_HEIGHT"
-  >
+  <ElTable :data="tableRows" row-key="rowKey" class="w-full" :border="true" :max-height="CONTENT_MAX_HEIGHT">
     <ElTableColumn
       v-for="column in columns"
       :key="column.key"

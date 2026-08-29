@@ -25,12 +25,7 @@ describe('同步歷程的查詢組裝', () => {
   })
 
   test('查詢裡沒有任何公司欄位（計畫 §2.1，日後也不得加）', () => {
-    expect(Object.keys(toSyncListQuery(1, 1)).sort()).toEqual([
-      'currentPage',
-      'datasetCode',
-      'perPage',
-      'sort',
-    ])
+    expect(Object.keys(toSyncListQuery(1, 1)).sort()).toEqual(['currentPage', 'datasetCode', 'perPage', 'sort'])
   })
 
   test('預設選的資料集是合法代碼之一，一進頁面就查得出東西', () => {

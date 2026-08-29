@@ -22,11 +22,7 @@ import type { MessageKey } from '../../../shared/i18n/messages.ts'
 import { readField, readText, type RecordColumn, type RecordDataKey } from './regulatory-datasets.record.view.ts'
 
 /** 一般文字欄（代碼、名稱、政府原文的區間字串）。 */
-export const textColumn = (
-  key: RecordDataKey,
-  labelKey: MessageKey,
-  minWidth: number,
-): RecordColumn => ({
+export const textColumn = (key: RecordDataKey, labelKey: MessageKey, minWidth: number): RecordColumn => ({
   key,
   labelKey,
   align: 'left',
@@ -38,11 +34,7 @@ export const textColumn = (
  * 金額欄。**靠右對齊**：一整欄數字靠左時，位數不同的兩個金額要逐位比對才看得出大小，
  * 而這一頁的主要動作正是「上下比對兩級差多少」。
  */
-export const amountColumn = (
-  key: RecordDataKey,
-  labelKey: MessageKey,
-  minWidth: number,
-): RecordColumn => ({
+export const amountColumn = (key: RecordDataKey, labelKey: MessageKey, minWidth: number): RecordColumn => ({
   key,
   labelKey,
   align: 'right',
@@ -51,11 +43,7 @@ export const amountColumn = (
 })
 
 /** 費率欄（比率 → 百分比字串，`0.115` → `11.5%`）。同樣靠右。 */
-export const rateColumn = (
-  key: RecordDataKey,
-  labelKey: MessageKey,
-  minWidth: number,
-): RecordColumn => ({
+export const rateColumn = (key: RecordDataKey, labelKey: MessageKey, minWidth: number): RecordColumn => ({
   key,
   labelKey,
   align: 'right',
@@ -92,11 +80,7 @@ export const enumColumn = (
 })
 
 /** 日期欄（西元 `YYYY-MM-DD`，計畫 §5.1：不轉民國）。 */
-export const dateColumn = (
-  key: RecordDataKey,
-  labelKey: MessageKey,
-  minWidth: number,
-): RecordColumn => ({
+export const dateColumn = (key: RecordDataKey, labelKey: MessageKey, minWidth: number): RecordColumn => ({
   key,
   labelKey,
   align: 'left',

@@ -40,11 +40,7 @@ export const BRACKET_TABLE_COLUMNS = {
     textColumn('actualWageRangeText', 'regulatory-datasets.field.actual-wage-range', 150),
     amountColumn('actualWageFrom', 'regulatory-datasets.field.range-from', 110),
     amountColumn('actualWageTo', 'regulatory-datasets.field.range-to', 110),
-    amountColumn(
-      'monthlyContributionWage',
-      'regulatory-datasets.field.monthly-contribution-wage',
-      130,
-    ),
+    amountColumn('monthlyContributionWage', 'regulatory-datasets.field.monthly-contribution-wage', 130),
     textColumn('remark', 'regulatory-datasets.field.remark', 120),
   ],
 
@@ -54,16 +50,8 @@ export const BRACKET_TABLE_COLUMNS = {
     amountColumn('monthlyInsuredAmount', 'regulatory-datasets.field.monthly-insured-amount', 120),
     amountColumn('insuredShareAmount', 'regulatory-datasets.field.insured-share', 110),
     amountColumn('insuredWithOneDependentAmount', 'regulatory-datasets.field.insured-with-1', 110),
-    amountColumn(
-      'insuredWithTwoDependentsAmount',
-      'regulatory-datasets.field.insured-with-2',
-      110,
-    ),
-    amountColumn(
-      'insuredWithThreeDependentsAmount',
-      'regulatory-datasets.field.insured-with-3',
-      110,
-    ),
+    amountColumn('insuredWithTwoDependentsAmount', 'regulatory-datasets.field.insured-with-2', 110),
+    amountColumn('insuredWithThreeDependentsAmount', 'regulatory-datasets.field.insured-with-3', 110),
     amountColumn('employerShareAmount', 'regulatory-datasets.field.employer-share', 120),
     amountColumn('governmentSubsidyAmount', 'regulatory-datasets.field.government-subsidy', 110),
   ],

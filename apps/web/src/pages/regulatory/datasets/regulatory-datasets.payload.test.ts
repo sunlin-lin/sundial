@@ -40,12 +40,7 @@ describe('版本清單的查詢組裝', () => {
   })
 
   test('查詢裡沒有任何公司欄位（計畫 §2.1，日後也不得加）', () => {
-    expect(Object.keys(toVersionListQuery(1, 1)).sort()).toEqual([
-      'currentPage',
-      'datasetCode',
-      'perPage',
-      'sort',
-    ])
+    expect(Object.keys(toVersionListQuery(1, 1)).sort()).toEqual(['currentPage', 'datasetCode', 'perPage', 'sort'])
   })
 })
 

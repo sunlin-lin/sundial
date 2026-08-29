@@ -70,6 +70,23 @@ export const MAIN_MENU: readonly MenuGroup[] = [
       },
     ],
   },
+  /**
+   * 人事作業。UI 定案（`docs/ui/22-ui-shift-settings.md`）明寫選單位置是「人事作業 → 班別設定」，
+   * 這個分組先前不存在——**新增分組不搬動任何檔案**（§0.2 的整段理由），只在這裡多一筆。
+   *
+   * 班別只回答「一天怎麼上班」，與「誰上這個班」（排班）無關（計畫 04 §1），因此不掛在系統設定
+   * 底下：系統設定是角色／權限／帳號／法規那一類平台管理事項，班別是人資日常會維護的業務資料。
+   */
+  {
+    labelKey: 'menu.hr-operations',
+    items: [
+      {
+        labelKey: 'menu.shifts-main',
+        routeName: 'shifts-main',
+        permissionCode: 'shifts.main.list',
+      },
+    ],
+  },
 ]
 
 /**
@@ -80,9 +97,7 @@ export const MAIN_MENU: readonly MenuGroup[] = [
  * **整組項目都被藏掉的分組，連分組標題一起不顯示。** 少了這一步，畫面上會出現一個標題底下
  * 一項都沒有的空分組——那看起來像載入失敗，而它其實是正常結果。
  */
-export const visibleMenuGroups = (
-  can: (code: PermissionCode) => boolean,
-): readonly MenuGroup[] =>
+export const visibleMenuGroups = (can: (code: PermissionCode) => boolean): readonly MenuGroup[] =>
   MAIN_MENU.map((group) => ({
     ...group,
     items: group.items.filter((item) => item.permissionCode === undefined || can(item.permissionCode)),

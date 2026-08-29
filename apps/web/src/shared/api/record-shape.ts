@@ -13,10 +13,7 @@ export const isRecord = (value: unknown): value is Readonly<Record<string, unkno
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /** 取一個非空字串欄位；不存在、型別不對或空字串一律回 `null`。 */
-export const readNonEmptyString = (
-  source: Readonly<Record<string, unknown>>,
-  key: string,
-): string | null => {
+export const readNonEmptyString = (source: Readonly<Record<string, unknown>>, key: string): string | null => {
   const value = source[key]
   return typeof value === 'string' && value !== '' ? value : null
 }

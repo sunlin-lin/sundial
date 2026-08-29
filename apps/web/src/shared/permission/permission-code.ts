@@ -39,9 +39,7 @@ type DottedPath<TSegments extends string> = TSegments extends `${infer Head}/${i
   : TSegments
 
 /** `/a/b/c` → `a.b.c`。開頭沒有 `/` 的字串不是端點路徑，回 `never`（用它會編譯錯誤）。 */
-type EndpointCommand<TPath extends string> = TPath extends `/${infer Rest}`
-  ? DottedPath<Rest>
-  : never
+type EndpointCommand<TPath extends string> = TPath extends `/${infer Rest}` ? DottedPath<Rest> : never
 
 /**
  * 後端每一支端點的指令名，由 `bun run gen:api` 的產生型別推導。
@@ -58,12 +56,25 @@ type ApiCommand = EndpointCommand<keyof paths & string>
  * 權限碼清單」會立刻長出「把全部權限碼列出來給人勾選」這種消費者——那是後端權限目錄端點的事
  *（`permissions.main.list`），不是前端硬編清單的事。
  */
+// 這個 const 只在下一行的 `typeof PERMISSION_CODES` 型別查詢中被參照，執行期的值本身
+// 確實沒有第二個使用者；這正是「const 陣列 + typeof [number]」推導聯集型別的標準寫法
+//（全站另有多處同構寫法，差別只在那些都用 `export const`——匯出後 ESLint 看不到
+// 「有沒有第二個使用者」，不會誤判。這裡刻意不匯出，見上方檔頭：避免長出
+// 「把全部權限碼列出來」的消費者，因此需要這一行說明，而不是為了過 lint 反過來匯出它）。
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const PERMISSION_CODES = [
   'regulatory.datasets.overview',
   'regulatory.datasets.list',
   'regulatory.datasets.get',
   'regulatory.datasets.resolve',
   'regulatory.sync.list',
+  // 班別設定（計畫 04 §6、§8）。六碼逐一比對過 `apps/api/drizzle/0022_seed_permission_codes_shifts.sql`。
+  'shifts.main.list',
+  'shifts.main.get',
+  'shifts.main.create',
+  'shifts.main.update',
+  'shifts.main.copy',
+  'shifts.main.delete',
 ] as const satisfies readonly ApiCommand[]
 
 /** 權限碼。全站判斷權限一律用這個型別，不用 `string`。 */

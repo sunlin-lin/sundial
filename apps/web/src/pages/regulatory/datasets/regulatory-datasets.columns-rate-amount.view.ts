@@ -17,11 +17,7 @@ export const RATE_AMOUNT_TABLE_COLUMNS = {
   4: () => [
     amountColumn('insuredSalary', 'regulatory-datasets.field.insured-salary', 120),
     rateColumn('laborInsuranceRate', 'regulatory-datasets.field.labor-insurance-rate', 110),
-    rateColumn(
-      'employmentInsuranceRate',
-      'regulatory-datasets.field.employment-insurance-rate',
-      110,
-    ),
+    rateColumn('employmentInsuranceRate', 'regulatory-datasets.field.employment-insurance-rate', 110),
     amountColumn('employeeShareAmount', 'regulatory-datasets.field.employee-share', 120),
     amountColumn('employerShareAmount', 'regulatory-datasets.field.employer-share', 120),
   ],
@@ -33,10 +29,6 @@ export const RATE_AMOUNT_TABLE_COLUMNS = {
     textColumn('industryName', 'regulatory-datasets.field.industry-name', 220),
     rateColumn('industryRate', 'regulatory-datasets.field.industry-rate', 110),
     rateColumn('commutingRate', 'regulatory-datasets.field.commuting-rate', 110),
-    rateColumn(
-      'occupationalAccidentRate',
-      'regulatory-datasets.field.occupational-accident-rate',
-      120,
-    ),
+    rateColumn('occupationalAccidentRate', 'regulatory-datasets.field.occupational-accident-rate', 120),
   ],
 } as const satisfies Pick<Record<DatasetCode, ColumnsBuilder>, 4 | 6>

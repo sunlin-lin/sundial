@@ -39,32 +39,16 @@ const perPage = VERSION_LIST_PER_PAGE
 <template>
   <div>
     <ElTable :data="tableRows" row-key="id" class="w-full" :border="true">
-      <ElTableColumn
-        prop="versionCode"
-        :label="$t('regulatory-datasets.column.version-code')"
-        width="130"
-      />
-      <ElTableColumn
-        prop="effectiveFrom"
-        :label="$t('regulatory-datasets.column.effective-from')"
-        width="120"
-      />
-      <ElTableColumn
-        prop="effectiveTo"
-        :label="$t('regulatory-datasets.column.effective-to')"
-        width="120"
-      />
+      <ElTableColumn prop="versionCode" :label="$t('regulatory-datasets.column.version-code')" width="130" />
+      <ElTableColumn prop="effectiveFrom" :label="$t('regulatory-datasets.column.effective-from')" width="120" />
+      <ElTableColumn prop="effectiveTo" :label="$t('regulatory-datasets.column.effective-to')" width="120" />
       <ElTableColumn
         prop="recordCount"
         :label="$t('regulatory-datasets.column.record-count')"
         width="90"
         align="right"
       />
-      <ElTableColumn
-        prop="syncedAt"
-        :label="$t('regulatory-datasets.column.synced-at')"
-        min-width="150"
-      />
+      <ElTableColumn prop="syncedAt" :label="$t('regulatory-datasets.column.synced-at')" min-width="150" />
 
       <!--
         「本基準日適用」的標記。這一欄的存在理由是把基準日這個抽象概念釘在畫面上的一列上：
@@ -81,11 +65,7 @@ const perPage = VERSION_LIST_PER_PAGE
 
       <ElTableColumn :label="$t('regulatory-datasets.column.actions')" width="120" align="center">
         <template #default="scope">
-          <ElButton
-            link
-            type="primary"
-            @click="$emit('content-requested', scope.row['versionCode'])"
-          >
+          <ElButton link type="primary" @click="$emit('content-requested', scope.row['versionCode'])">
             {{ $t('regulatory-datasets.action.content') }}
           </ElButton>
         </template>

@@ -19,11 +19,7 @@ import type { LoginInput } from '../../../shared/api/sessions.ts'
  * 密碼則絕不能動——空白是合法的密碼字元，前端擅自去掉會讓一個設定過的密碼永遠登不進去，
  * 而使用者只會看到同一句含糊訊息。
  */
-export const toLoginPayload = (
-  companyCode: string,
-  username: string,
-  password: string,
-): LoginInput => ({
+export const toLoginPayload = (companyCode: string, username: string, password: string): LoginInput => ({
   companyCode: companyCode.trim(),
   username: username.trim(),
   password,

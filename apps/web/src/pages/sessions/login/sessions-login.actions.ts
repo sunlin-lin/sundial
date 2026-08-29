@@ -18,7 +18,4 @@ import type { LoginInput } from '../../../shared/api/sessions.ts'
  *    目前**沒有任何前端驗證規則**，格式問題一律由後端判定並回 `300`。
  */
 export const canSubmitLogin = (payload: LoginInput, isSubmitting: boolean): boolean =>
-  !isSubmitting &&
-  payload.companyCode !== '' &&
-  payload.username !== '' &&
-  payload.password !== ''
+  !isSubmitting && payload.companyCode !== '' && payload.username !== '' && payload.password !== ''

@@ -139,10 +139,7 @@ export const toOverviewDisplayRows = (
   })
 
 /** 某個資料集在目前基準日適用的版本代碼；沒有適用版本時回 `null`。 */
-export const effectiveVersionCodeOf = (
-  rows: readonly OverviewRow[],
-  datasetCode: DatasetCode,
-): string | null =>
+export const effectiveVersionCodeOf = (rows: readonly OverviewRow[], datasetCode: DatasetCode): string | null =>
   rows.find((row) => row.datasetCode === datasetCode)?.effectiveVersion?.versionCode ?? null
 
 /** 某個資料集的名稱；找不到時回代碼本身（理由同同步歷程那一頁：一格寫著數字看起來就是壞的）。 */

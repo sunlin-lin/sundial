@@ -5,15 +5,11 @@ const SORT: ListSort = { field: 'startedAt', order: 'desc' }
 
 describe('列表回應的回聲比對（舊回應必須被丟棄）', () => {
   test('條件與排序都相同時採用', () => {
-    expect(isListEcho({ search: { datasetCode: 1 }, sort: SORT }, { datasetCode: 1, sort: SORT })).toBe(
-      true,
-    )
+    expect(isListEcho({ search: { datasetCode: 1 }, sort: SORT }, { datasetCode: 1, sort: SORT })).toBe(true)
   })
 
   test('條件不同的回應一律丟棄——那是上一次點選送出的請求晚回來了', () => {
-    expect(isListEcho({ search: { datasetCode: 5 }, sort: SORT }, { datasetCode: 1, sort: SORT })).toBe(
-      false,
-    )
+    expect(isListEcho({ search: { datasetCode: 5 }, sort: SORT }, { datasetCode: 1, sort: SORT })).toBe(false)
   })
 
   test('排序欄位不同的回應一律丟棄', () => {

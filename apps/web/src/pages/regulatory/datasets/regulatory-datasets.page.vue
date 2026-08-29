@@ -61,12 +61,7 @@ import DatasetRecordTable from './components/DatasetRecordTable.vue'
 import DatasetVersionTable from './components/DatasetVersionTable.vue'
 import LoadFailureAlert from './components/LoadFailureAlert.vue'
 import { columnsFor } from './regulatory-datasets.columns.view.ts'
-import {
-  toOverviewQuery,
-  toResolveQuery,
-  toVersionListQuery,
-  type DatasetCode,
-} from './regulatory-datasets.payload.ts'
+import { toOverviewQuery, toResolveQuery, toVersionListQuery, type DatasetCode } from './regulatory-datasets.payload.ts'
 import type { ResolvedVersion } from './regulatory-datasets.record.view.ts'
 import { toRecordDisplayRows } from './regulatory-datasets.record.view.ts'
 import {
@@ -75,10 +70,7 @@ import {
   toOverviewDisplayRows,
   type OverviewRow,
 } from './regulatory-datasets.view.ts'
-import {
-  toVersionDisplayRows,
-  type VersionRow,
-} from './regulatory-datasets.version.view.ts'
+import { toVersionDisplayRows, type VersionRow } from './regulatory-datasets.version.view.ts'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -121,23 +113,17 @@ const contentFailure = ref<LoadFailure | null>(null)
 const overviewDisplayRows = computed(() => toOverviewDisplayRows(overviewRows.value, $t))
 
 const selectedDatasetName = computed(() =>
-  selectedDatasetCode.value === null
-    ? ''
-    : datasetNameOf(overviewRows.value, selectedDatasetCode.value),
+  selectedDatasetCode.value === null ? '' : datasetNameOf(overviewRows.value, selectedDatasetCode.value),
 )
 
 const versionDisplayRows = computed(() =>
   toVersionDisplayRows(
     versionRows.value,
-    selectedDatasetCode.value === null
-      ? null
-      : effectiveVersionCodeOf(overviewRows.value, selectedDatasetCode.value),
+    selectedDatasetCode.value === null ? null : effectiveVersionCodeOf(overviewRows.value, selectedDatasetCode.value),
   ),
 )
 
-const recordColumns = computed(() =>
-  resolved.value === null ? [] : columnsFor(resolved.value.datasetCode, $t),
-)
+const recordColumns = computed(() => (resolved.value === null ? [] : columnsFor(resolved.value.datasetCode, $t)))
 
 const recordDisplayRows = computed(() =>
   resolved.value === null ? [] : toRecordDisplayRows(recordColumns.value, resolved.value.records),
@@ -326,10 +312,7 @@ onMounted(() => {
       @retry="loadOverview"
     />
     <ElSkeleton v-else-if="isOverviewLoading" class="mt-2" :rows="6" animated />
-    <ElEmpty
-      v-else-if="overviewDisplayRows.length === 0"
-      :description="$t('regulatory-datasets.empty')"
-    />
+    <ElEmpty v-else-if="overviewDisplayRows.length === 0" :description="$t('regulatory-datasets.empty')" />
     <DatasetOverviewTable
       v-else
       :rows="overviewDisplayRows"
@@ -351,10 +334,7 @@ onMounted(() => {
         @retry="loadVersions"
       />
       <ElSkeleton v-else-if="isVersionLoading" class="mt-2" :rows="4" animated />
-      <ElEmpty
-        v-else-if="versionDisplayRows.length === 0"
-        :description="$t('regulatory-datasets.versions-empty')"
-      />
+      <ElEmpty v-else-if="versionDisplayRows.length === 0" :description="$t('regulatory-datasets.versions-empty')" />
       <DatasetVersionTable
         v-else
         class="mt-4"
@@ -371,9 +351,7 @@ onMounted(() => {
       <h2 class="text-lg font-semibold text-ink">
         {{ $t('regulatory-datasets.content-heading') }}｜{{ selectedDatasetName }}
       </h2>
-      <p class="mt-1 text-sm text-ink-muted">
-        {{ $t('regulatory-datasets.content-as-of') }}{{ asOfDate }}
-      </p>
+      <p class="mt-1 text-sm text-ink-muted">{{ $t('regulatory-datasets.content-as-of') }}{{ asOfDate }}</p>
 
       <LoadFailureAlert
         v-if="contentFailure !== null"
@@ -388,10 +366,7 @@ onMounted(() => {
         它不是錯誤（§3.6），所以走空狀態而不是失敗畫面；而那句話必須說清楚是「這一天沒有」，
         不能只寫「沒有資料」——使用者要能想到「那我把日期往後調」。
       -->
-      <ElEmpty
-        v-else-if="resolved === null"
-        :description="$t('regulatory-datasets.content-no-version')"
-      />
+      <ElEmpty v-else-if="resolved === null" :description="$t('regulatory-datasets.content-no-version')" />
       <div v-else class="mt-4">
         <p class="mb-2 text-sm text-ink-muted">
           {{ $t('regulatory-datasets.content-version') }}{{ resolved.version.versionCode }}

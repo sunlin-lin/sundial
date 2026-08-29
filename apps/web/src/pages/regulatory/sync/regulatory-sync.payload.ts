@@ -58,10 +58,7 @@ export const DEFAULT_DATASET_CODE: SyncDatasetCode = 1
  * @param datasetCode 後端**必填**：這支端點一次只查一個資料集，因此畫面上必須有選擇器。
  * @param currentPage 1 起算（§7.1）。篩選條件變更時由呼叫端歸零回第 1 頁。
  */
-export const toSyncListQuery = (
-  datasetCode: SyncDatasetCode,
-  currentPage: number,
-): SyncListQuery => ({
+export const toSyncListQuery = (datasetCode: SyncDatasetCode, currentPage: number): SyncListQuery => ({
   datasetCode,
   currentPage,
   perPage: SYNC_LIST_PER_PAGE,

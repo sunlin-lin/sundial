@@ -80,9 +80,7 @@ const onSignOutClicked = (): void => {
     </aside>
 
     <div class="flex min-w-0 flex-1 flex-col">
-      <header
-        class="flex h-16 shrink-0 items-center justify-end gap-4 border-b border-line bg-surface px-gutter"
-      >
+      <header class="flex h-16 shrink-0 items-center justify-end gap-4 border-b border-line bg-surface px-gutter">
         <div class="text-right leading-tight">
           <p class="text-sm font-medium">{{ userName }}</p>
           <p class="text-xs text-ink-muted">{{ companyName }}</p>

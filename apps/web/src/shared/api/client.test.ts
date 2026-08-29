@@ -21,8 +21,7 @@ const PROBE_PATH = '/employees/main/list'
 const PROBE_COMMAND = 'employees.main.list'
 
 /** 只驗一個旗標欄位的 reader，讓測試專注在 client 的分支行為上。 */
-const readProbeResult = (value: unknown): true | null =>
-  isRecord(value) && value['ok'] === true ? true : null
+const readProbeResult = (value: unknown): true | null => (isRecord(value) && value['ok'] === true ? true : null)
 
 const envelopeBody = (
   code: string,
@@ -129,11 +128,11 @@ describe('並行的 refresh 收斂（single-flight）', () => {
       hasAskedForLogin = true
     })
 
-    replaceTransport(async () => ({ status: 401, payload: envelopeBody('900', null, null) }))
+    // 不含 await 的 mock：`async` 只是用來滿足 `Transport` 回傳 `Promise<...>` 的介面，
+    // 用 `Promise.resolve` 取代，避免 ESLint 的 require-await 誤判成漏寫的 await（通用規範 §4.2）。
+    replaceTransport(() => Promise.resolve({ status: 401, payload: envelopeBody('900', null, null) }))
 
-    await expect(callApi(PROBE_COMMAND, PROBE_PATH, {}, readProbeResult)).rejects.toBeInstanceOf(
-      AuthRequiredError,
-    )
+    await expect(callApi(PROBE_COMMAND, PROBE_PATH, {}, readProbeResult)).rejects.toBeInstanceOf(AuthRequiredError)
     expect(readAccessToken()).toBeNull()
     expect(hasAskedForLogin).toBe(true)
   })
@@ -148,27 +147,25 @@ describe('依 code 分支', () => {
       hasAskedForLogin = true
     })
 
-    replaceTransport(async () => ({ status: 403, payload: envelopeBody('901', null, 7200) }))
+    replaceTransport(() => Promise.resolve({ status: 403, payload: envelopeBody('901', null, 7200) }))
 
-    await expect(callApi(PROBE_COMMAND, PROBE_PATH, {}, readProbeResult)).rejects.toBeInstanceOf(
-      PermissionDeniedError,
-    )
+    await expect(callApi(PROBE_COMMAND, PROBE_PATH, {}, readProbeResult)).rejects.toBeInstanceOf(PermissionDeniedError)
     // 把 403 當 401 導向登入頁，會產生「登入 → 點到沒權限的功能 → 被踢回登入頁」的無限迴圈。
     expect(hasAskedForLogin).toBe(false)
     expect(readAccessToken()).toBe('valid-token')
   })
 
   test('300 拋出帶 errors 的業務錯誤，供畫面依 field 的 dot-path 定位', async () => {
-    replaceTransport(async () => ({
-      status: 422,
-      payload: envelopeBody('300', null, null, [
-        { code: 'sessions.main.errors.invalid-credentials', msg: '帳號或密碼錯誤', data: { field: 'password' } },
-      ]),
-    }))
-
-    const failure = await callApi(PROBE_COMMAND, PROBE_PATH, {}, readProbeResult).catch(
-      (error: unknown) => error,
+    replaceTransport(() =>
+      Promise.resolve({
+        status: 422,
+        payload: envelopeBody('300', null, null, [
+          { code: 'sessions.main.errors.invalid-credentials', msg: '帳號或密碼錯誤', data: { field: 'password' } },
+        ]),
+      }),
     )
+
+    const failure = await callApi(PROBE_COMMAND, PROBE_PATH, {}, readProbeResult).catch((error: unknown) => error)
 
     expect(failure).toBeInstanceOf(BusinessRuleError)
     expect(failure).toHaveProperty('errors.0.code', 'sessions.main.errors.invalid-credentials')
@@ -178,9 +175,9 @@ describe('依 code 分支', () => {
 describe('request envelope 的基底三欄由 client 自動補上', () => {
   test('rqTS 帶 +08:00 偏移，cmd 與 locale 不必由頁面提供', async () => {
     let sent: Readonly<Record<string, unknown>> = {}
-    replaceTransport(async ({ body }: TransportRequest) => {
+    replaceTransport(({ body }: TransportRequest) => {
       sent = body
-      return { status: 200, payload: envelopeBody('200', { ok: true }, 7200) }
+      return Promise.resolve({ status: 200, payload: envelopeBody('200', { ok: true }, 7200) })
     })
 
     await callApi(PROBE_COMMAND, PROBE_PATH, { keyword: '王' }, readProbeResult)

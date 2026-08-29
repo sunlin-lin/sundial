@@ -49,27 +49,10 @@ const actionLabel = (datasetCode: DatasetCode): string =>
 <template>
   <ElTable :data="tableRows" row-key="datasetCode" class="w-full" :border="true">
     <ElTableColumn prop="name" :label="$t('regulatory-datasets.column.dataset')" min-width="240" />
-    <ElTableColumn
-      prop="maintenance"
-      :label="$t('regulatory-datasets.column.maintenance')"
-      width="110"
-    />
-    <ElTableColumn
-      prop="versionCode"
-      :label="$t('regulatory-datasets.column.effective-version')"
-      width="130"
-    />
-    <ElTableColumn
-      prop="effectiveFrom"
-      :label="$t('regulatory-datasets.column.effective-from')"
-      width="120"
-    />
-    <ElTableColumn
-      prop="recordCount"
-      :label="$t('regulatory-datasets.column.record-count')"
-      width="90"
-      align="right"
-    />
+    <ElTableColumn prop="maintenance" :label="$t('regulatory-datasets.column.maintenance')" width="110" />
+    <ElTableColumn prop="versionCode" :label="$t('regulatory-datasets.column.effective-version')" width="130" />
+    <ElTableColumn prop="effectiveFrom" :label="$t('regulatory-datasets.column.effective-from')" width="120" />
+    <ElTableColumn prop="recordCount" :label="$t('regulatory-datasets.column.record-count')" width="90" align="right" />
 
     <!--
       最後同步：時間（或「不適用」／「從未同步」）＋ 狀態標籤。
@@ -98,11 +81,7 @@ const actionLabel = (datasetCode: DatasetCode): string =>
     -->
     <ElTableColumn :label="$t('regulatory-datasets.column.actions')" width="120" align="center">
       <template #default="scope">
-        <ElButton
-          link
-          type="primary"
-          @click="$emit('versions-requested', scope.row['datasetCode'])"
-        >
+        <ElButton link type="primary" @click="$emit('versions-requested', scope.row['datasetCode'])">
           {{ actionLabel(scope.row['datasetCode']) }}
         </ElButton>
       </template>

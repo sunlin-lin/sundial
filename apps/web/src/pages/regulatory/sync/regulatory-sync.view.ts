@@ -33,10 +33,7 @@
 import { EMPTY_DISPLAY } from '../../../shared/format/empty-display.ts'
 import { formatAmount } from '../../../shared/format/decimal.ts'
 import { formatDateTime } from '../../../shared/format/business-date.ts'
-import {
-  syncStatusPresentation,
-  type SyncStatusPresentation,
-} from '../../../shared/regulatory/sync-status.ts'
+import { syncStatusPresentation, type SyncStatusPresentation } from '../../../shared/regulatory/sync-status.ts'
 import type { TranslateMessage } from '../../../shared/i18n/messages.ts'
 import type { RegulatorySyncListData } from '../../../api/generated/api-client.ts'
 

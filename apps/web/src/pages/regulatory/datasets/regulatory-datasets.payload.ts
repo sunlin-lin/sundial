@@ -52,10 +52,7 @@ export const toOverviewQuery = (asOfDate: string): RegulatoryDatasetsOverviewInp
 /**
  * @param currentPage 1 起算（§7.1）。換資料集時由呼叫端歸零回第 1 頁。
  */
-export const toVersionListQuery = (
-  datasetCode: DatasetCode,
-  currentPage: number,
-): VersionListQuery => ({
+export const toVersionListQuery = (datasetCode: DatasetCode, currentPage: number): VersionListQuery => ({
   datasetCode,
   currentPage,
   perPage: VERSION_LIST_PER_PAGE,
@@ -73,7 +70,7 @@ export const toVersionListQuery = (
  * 這不是繞路，它正好是計畫 §4.2 想教會使用者的那件事：**內容永遠是「某一天適用的那一版」**，
  * 而不是一個可以脫離時間單獨存在的東西。
  */
-export const toResolveQuery = (
-  datasetCode: DatasetCode,
-  asOfDate: string,
-): RegulatoryDatasetsResolveInput => ({ datasetCode, asOfDate })
+export const toResolveQuery = (datasetCode: DatasetCode, asOfDate: string): RegulatoryDatasetsResolveInput => ({
+  datasetCode,
+  asOfDate,
+})

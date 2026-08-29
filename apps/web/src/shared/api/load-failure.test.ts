@@ -1,10 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  AuthRequiredError,
-  BusinessRuleError,
-  PermissionDeniedError,
-  SystemFailureError,
-} from './api-error.ts'
+import { AuthRequiredError, BusinessRuleError, PermissionDeniedError, SystemFailureError } from './api-error.ts'
 import { toLoadFailure } from './load-failure.ts'
 
 describe('載入失敗的分流', () => {

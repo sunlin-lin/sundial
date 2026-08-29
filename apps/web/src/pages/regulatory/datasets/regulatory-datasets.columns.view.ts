@@ -42,7 +42,5 @@ const COLUMN_BUILDERS = {
  * @param translate 只有固定代碼欄需要它（把 `'monthly'` 變成「每月最低工資」）。
  *   傳進來而不是在這裡 import i18n 實例：本檔要能被純函式測試直接呼叫（§8.1）。
  */
-export const columnsFor = (
-  datasetCode: DatasetCode,
-  translate: TranslateMessage,
-): readonly RecordColumn[] => COLUMN_BUILDERS[datasetCode](translate)
+export const columnsFor = (datasetCode: DatasetCode, translate: TranslateMessage): readonly RecordColumn[] =>
+  COLUMN_BUILDERS[datasetCode](translate)

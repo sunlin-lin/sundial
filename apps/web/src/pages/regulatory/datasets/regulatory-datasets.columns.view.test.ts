@@ -162,9 +162,7 @@ describe('格式化', () => {
 
   test('公告原文照印，裡面的民國年不轉西元（計畫 §5.1 的例外）', () => {
     const columns = columnsFor(8, echoTranslate)
-    expect(columns.find((column) => column.key === 'announcementText')?.read(SAMPLES[8])).toContain(
-      '民國114年10月21日',
-    )
+    expect(columns.find((column) => column.key === 'announcementText')?.read(SAMPLES[8])).toContain('民國114年10月21日')
   })
 
   test('金額欄靠右、文字欄靠左——一整欄數字靠左時要逐位比對才看得出大小', () => {
