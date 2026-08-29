@@ -67,7 +67,15 @@ export {
 } from './employee-dependents.ts'
 export { employeeLaborPensionSettings } from './employee-labor-pension-settings.ts'
 export { attendanceSettings } from './attendance-settings.ts'
+export {
+  attendanceRecords,
+  AttendanceTypeCode,
+  type AttendanceTypeCodeValue,
+  AttendanceSourceTypeCode,
+  type AttendanceSourceTypeCodeValue,
+} from './attendance-records.ts'
 
+import { attendanceRecords } from './attendance-records.ts'
 import { attendanceSettings } from './attendance-settings.ts'
 import { auditLogs } from './audit-logs.ts'
 import { companyUserRoles } from './company-user-roles.ts'
@@ -205,6 +213,13 @@ export type CompanyScopedTable =
    * 指向 `companies`，放在依賴鏈中段即可（見下方陣列）。
    */
   | typeof attendanceSettings
+  /**
+   * `attendance_records` 有 `company_id`，因此屬於這個聯集（實作計畫 `plans/06-attendance.md`
+   * §5 Stage 3）。**沒有任何其他表以外鍵指向它**（`employee_schedule_id`／`source_id` 兩欄目前
+   * 都沒有 FK，見 `db/schema/attendance-records.ts` 檔頭第 2 點），但它自己以複合外鍵指向
+   * `employees`／`employee_employments`／`company_users`，因此**必須排在這三張表之前**清空。
+   */
+  | typeof attendanceRecords
 
 /**
  * 對「窮舉一個聯集的所有成員」做編譯期檢查的小工具，供下方 {@link companyScopedTablesInDeleteOrder} 使用。
@@ -285,6 +300,10 @@ export const companyScopedTablesInDeleteOrder = exhaustiveCompanyScopedTables<Co
   // 之間都互不依賴（順序無關）。
   employeeDependents,
   employeeLaborPensionSettings,
+  // 打卡事件：複合外鍵指向 employees／employeeEmployments／companyUsers 三張，必須排在全部
+  // 三者之前清空（companyUsers 本來就排在本陣列最後，這裡只需要早於 employeeEmployments／
+  // employees 即可）。
+  attendanceRecords,
   employeeEmployments,
   employees,
   shiftDefinitions,

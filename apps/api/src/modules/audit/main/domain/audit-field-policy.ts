@@ -334,6 +334,35 @@ export const AUDIT_FIELD_POLICY = {
       gpsRequired: AuditFieldLevel.Value,
     },
   },
+  /**
+   * 他人撤銷打卡（`attendance.records.revoke-other`，實作計畫 `plans/06-attendance.md` §4.6、
+   * §5 Stage 3）。**打卡建立與本人撤銷（`revoke`）不落在這份政策裡，也不會呼叫 `recordAudit`**
+   * ——兩者都不是稽核要求的五類操作之一，`attendance_records` 自己的 `revoked_by`／
+   * `revoked_at`／`revoke_reason` 三欄已完整回答「誰、何時、為何撤銷」，這份政策只在
+   * `revoke-other` 這一種動作下才會被查表比對。
+   *
+   * `source` 指向 `revoke-other` 專用的稽核快照型別，不是 `AttendanceRecordDetail`
+   * ——理由與 `employee_employments` 的 `EmploymentAuditSnapshot` 相同：拿輸出型別當來源會把
+   * `id`／`employeeId`／`employmentId`／`createdAt`／`updatedAt` 這些不該記的推導值也混進定義域。
+   *
+   * **`latitude`／`longitude`／`address` 為 `presence` 級，不是 `value`**：這三欄不再是密文欄位
+   * （§5.1 架構變更，見 `db/schema/attendance-records.ts` 檔頭），但仍是位置隱私——`audit_logs`
+   * 是不加密、只能新增、任何具備稽核查看權限的人都能查的全域表，把座標原始值整份記進 `value`
+   * 級，等於在稽核這條路上開了一個後門，讓計畫 §4.2 剛定案的「誰能看到別人座標」可見範圍規則
+   * 失去意義——查得到 `audit_logs` 的人不需要 `attendance.records.view-all`／`.revoke-other`
+   * 這個權限碼，就能在稽核紀錄裡看到每一筆他人座標的完整明細。
+   */
+  attendance_records: {
+    source: 'modules/attendance/records/domain/attendance-record-model.ts#AttendanceRecordRevokeOtherAuditSnapshot',
+    fields: {
+      clockedAt: AuditFieldLevel.Value,
+      attendanceTypeCode: AuditFieldLevel.Value,
+      latitude: AuditFieldLevel.Presence,
+      longitude: AuditFieldLevel.Presence,
+      address: AuditFieldLevel.Presence,
+      revokeReason: AuditFieldLevel.Value,
+    },
+  },
 } as const satisfies Readonly<Record<string, AuditTablePolicy>>
 
 /**

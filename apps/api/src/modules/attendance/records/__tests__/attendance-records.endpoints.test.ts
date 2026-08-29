@@ -1,0 +1,718 @@
+/**
+ * 打卡的端點測試（§7.1）。形狀比照 `attendance/settings/__tests__/attendance-settings.
+ * endpoints.test.ts`。
+ *
+ * **從 HTTP 打進去，不直接呼叫 service**：要測的不只是業務規則，還包括 envelope 的形狀、
+ * HTTP status 與 envelope `code` 的映射，以及 §4.2 座標可見範圍在 JSON 序列化後的鍵存不存在。
+ *
+ * 測試資料隔離（§7.4）：每一條測試都用自己隨機產生的公司 ID，彼此看不到對方的資料。
+ *
+ * **不得 mock 掉 `recordAudit`**（§7.3）：稽核測試的全部價值就在於驗真的有寫進去。
+ */
+import { randomBytes } from 'node:crypto'
+import { beforeAll, describe, expect, test } from 'bun:test'
+import { eq } from 'drizzle-orm'
+import { Elysia } from 'elysia'
+import { createDatabase, type Database } from '../../../../db/client.ts'
+import {
+  attendanceRecords,
+  attendanceSettings,
+  AttendanceSourceTypeCode,
+  AttendanceTypeCode,
+  auditLogs,
+  companies,
+  companyUsers,
+  departments,
+  employeeDepartmentHistories,
+  employeeEmployments,
+  employees,
+  EmploymentStatus,
+  EmploymentTypeCode,
+  permissions,
+  rolePermissions,
+  roles,
+  companyUserRoles,
+  users,
+} from '../../../../db/schema/index.ts'
+import { errorHandler } from '../../../../http/error-handler.ts'
+import { identityGuard } from '../../../../http/identity-guard.ts'
+import { requestContext } from '../../../../http/request-context.ts'
+import { responseEnvelope } from '../../../../http/response-envelope.ts'
+import type { AccessControlPorts, VerifiedIdentity } from '../../../../shared/access-control.ts'
+import { fixedClock } from '../../../../shared/clock.ts'
+import { attendanceRecordsRoutes } from '../attendance-records.routes.ts'
+import { AttendanceRecordErrorCode } from '../attendance-records.errors.ts'
+
+const readTestDatabaseConfig = () => ({
+  host: process.env['DB_HOST'] ?? '127.0.0.1',
+  port: Number(process.env['DB_PORT'] ?? '3306'),
+  user: process.env['DB_USER'] ?? '',
+  password: process.env['DB_PASSWORD'] ?? '',
+  database: process.env['DB_NAME'] ?? '',
+})
+
+/** 釘住「現在」（§6.2）。台北時間 2026-08-29 12:00:00。 */
+const clock = fixedClock(new Date('2026-08-29T04:00:00.000Z'))
+
+type ErrorItemShape = { readonly code: string; readonly msg: string; readonly data?: Record<string, unknown> }
+type EnvelopeShape<TData> = {
+  readonly code: string
+  readonly msg: string
+  readonly errors: readonly ErrorItemShape[]
+  readonly data: TData
+  readonly cmd: string
+  readonly locale: string
+  readonly rspTS: string
+  readonly expiresIn: number | null
+}
+
+const identityByToken = new Map<string, VerifiedIdentity>()
+const permissionCodesByToken = new Map<string, ReadonlySet<string>>()
+
+/** 身分驗證的替身（§7.3）：token 驗證與權限查詢屬於尚未落地的 `sessions`／`company-users` 模組。 */
+const accessControl: AccessControlPorts = {
+  verifyAccessToken: (token) => Promise.resolve(identityByToken.get(token) ?? null),
+  renewSession: () => Promise.resolve({ expiresIn: 7200, exp: clock.transportNow() }),
+  loadPermissionCodes: (_companyId, companyUserId) => {
+    for (const [token, identity] of identityByToken) {
+      if (identity.companyUserId === companyUserId) {
+        return Promise.resolve(new Set(permissionCodesByToken.get(token) ?? []))
+      }
+    }
+    return Promise.resolve(new Set())
+  },
+}
+
+/** 與 `app/app.ts` 相同的中介層堆疊，理由見 `attendance-settings.endpoints.test.ts` 同名函式。 */
+const buildTestApp = (db: Database) =>
+  new Elysia()
+    .use(requestContext)
+    .use(errorHandler(clock))
+    .use(responseEnvelope(clock))
+    .use(
+      new Elysia({ name: 'test-authenticated-group' })
+        .use(identityGuard(accessControl))
+        .use(attendanceRecordsRoutes({ db, clock })),
+    )
+
+let database: Database
+let app: ReturnType<typeof buildTestApp>
+
+const asEnvelope = <TData>(payload: unknown): payload is EnvelopeShape<TData> => {
+  if (typeof payload !== 'object' || payload === null) return false
+  const record: Record<string, unknown> = { ...payload }
+  return typeof record['code'] === 'string' && typeof record['msg'] === 'string' && Array.isArray(record['errors'])
+}
+
+const call = async <TData>(path: string, token: string, body: Record<string, unknown>) => {
+  const response = await app.handle(
+    new Request(`http://localhost${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        rqTS: clock.transportNow(),
+        cmd: path.replace(/^\//, '').replaceAll('/', '.'),
+        locale: 'zh-TW',
+        ...body,
+      }),
+    }),
+  )
+  const payload: unknown = await response.json()
+  if (!asEnvelope<TData>(payload)) {
+    throw new Error(`${path} 的回應不是 envelope 形狀（HTTP ${response.status}）：${JSON.stringify(payload)}`)
+  }
+  return { status: response.status, payload }
+}
+
+/** 直接讀 HTTP 回應的原始 JSON（不收斂成 envelope 型別），供斷言「鍵存不存在」使用。 */
+const callRaw = async (path: string, token: string, body: Record<string, unknown>) => {
+  const response = await app.handle(
+    new Request(`http://localhost${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        rqTS: clock.transportNow(),
+        cmd: path.replace(/^\//, '').replaceAll('/', '.'),
+        locale: 'zh-TW',
+        ...body,
+      }),
+    }),
+  )
+  const payload = (await response.json()) as { readonly data: Record<string, unknown> | null }
+  return { status: response.status, payload }
+}
+
+/** 一位員工＋一段有效任職＋一個登入帳號（帳號連結到這位員工）。 */
+type EmployeeFixture = {
+  readonly employeeId: string
+  readonly employmentId: string
+  readonly companyUserId: string
+  readonly token: string
+}
+
+/** 建立一家公司；`registerEmployee` 可以在同一家公司內重複呼叫，建立多位員工（供他人撤銷／
+ * 列表跨員工測試使用）。§7.3 的例外：這幾張表目前沒有從零開始的正式流程可以呼叫，直接寫入。 */
+const registerCompany = async (): Promise<{
+  companyId: string
+  registerEmployee: (options?: { readonly permissionCodes?: readonly string[] }) => Promise<EmployeeFixture>
+}> => {
+  const companyId = crypto.randomUUID()
+  const now = clock.now()
+
+  await database.insert(companies).values({
+    id: companyId,
+    companyCode: companyId.replaceAll('-', '').slice(0, 20),
+    companyType: 'COMPANY',
+    legalType: 'LIMITED_COMPANY',
+    taxId: null,
+    name: `打卡測試公司-${companyId.slice(0, 8)}`,
+    shortName: null,
+    registeredPostalCode: null,
+    registeredCity: null,
+    registeredDistrict: null,
+    registeredAddress: null,
+    actualPostalCode: null,
+    actualCity: null,
+    actualDistrict: null,
+    actualAddress: null,
+    invoicePostalCode: null,
+    invoiceCity: null,
+    invoiceDistrict: null,
+    invoiceAddress: null,
+    status: 'ACTIVE',
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+    deletedSeq: 0,
+  })
+
+  const registerEmployee = async (
+    options: { readonly permissionCodes?: readonly string[] } = {},
+  ): Promise<EmployeeFixture> => {
+    const userId = crypto.randomUUID()
+    const companyUserId = crypto.randomUUID()
+    const employeeId = crypto.randomUUID()
+    const employmentId = crypto.randomUUID()
+    const token = crypto.randomUUID()
+
+    await database.insert(users).values({
+      id: userId,
+      username: `attendance-endpoint-${userId}`,
+      passwordHash: 'not-a-real-hash',
+      mustChangePassword: false,
+      passwordChangedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await database.insert(employees).values({
+      id: employeeId,
+      companyId,
+      employeeCode: `E${employeeId.slice(0, 8)}`,
+      name: `打卡測試員工-${employeeId.slice(0, 4)}`,
+      gender: 'MALE',
+      identityNumberEncrypted: randomBytes(32),
+      identityNumberHash: randomBytes(32),
+      birthdayEncrypted: randomBytes(16),
+      phoneEncrypted: randomBytes(16),
+      emailEncrypted: null,
+      addressEncrypted: randomBytes(32),
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      deletedSeq: 0,
+    })
+    await database.insert(companyUsers).values({
+      id: companyUserId,
+      companyId,
+      userId,
+      employeeId,
+      status: 'ACTIVE',
+      activatedAt: now,
+      deactivatedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await database.insert(employeeEmployments).values({
+      id: employmentId,
+      companyId,
+      employeeId,
+      employmentTypeCode: EmploymentTypeCode.FullTime,
+      employmentNatureCode: null,
+      hireDate: '2024-01-01',
+      leaveDate: null,
+      lastWorkingDate: null,
+      leaveReasonCode: null,
+      status: EmploymentStatus.Active,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      deletedSeq: 0,
+    })
+
+    const grantedCodes = options.permissionCodes ?? [
+      'attendance.records.create',
+      'attendance.records.revoke',
+      'attendance.records.get',
+    ]
+
+    identityByToken.set(token, { sessionId: crypto.randomUUID(), userId, companyId, companyUserId })
+    // 這一份只餵給身分驗證 middleware 的替身（`accessControl.loadPermissionCodes`），把關的是
+    // 端點自己的粗粒度權限碼（§5.2）。
+    permissionCodesByToken.set(token, new Set(grantedCodes))
+
+    // **同時建立真的角色與指派**——`get.service.ts` 判斷座標可見範圍時，呼叫的是
+    // `company-users` 模組真正的 `listPermissionCodes`（查 `company_user_roles`／`role_permissions`
+    // ／`permissions`），不是上面那份 middleware 替身。少了這一段，`attendance.records.view-all`
+    // 這類「不對應任何端點」的細粒度旗標永遠查不到，因為它從來不會出現在身分驗證的粗粒度判斷裡。
+    if (grantedCodes.length > 0) {
+      const roleId = crypto.randomUUID()
+      await database.insert(roles).values({
+        id: roleId,
+        companyId,
+        code: `TEST-ROLE-${roleId.slice(0, 8)}`,
+        name: '打卡測試角色',
+        description: null,
+        isSystem: false,
+        status: 'ACTIVE',
+        deletedAt: null,
+        deletedSeq: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+      const permissionRows = await database
+        .select({ id: permissions.id, code: permissions.code })
+        .from(permissions)
+        .where(eq(permissions.status, 'ACTIVE'))
+      const permissionIdByCode = new Map(permissionRows.map((row) => [row.code, row.id]))
+      for (const code of grantedCodes) {
+        const permissionId = permissionIdByCode.get(code)
+        if (permissionId === undefined) {
+          throw new Error(`測試固定資料準備失敗：權限碼 ${code} 在 permissions 表裡查不到（migration 沒有 seed 到？）`)
+        }
+        await database.insert(rolePermissions).values({ companyId, roleId, permissionId, createdAt: now })
+      }
+      await database.insert(companyUserRoles).values({
+        id: crypto.randomUUID(),
+        companyId,
+        companyUserId,
+        roleId,
+        assignedAt: now,
+        assignedBy: companyUserId,
+        revokedAt: null,
+        revokedBy: null,
+        revokedSeq: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+
+    return { employeeId, employmentId, companyUserId, token }
+  }
+
+  return { companyId, registerEmployee }
+}
+
+const readAuditLogs = (companyId: string, subjectId: string) =>
+  database
+    .select({
+      actorCompanyUserId: auditLogs.actorCompanyUserId,
+      action: auditLogs.action,
+      subjectTable: auditLogs.subjectTable,
+      subjectId: auditLogs.subjectId,
+      changes: auditLogs.changes,
+    })
+    .from(auditLogs)
+    .where(eq(auditLogs.companyId, companyId))
+    .then((rows) => rows.filter((row) => row.subjectTable === 'attendance_records' && row.subjectId === subjectId))
+
+const parseChanges = (raw: unknown): readonly { field: string; before?: unknown; after?: unknown; changed?: true }[] =>
+  (typeof raw === 'string' ? JSON.parse(raw) : raw) as readonly {
+    field: string
+    before?: unknown
+    after?: unknown
+    changed?: true
+  }[]
+
+beforeAll(() => {
+  database = createDatabase(readTestDatabaseConfig())
+  app = buildTestApp(database)
+})
+
+describe('attendance/records endpoints (integration)', () => {
+  test('create：上班卡成功、下班卡依配對成功，回應含座標（本人一律可見）', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+
+    const clockIn = await call<{ id: string; workDate: string; attendanceTypeCode: number; latitude: number | null }>(
+      '/attendance/records/create',
+      employee.token,
+      { attendanceTypeCode: 1, latitude: 25.033, longitude: 121.5654, accuracyMeters: 10 },
+    )
+    expect(clockIn.status).toBe(200)
+    expect(clockIn.payload.data.attendanceTypeCode).toBe(1)
+    expect(clockIn.payload.data.workDate).toBe('2026-08-29')
+    expect(clockIn.payload.data.latitude).toBeCloseTo(25.033, 5)
+
+    const clockOut = await call<{ workDate: string; attendanceTypeCode: number }>(
+      '/attendance/records/create',
+      employee.token,
+      { attendanceTypeCode: 2, latitude: null, longitude: null, accuracyMeters: null },
+    )
+    expect(clockOut.status).toBe(200)
+    // 配對規則：下班卡的 work_date 取自它配對到的上班卡，這裡兩者同一天。
+    expect(clockOut.payload.data.workDate).toBe(clockIn.payload.data.workDate)
+  })
+
+  test('create：already-punched，同一天已有一張有效上班卡時再打一次回 409', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+
+    await call('/attendance/records/create', employee.token, { attendanceTypeCode: 1 })
+    const second = await call('/attendance/records/create', employee.token, { attendanceTypeCode: 1 })
+
+    expect(second.status).toBe(409)
+    expect(second.payload.errors[0]?.code).toBe(AttendanceRecordErrorCode.AlreadyPunched)
+  })
+
+  test('create：no-clock-in-to-pair，沒有上班卡直接打下班卡（設定未建立時預設要求先上班卡）', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+
+    const result = await call('/attendance/records/create', employee.token, { attendanceTypeCode: 2 })
+    expect(result.status).toBe(422)
+    expect(result.payload.errors[0]?.code).toBe(AttendanceRecordErrorCode.NoClockInToPair)
+  })
+
+  test('create：gps-required，公司出勤設定要求 GPS 但沒有帶座標', async () => {
+    const { companyId, registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+    const now = clock.now()
+    await database.insert(attendanceSettings).values({
+      id: crypto.randomUUID(),
+      companyId,
+      requireClockInBeforeClockOut: true,
+      allowEmployeeCancellation: true,
+      allowCorrectionRequest: true,
+      correctionRequiresApproval: true,
+      gpsEnabled: true,
+      gpsRequired: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const result = await call('/attendance/records/create', employee.token, { attendanceTypeCode: 1 })
+    expect(result.status).toBe(422)
+    expect(result.payload.errors[0]?.code).toBe(AttendanceRecordErrorCode.GpsRequired)
+  })
+
+  test('revoke：本人撤銷自己的打卡成功，軟刪除且不寫稽核', async () => {
+    const { companyId, registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+
+    const created = await call<{ id: string }>('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 1,
+    })
+    const revoked = await call<{ id: string; revokedAt: string | null; revokedBy: string | null }>(
+      '/attendance/records/revoke',
+      employee.token,
+      { recordId: created.payload.data.id, reason: '打錯卡了' },
+    )
+    expect(revoked.status).toBe(200)
+    expect(revoked.payload.data.revokedAt).not.toBeNull()
+    expect(revoked.payload.data.revokedBy).toBe(employee.companyUserId)
+
+    const logs = await readAuditLogs(companyId, created.payload.data.id)
+    expect(logs.length).toBe(0)
+  })
+
+  test('revoke：撤銷別人的記錄視同找不到（不接受 employeeId，範圍由 token 推出）', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employeeA = await registerEmployee()
+    const employeeB = await registerEmployee()
+
+    const created = await call<{ id: string }>('/attendance/records/create', employeeA.token, {
+      attendanceTypeCode: 1,
+    })
+    const result = await call('/attendance/records/revoke', employeeB.token, {
+      recordId: created.payload.data.id,
+      reason: '不是我的卡',
+    })
+    expect(result.status).toBe(422)
+    expect(result.payload.errors[0]?.code).toBe(AttendanceRecordErrorCode.RecordNotFound)
+  })
+
+  test('revoke-other：他人撤銷成功並寫入 audit_logs（座標三欄為 presence 級）', async () => {
+    const { companyId, registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+    const reviewer = await registerEmployee({ permissionCodes: ['attendance.records.revoke-other'] })
+
+    const created = await call<{ id: string }>('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 1,
+      latitude: 25.03,
+      longitude: 121.56,
+    })
+    const revoked = await call<{ revokedBy: string | null }>('/attendance/records/revoke-other', reviewer.token, {
+      recordId: created.payload.data.id,
+      reason: '主管代為撤銷',
+    })
+    expect(revoked.status).toBe(200)
+    expect(revoked.payload.data.revokedBy).toBe(reviewer.companyUserId)
+
+    const logs = await readAuditLogs(companyId, created.payload.data.id)
+    expect(logs.length).toBe(1)
+    const [log] = logs
+    if (log === undefined) throw new Error('稽核紀錄不存在')
+    expect(log.action).toBe('attendance.records.revoke-other')
+    expect(log.actorCompanyUserId).toBe(reviewer.companyUserId)
+
+    const changes = parseChanges(log.changes)
+    // 座標為 presence 級：只記「變更了」，不記經緯度原始值。
+    const latitudeChange = changes.find((change) => change.field === 'latitude')
+    expect(latitudeChange).toEqual({ field: 'latitude', changed: true })
+    expect(JSON.stringify(latitudeChange)).not.toContain('25.03')
+    // revokeReason 為 value 級：記值。
+    expect(changes.find((change) => change.field === 'revokeReason')).toEqual({
+      field: 'revokeReason',
+      before: null,
+      after: '主管代為撤銷',
+    })
+  })
+
+  test('revoke-other：沒有權限碼時回 403', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+    const bystander = await registerEmployee({ permissionCodes: [] })
+
+    const created = await call<{ id: string }>('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 1,
+    })
+    const result = await callRaw('/attendance/records/revoke-other', bystander.token, {
+      recordId: created.payload.data.id,
+      reason: '沒有權限也想撤銷',
+    })
+    expect(result.status).toBe(403)
+  })
+
+  test('revoke：已有下班卡時，需先撤銷下班卡才能撤銷其前面的上班卡', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+
+    const clockIn = await call<{ id: string }>('/attendance/records/create', employee.token, { attendanceTypeCode: 1 })
+    const clockOut = await call<{ id: string }>('/attendance/records/create', employee.token, { attendanceTypeCode: 2 })
+
+    const blocked = await call('/attendance/records/revoke', employee.token, {
+      recordId: clockIn.payload.data.id,
+      reason: '想撤銷上班卡',
+    })
+    expect(blocked.status).toBe(422)
+    expect(blocked.payload.errors[0]?.code).toBe(AttendanceRecordErrorCode.ClockOutMustBeRevokedFirst)
+
+    const revokeClockOut = await call('/attendance/records/revoke', employee.token, {
+      recordId: clockOut.payload.data.id,
+      reason: '先撤銷下班卡',
+    })
+    expect(revokeClockOut.status).toBe(200)
+
+    const revokeClockIn = await call('/attendance/records/revoke', employee.token, {
+      recordId: clockIn.payload.data.id,
+      reason: '再撤銷上班卡',
+    })
+    expect(revokeClockIn.status).toBe(200)
+  })
+
+  test('revoke：已撤銷的記錄再撤銷一次回 409 already-revoked', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+
+    const created = await call<{ id: string }>('/attendance/records/create', employee.token, { attendanceTypeCode: 1 })
+    await call('/attendance/records/revoke', employee.token, {
+      recordId: created.payload.data.id,
+      reason: '第一次撤銷',
+    })
+    const second = await call('/attendance/records/revoke', employee.token, {
+      recordId: created.payload.data.id,
+      reason: '第二次撤銷',
+    })
+    expect(second.status).toBe(409)
+    expect(second.payload.errors[0]?.code).toBe(AttendanceRecordErrorCode.AlreadyRevoked)
+  })
+
+  test('get：★ 三種情境——本人／有權限查他人／無權限查他人，斷言鍵存不存在而不是值', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+    const viewer = await registerEmployee({
+      permissionCodes: ['attendance.records.get', 'attendance.records.view-all'],
+    })
+    const bystander = await registerEmployee({ permissionCodes: ['attendance.records.get'] })
+
+    const created = await call<{ id: string }>('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 1,
+      latitude: 25.04,
+      longitude: 121.55,
+    })
+    const recordId = created.payload.data.id
+
+    // 情境 1：查自己的——含 latitude／longitude 鍵。
+    const own = await callRaw('/attendance/records/get', employee.token, { recordId })
+    expect(own.status).toBe(200)
+    expect(own.payload.data).not.toBeNull()
+    const ownData = own.payload.data as Record<string, unknown>
+    expect('latitude' in ownData).toBe(true)
+    expect('longitude' in ownData).toBe(true)
+    expect(ownData['latitude']).toBeCloseTo(25.04, 5)
+
+    // 情境 2：具備 view-all 權限查別人的——含 latitude／longitude 鍵。
+    const withPermission = await callRaw('/attendance/records/get', viewer.token, { recordId })
+    expect(withPermission.status).toBe(200)
+    const withPermissionData = withPermission.payload.data as Record<string, unknown>
+    expect('latitude' in withPermissionData).toBe(true)
+    expect('longitude' in withPermissionData).toBe(true)
+
+    // 情境 3：不具備權限查別人的——★ 兩把鍵完全不出現（不是出現且為 null）。
+    const withoutPermission = await callRaw('/attendance/records/get', bystander.token, { recordId })
+    expect(withoutPermission.status).toBe(200)
+    const withoutPermissionData = withoutPermission.payload.data as Record<string, unknown>
+    expect('latitude' in withoutPermissionData).toBe(false)
+    expect('longitude' in withoutPermissionData).toBe(false)
+    // 其餘欄位（時間、地址）仍然看得到。
+    expect(withoutPermissionData['id']).toBe(recordId)
+  })
+
+  test('get：查無資料（含跨公司）回 data: null，不是錯誤', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+
+    const result = await call<null>('/attendance/records/get', employee.token, { recordId: crypto.randomUUID() })
+    expect(result.status).toBe(200)
+    expect(result.payload.data).toBeNull()
+  })
+
+  test('list-by-date：一次 JOIN 帶出員工姓名／工號／部門，分頁且不含座標', async () => {
+    const { companyId, registerEmployee } = await registerCompany()
+    const employeeWithDept = await registerEmployee({
+      permissionCodes: ['attendance.records.create', 'attendance.records.list-by-date'],
+    })
+    const employeeWithoutDept = await registerEmployee()
+    const now = clock.now()
+
+    const departmentId = crypto.randomUUID()
+    await database.insert(departments).values({
+      id: departmentId,
+      companyId,
+      parentId: null,
+      code: 'DEPT-A',
+      name: '測試部門',
+      description: null,
+      status: 'ACTIVE',
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      deletedSeq: 0,
+    })
+    await database.insert(employeeDepartmentHistories).values({
+      id: crypto.randomUUID(),
+      companyId,
+      employmentId: employeeWithDept.employmentId,
+      departmentId,
+      effectiveFrom: '2024-01-01',
+      effectiveTo: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    await call('/attendance/records/create', employeeWithDept.token, {
+      attendanceTypeCode: 1,
+      latitude: 25.01,
+      longitude: 121.51,
+    })
+    await call('/attendance/records/create', employeeWithoutDept.token, { attendanceTypeCode: 1 })
+
+    const list = await callRaw('/attendance/records/list-by-date', employeeWithDept.token, {
+      date: '2026-08-29',
+      perPage: 20,
+      currentPage: 1,
+    })
+    expect(list.status).toBe(200)
+    const listData = list.payload.data as {
+      readonly data: readonly Record<string, unknown>[]
+      readonly pagination: { totalCount: number }
+    }
+    expect(listData.pagination.totalCount).toBe(2)
+    expect(listData.data.length).toBe(2)
+
+    const withDeptItem = listData.data.find((item) => item['employeeId'] === employeeWithDept.employeeId)
+    expect(withDeptItem?.['departmentName']).toBe('測試部門')
+    expect(withDeptItem?.['employeeCode']).toBeTruthy()
+    // 列表恆不含座標——不是「查了但為 null」，是整個沒有這兩把鍵。
+    expect('latitude' in (withDeptItem ?? {})).toBe(false)
+    expect('longitude' in (withDeptItem ?? {})).toBe(false)
+
+    const withoutDeptItem = listData.data.find((item) => item['employeeId'] === employeeWithoutDept.employeeId)
+    expect(withoutDeptItem?.['departmentName']).toBeNull()
+
+    // 篩選：只查有部門的那一位。
+    const filtered = await callRaw('/attendance/records/list-by-date', employeeWithDept.token, {
+      date: '2026-08-29',
+      departmentId,
+      perPage: 20,
+      currentPage: 1,
+    })
+    const filteredData = filtered.payload.data as { readonly data: readonly Record<string, unknown>[] }
+    expect(filteredData.data.length).toBe(1)
+  })
+
+  test('list-by-date：含已撤銷紀錄（審核情境需要看到本來就已經被撤銷的打卡）', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee({
+      permissionCodes: ['attendance.records.create', 'attendance.records.revoke', 'attendance.records.list-by-date'],
+    })
+
+    const created = await call<{ id: string }>('/attendance/records/create', employee.token, { attendanceTypeCode: 1 })
+    await call('/attendance/records/revoke', employee.token, { recordId: created.payload.data.id, reason: '打錯了' })
+
+    const list = await callRaw('/attendance/records/list-by-date', employee.token, {
+      date: '2026-08-29',
+      perPage: 20,
+      currentPage: 1,
+    })
+    const listData = list.payload.data as { readonly data: readonly Record<string, unknown>[] }
+    expect(listData.data.length).toBe(1)
+    expect(listData.data[0]?.['revokedAt']).not.toBeNull()
+  })
+
+  test('revoke：由核准補打卡建立的紀錄（人工補登來源）一樣能正常撤銷，不因來源被擋', async () => {
+    const { companyId, registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+    const now = clock.now()
+    const recordId = crypto.randomUUID()
+
+    // Stage 8（補打卡申請）尚未實作，這裡直接寫入一筆來源為人工補登的打卡，模擬「核准後建立的
+    // 正式打卡」，驗證 revoke 的檢查邏輯確實沒有依 source_type_code 分支（計畫 §4.3.1）。
+    await database.insert(attendanceRecords).values({
+      id: recordId,
+      companyId,
+      employeeId: employee.employeeId,
+      employmentId: employee.employmentId,
+      employeeScheduleId: null,
+      workDate: '2026-08-29',
+      attendanceTypeCode: AttendanceTypeCode.ClockIn,
+      sourceTypeCode: AttendanceSourceTypeCode.ManualCorrection,
+      sourceId: null,
+      clockedAt: now,
+      latitude: null,
+      longitude: null,
+      accuracyMeters: null,
+      address: null,
+      addressResolvedAt: null,
+      revokedAt: null,
+      revokedBy: null,
+      revokeReason: null,
+      revokedSeq: 0,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const result = await call('/attendance/records/revoke', employee.token, { recordId, reason: '人工補登也能撤銷' })
+    expect(result.status).toBe(200)
+  })
+})

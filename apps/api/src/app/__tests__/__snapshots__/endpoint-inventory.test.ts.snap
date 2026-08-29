@@ -1,7 +1,12 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | 認證群組 | request body 必填欄位\`） 1`] = `
-"/attendance/settings/get | attendance.settings.get | authenticated | cmd,locale,rqTS
+"/attendance/records/create | attendance.records.create | authenticated | attendanceTypeCode,cmd,locale,rqTS
+/attendance/records/get | attendance.records.get | authenticated | cmd,locale,recordId,rqTS
+/attendance/records/list-by-date | attendance.records.list-by-date | authenticated | cmd,currentPage,date,locale,perPage,rqTS
+/attendance/records/revoke | attendance.records.revoke | authenticated | cmd,locale,reason,recordId,rqTS
+/attendance/records/revoke-other | attendance.records.revoke-other | authenticated | cmd,locale,reason,recordId,rqTS
+/attendance/settings/get | attendance.settings.get | authenticated | cmd,locale,rqTS
 /attendance/settings/update | attendance.settings.update | authenticated | allowCorrectionRequest,allowEmployeeCancellation,cmd,correctionRequiresApproval,gpsEnabled,gpsRequired,locale,requireClockInBeforeClockOut,rqTS
 /company-users/main/activate | company-users.main.activate | authenticated | cmd,employeeId,locale,rqTS
 /company-users/main/deactivate | company-users.main.deactivate | authenticated | cmd,employeeId,locale,rqTS

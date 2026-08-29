@@ -8,8 +8,10 @@
  * 跨模組的一行 import 把資料庫連線一起拖進來，而「裸 db client 限資料存取層」那條規則會被繞過。
  * 跨大目錄要資料，一律走 service。
  *
- * 本輪只有 `settings` 一個次目錄（實作計畫 `plans/06-attendance.md` §5 Stage 2）；`records`／
- * `results`／`correction-requests`／`correction-reviews` 排在後續階段，屆時在這裡各加一行。
+ * 本輪多了 `records` 次目錄（實作計畫 `plans/06-attendance.md` §5 Stage 3）；`results`／
+ * `correction-requests`／`correction-reviews` 排在後續階段，屆時在這裡各加一行。
  */
 export * from './settings/attendance-settings.service.ts'
 export * from './settings/attendance-settings.errors.ts'
+export * from './records/attendance-records.service.ts'
+export * from './records/attendance-records.errors.ts'
