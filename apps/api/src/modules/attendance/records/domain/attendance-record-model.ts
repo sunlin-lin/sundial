@@ -121,3 +121,44 @@ export type ListAttendanceRecordsByDatePage = {
   readonly items: readonly AttendanceRecordListItem[]
   readonly totalCount: number
 }
+
+/**
+ * `list-own-by-date` 的查詢條件。**範圍固定為呼叫者本人**（token 推出的身分，service 內部由
+ * `company_user → employee_id` 解出），不接受 `employeeId`／`departmentId`——查自己不需要篩選
+ * 是哪個員工、哪個部門。`workDate` 收一般日期而不是固定「今天」：Dashboard 現在只需要今天，
+ * 但 Stage 7「我的出勤」查別天會需要同一支查詢，不含日期會讓那時候得再開一支幾乎一樣的端點
+ * （Stage 5 補這個端點時一併判斷過，見 `attendance-records.routes.ts` 的端點說明）。
+ */
+export type ListOwnAttendanceRecordsByDateQuery = {
+  readonly workDate: string
+  readonly perPage: number
+  readonly currentPage: number
+  readonly sort: { readonly field: 'clockedAt'; readonly order: 'asc' | 'desc' }
+}
+
+/**
+ * `list-own-by-date` 單筆。**恆不含座標**（計畫 §4.2：列表輸出範圍由端點形狀決定，不是由呼叫者
+ * 身分決定——即使這是本人資料，這支端點仍是「列表」形狀，與 `list-by-date` 適用同一條規則；
+ * §4.2「看自己的一律看得到」講的是 `get` 這種明細端點，兩者管的是不同軸線，見
+ * `attendance-records.routes.ts` 的端點說明有完整推論）。
+ *
+ * 也不含 `employeeCode`／`employeeName`／`departmentName`——呼叫者查的必然是自己，不需要在
+ * 每一列重複回聲自己的姓名與工號，這也是這支查詢不必 JOIN `employees`／部門相關表的理由。
+ */
+export type OwnAttendanceRecordListItem = {
+  readonly id: string
+  readonly employmentId: string
+  readonly workDate: string
+  readonly attendanceTypeCode: AttendanceTypeCodeValue
+  readonly sourceTypeCode: AttendanceSourceTypeCodeValue
+  readonly clockedAt: string
+  readonly address: string | null
+  readonly revokedAt: string | null
+  readonly revokedBy: string | null
+  readonly revokeReason: string | null
+}
+
+export type ListOwnAttendanceRecordsByDatePage = {
+  readonly items: readonly OwnAttendanceRecordListItem[]
+  readonly totalCount: number
+}

@@ -8,11 +8,37 @@
  * 把整個 plugin 掛進已登入群組。
  *
  * **權限碼也不在這裡宣告**（§5.2.2）：它等於路徑的機械轉換，由身分驗證 middleware 自己推導。
- * 五支端點對應五個權限碼：`attendance.records.create`／`.revoke`／`.revoke-other`／`.get`／
- * `.list-by-date`。`attendance.records.view-all`（計畫 §4.2 的細粒度旗標，供 `get` 判斷座標
- * 可見範圍）**不是任何端點自己的權限碼**，不會出現在這裡——它是一個獨立、不對應任何路徑的
- * 可指派權限碼，由 `get.service.ts` 在執行期查詢並比對，見該檔與 `domain/
+ * 六支端點對應六個權限碼：`attendance.records.create`／`.revoke`／`.revoke-other`／`.get`／
+ * `.list-by-date`／`.list-own-by-date`。`attendance.records.view-all`（計畫 §4.2 的細粒度旗標，
+ * 供 `get` 判斷座標可見範圍）**不是任何端點自己的權限碼**，不會出現在這裡——它是一個獨立、不
+ * 對應任何路徑的可指派權限碼，由 `get.service.ts` 在執行期查詢並比對，見該檔與 `domain/
  * attendance-record-visibility.ts` 檔頭。
+ *
+ * ---
+ *
+ * ## `list-own-by-date`：Dashboard 缺口二，為什麼不能沿用 `list-by-date` 的權限碼
+ *
+ * Stage 5 Dashboard「今日打卡狀態」原本靠本次瀏覽階段內累積推導，重新整理頁面就歸零，即使今天
+ * 稍早已經打過卡。現有端點都不適用：`get` 要已知 `recordId`；`list-by-date` 的權限碼
+ * （`attendance.records.list-by-date`）在架構意圖上是人事／主管專用（見 0039 seed migration
+ * 的節點說明：「每日全員打卡明細（Stage 6）使用」），拿它當自助查詢會把 Dashboard 綁在一個不
+ * 保證每個員工都有的權限碼上。
+ *
+ * 因此新開一支獨立端點與獨立權限碼 `attendance.records.list-own-by-date`：**範圍固定為 token
+ * 推出的呼叫者本人**（service 內部由 `company_user → employee_id` 解出，不接受呼叫端指定
+ * `employeeId`，比照 `revoke` 與 `sessions-main.logout-all.service.ts` 的既有先例），因此可以
+ * 安全地配給每一位一般員工的角色，不必依賴人事／主管才有的權限碼。
+ *
+ * **日期參數收一般日期，不是固定查今天**：Dashboard 現在只需要今天，但同一支查詢日後「我的出勤」
+ * （Stage 7）查別天會直接用得上；收固定日期只服務得了 Dashboard 一種情境，日後多開一支「查別天」
+ * 的端點才是真正的白工，兩者的授權與範圍規則完全相同，沒有理由拆成兩支。
+ *
+ * **列表恆不含座標，與 `list-by-date` 適用同一條規則，不是計畫 §4.2「看自己的一律看得到」的例外**
+ * ：那一條講的是 `get` 這種明細端點——依呼叫者身分決定「看不看得到」是一個獨立的判斷軸線，只套用
+ * 在明細端點上；「列表一律不輸出座標」是另一條獨立的規則，套用在所有列表端點上，不分呼叫者是誰、
+ * 查的是不是自己的資料。這支端點是列表形狀（分頁、多筆），因此落在後一條規則裡，兩條規則管的是
+ * 不同的軸線，套在同一支端點上不衝突——即使查的是本人資料，端點形狀仍是決定要不要輸出座標的唯一
+ * 依據。需要座標時，呼叫端可以拿這支列表回來的 `id` 再打一次 `get`（明細端點才回座標）。
  *
  * ---
  *
@@ -43,6 +69,7 @@ import {
   handleAttendanceRecordCreate,
   handleAttendanceRecordGet,
   handleAttendanceRecordListByDate,
+  handleAttendanceRecordListOwnByDate,
   handleAttendanceRecordRevoke,
   handleAttendanceRecordRevokeOther,
   type AttendanceRecordsDependencies,
@@ -128,7 +155,27 @@ const AttendanceRecordListSearchSchema = t.Object({
   employeeId: t.Optional(Uuid),
 })
 
-/** `list-by-date` 只支援依打卡時刻排序——這一頁服務的是「當天逐筆事件」，不需要更多排序欄位。 */
+/** `list-own-by-date` 單筆：**恆不含座標**，也不含員工姓名／工號／部門（查的必然是自己，見
+ * `attendance-records.routes.ts` 檔頭「`list-own-by-date`」節與 `domain/
+ * attendance-record-model.ts` 的 `OwnAttendanceRecordListItem` 檔頭）。 */
+const OwnAttendanceRecordListItemSchema = t.Object({
+  id: Uuid,
+  employmentId: Uuid,
+  workDate: IsoDate,
+  attendanceTypeCode: AttendanceTypeCodeSchema,
+  sourceTypeCode: AttendanceSourceTypeCodeSchema,
+  clockedAt: TaipeiDateTime,
+  address: Nullable(t.String({ maxLength: 255 })),
+  revokedAt: Nullable(TaipeiDateTime),
+  revokedBy: Nullable(Uuid),
+  revokeReason: Nullable(t.String({ maxLength: 500 })),
+})
+
+/** `list-own-by-date` 的搜尋回聲：只有 `date`——範圍固定是呼叫者本人，沒有其他可篩選欄位。 */
+const OwnAttendanceRecordListSearchSchema = t.Object({ date: IsoDate })
+
+/** `list-by-date`／`list-own-by-date` 都只支援依打卡時刻排序——這一頁服務的是「當天逐筆事件」，
+ * 不需要更多排序欄位。 */
 const ATTENDANCE_RECORD_LIST_SORT_FIELDS = ['clockedAt'] as const
 
 /**
@@ -243,3 +290,24 @@ export const attendanceRecordsRoutes = (dependencies: AttendanceRecordsDependenc
         description: `${describeAttendanceRecordErrors(ATTENDANCE_RECORDS_ENDPOINT_ERRORS.listByDate)} 列表恆不含座標，只顯示反查地址；departmentId／employeeId 比對的都是查詢當天的資料。`,
       },
     })
+    .post(
+      '/attendance/records/list-own-by-date',
+      (context) => handleAttendanceRecordListOwnByDate(dependencies, context),
+      {
+        body: t.Object({
+          ...BaseRequest,
+          cmd: t.Literal('attendance.records.list-own-by-date'),
+          date: IsoDate,
+          ...PageRequest,
+          sort: t.Optional(sortRequest(ATTENDANCE_RECORD_LIST_SORT_FIELDS)),
+        }),
+        response: {
+          200: envelope(paginationResponse(OwnAttendanceRecordListSearchSchema, OwnAttendanceRecordListItemSchema)),
+          ...CommonFailureResponses,
+        },
+        detail: {
+          summary: '查詢本人某一天的打卡記錄（分頁，含已撤銷，供 Dashboard 重建今日打卡狀態使用）',
+          description: `${describeAttendanceRecordErrors(ATTENDANCE_RECORDS_ENDPOINT_ERRORS.listOwnByDate)} 範圍固定為 token 推出的本人，不接受 employeeId；列表恆不含座標（與 list-by-date 同一條規則），需要座標時改呼叫 get 查單筆明細，見本檔檔頭「list-own-by-date」節。`,
+        },
+      },
+    )

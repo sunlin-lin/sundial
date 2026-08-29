@@ -23,6 +23,7 @@ export const AttendanceRecordErrorCode = {
   AlreadyRevoked: 'attendance.records.errors.already-revoked',
   ClockOutMustBeRevokedFirst: 'attendance.records.errors.clock-out-must-be-revoked-first',
   PeriodLocked: 'attendance.records.errors.period-locked',
+  CancellationNotAllowed: 'attendance.records.errors.cancellation-not-allowed',
 } as const satisfies Record<string, ErrorCode>
 
 export type AttendanceRecordErrorCodeValue = (typeof AttendanceRecordErrorCode)[keyof typeof AttendanceRecordErrorCode]
@@ -96,6 +97,22 @@ export const attendanceRecordPeriodLocked = (): DomainError => ({
 })
 
 /**
+ * 公司出勤設定 `allow_employee_cancellation = false`，本人不得自行撤銷打卡（計畫 §4.2 的姊妹
+ * 開關；UI 10「本流程符合 `attendance_settings.allow_employee_cancellation`」）。**只用在
+ * `revoke`（本人），不用在 `revoke-other`（他人）**——這個開關字面上管的是「員工」自行撤銷，
+ * 不是具審核權限者的代為撤銷，見 `impl/attendance-records.revoke.service.ts` 檔頭的完整推論。
+ *
+ * **分組不是 `Forbidden`**：理由與 `attendanceRecordPeriodLocked` 相同——`Forbidden` 在邊界層
+ * 一律映射成不帶細節的「無權限」，會把「請改走補打卡流程」這句指引一起吃掉，而這裡的情境是
+ * 「這個功能被公司關掉了」，不是「你沒有權限」，訊息需要指向正確出路。
+ */
+export const attendanceRecordCancellationNotAllowed = (): DomainError => ({
+  group: ErrorGroup.Unprocessable,
+  code: AttendanceRecordErrorCode.CancellationNotAllowed,
+  msg: AttendanceRecordErrorCode.CancellationNotAllowed,
+})
+
+/**
  * 端點錯誤碼宣告（§1.8.3）。**未宣告的錯誤碼不得在執行期出現。**
  *
  * `httpStatus` 在這裡是**契約文件**，不是控制流程：實際的 status 由邊界層依 `group` 決定
@@ -139,6 +156,7 @@ export const ATTENDANCE_RECORDS_ENDPOINT_ERRORS = {
   revoke: [
     unprocessable(AttendanceRecordErrorCode.RecordNotFound),
     conflict(AttendanceRecordErrorCode.AlreadyRevoked),
+    unprocessable(AttendanceRecordErrorCode.CancellationNotAllowed),
     unprocessable(AttendanceRecordErrorCode.ClockOutMustBeRevokedFirst),
     unprocessable(AttendanceRecordErrorCode.PeriodLocked),
   ],
@@ -150,6 +168,7 @@ export const ATTENDANCE_RECORDS_ENDPOINT_ERRORS = {
   ],
   get: [],
   listByDate: [],
+  listOwnByDate: [],
 } as const satisfies Record<string, readonly AttendanceRecordErrorDeclaration[]>
 
 /** 把宣告清單轉成 OpenAPI 的 `description` 文字。 */

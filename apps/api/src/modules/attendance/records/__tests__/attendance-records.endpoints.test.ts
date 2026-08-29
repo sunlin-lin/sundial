@@ -656,6 +656,169 @@ describe('attendance/records endpoints (integration)', () => {
     expect(revokeClockIn.status).toBe(200)
   })
 
+  test('revoke：公司關掉 allow_employee_cancellation 後，本人撤銷被擋（缺口一）', async () => {
+    const { companyId, registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+    const now = clock.now()
+
+    const created = await call<{ id: string }>('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 1,
+    })
+
+    // 公司關掉這個開關——只有前端隱藏按鈕不算數（前端規範 §4.2），後端這裡也要擋。
+    await database.insert(attendanceSettings).values({
+      id: crypto.randomUUID(),
+      companyId,
+      requireClockInBeforeClockOut: true,
+      allowEmployeeCancellation: false,
+      allowCorrectionRequest: true,
+      correctionRequiresApproval: true,
+      gpsEnabled: true,
+      gpsRequired: false,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const blocked = await call('/attendance/records/revoke', employee.token, {
+      recordId: created.payload.data.id,
+      reason: '開關關了也想撤銷',
+    })
+    expect(blocked.status).toBe(422)
+    expect(blocked.payload.errors[0]?.code).toBe(AttendanceRecordErrorCode.CancellationNotAllowed)
+
+    // 這筆記錄仍然是未撤銷狀態——業務失敗不能留下任何寫入痕跡。
+    const stillNotRevoked = await call<{ revokedAt: string | null }>('/attendance/records/get', employee.token, {
+      recordId: created.payload.data.id,
+    })
+    expect(stillNotRevoked.payload.data?.revokedAt).toBeNull()
+  })
+
+  test('revoke：公司從未設定過出勤設定時（get 回 null），預設仍允許本人撤銷', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+
+    // 刻意不插入 attendance_settings，模擬「這間公司從未進過設定頁」。
+    const created = await call<{ id: string }>('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 1,
+    })
+    const revoked = await call('/attendance/records/revoke', employee.token, {
+      recordId: created.payload.data.id,
+      reason: '沒有設定過也應該能撤銷',
+    })
+    expect(revoked.status).toBe(200)
+  })
+
+  test('revoke-other：公司關掉 allow_employee_cancellation 不影響他人撤銷（這個開關管的是員工自助撤銷，不是人事代為撤銷）', async () => {
+    const { companyId, registerEmployee } = await registerCompany()
+    const employee = await registerEmployee()
+    const reviewer = await registerEmployee({ permissionCodes: ['attendance.records.revoke-other'] })
+    const now = clock.now()
+
+    await database.insert(attendanceSettings).values({
+      id: crypto.randomUUID(),
+      companyId,
+      requireClockInBeforeClockOut: true,
+      allowEmployeeCancellation: false,
+      allowCorrectionRequest: true,
+      correctionRequiresApproval: true,
+      gpsEnabled: true,
+      gpsRequired: false,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const created = await call<{ id: string }>('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 1,
+    })
+    const revoked = await call('/attendance/records/revoke-other', reviewer.token, {
+      recordId: created.payload.data.id,
+      reason: '員工自助撤銷被關了，但人事還是能代為撤銷',
+    })
+    expect(revoked.status).toBe(200)
+  })
+
+  test('list-own-by-date：只回本人在指定日期的打卡，分頁且不含座標與他人欄位（缺口二）', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee({
+      permissionCodes: ['attendance.records.create', 'attendance.records.list-own-by-date'],
+    })
+    const otherEmployee = await registerEmployee({
+      permissionCodes: ['attendance.records.create', 'attendance.records.list-own-by-date'],
+    })
+
+    await call('/attendance/records/create', employee.token, {
+      attendanceTypeCode: 1,
+      latitude: 25.02,
+      longitude: 121.52,
+    })
+    await call('/attendance/records/create', otherEmployee.token, { attendanceTypeCode: 1 })
+
+    const list = await callRaw('/attendance/records/list-own-by-date', employee.token, {
+      date: '2026-08-29',
+      perPage: 20,
+      currentPage: 1,
+    })
+    expect(list.status).toBe(200)
+    const listData = list.payload.data as {
+      readonly data: readonly Record<string, unknown>[]
+      readonly pagination: { totalCount: number }
+      readonly search: { date: string }
+    }
+    // 只看得到自己這一筆，看不到 otherEmployee 的。
+    expect(listData.pagination.totalCount).toBe(1)
+    expect(listData.data.length).toBe(1)
+    expect(listData.search.date).toBe('2026-08-29')
+
+    const item = listData.data[0]
+    // 列表恆不含座標——即使查的是自己的資料，端點形狀（列表）仍決定不回座標。
+    expect('latitude' in (item ?? {})).toBe(false)
+    expect('longitude' in (item ?? {})).toBe(false)
+    // 也不含員工姓名／工號／部門——查的必然是自己，不需要回聲。
+    expect('employeeId' in (item ?? {})).toBe(false)
+    expect('employeeName' in (item ?? {})).toBe(false)
+    expect('departmentName' in (item ?? {})).toBe(false)
+    expect(item?.['attendanceTypeCode']).toBe(1)
+  })
+
+  test('list-own-by-date：權限碼獨立於 list-by-date，只有 list-by-date 沒有本碼時回 403', async () => {
+    const { registerEmployee } = await registerCompany()
+    // 只授予人事／主管用的 list-by-date，刻意不給 list-own-by-date。
+    const employee = await registerEmployee({
+      permissionCodes: ['attendance.records.create', 'attendance.records.list-by-date'],
+    })
+
+    await call('/attendance/records/create', employee.token, { attendanceTypeCode: 1 })
+    const result = await callRaw('/attendance/records/list-own-by-date', employee.token, {
+      date: '2026-08-29',
+      perPage: 20,
+      currentPage: 1,
+    })
+    expect(result.status).toBe(403)
+  })
+
+  test('list-own-by-date：含已撤銷紀錄（Dashboard 需要知道這筆已經被撤銷，才能正確重建今日狀態）', async () => {
+    const { registerEmployee } = await registerCompany()
+    const employee = await registerEmployee({
+      permissionCodes: [
+        'attendance.records.create',
+        'attendance.records.revoke',
+        'attendance.records.list-own-by-date',
+      ],
+    })
+
+    const created = await call<{ id: string }>('/attendance/records/create', employee.token, { attendanceTypeCode: 1 })
+    await call('/attendance/records/revoke', employee.token, { recordId: created.payload.data.id, reason: '打錯了' })
+
+    const list = await callRaw('/attendance/records/list-own-by-date', employee.token, {
+      date: '2026-08-29',
+      perPage: 20,
+      currentPage: 1,
+    })
+    const listData = list.payload.data as { readonly data: readonly Record<string, unknown>[] }
+    expect(listData.data.length).toBe(1)
+    expect(listData.data[0]?.['revokedAt']).not.toBeNull()
+  })
+
   test('revoke：已撤銷的記錄再撤銷一次回 409 already-revoked', async () => {
     const { registerEmployee } = await registerCompany()
     const employee = await registerEmployee()

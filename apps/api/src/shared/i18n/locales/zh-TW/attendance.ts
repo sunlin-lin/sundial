@@ -22,6 +22,7 @@ export const ATTENDANCE = {
       'already-revoked': '這筆打卡紀錄剛好已經被撤銷，請重新整理後再試',
       'clock-out-must-be-revoked-first': '這筆上班卡已經有對應的下班卡，請先撤銷下班卡再撤銷這筆上班卡',
       'period-locked': '這個工作日的薪資已結算，如需更正請改走補打卡流程',
+      'cancellation-not-allowed': '公司目前不允許員工自行撤銷打卡紀錄，如需更正請改走補打卡流程或聯繫人事協助撤銷',
     },
   },
 } as const

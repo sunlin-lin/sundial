@@ -6,6 +6,8 @@ import type {
   AttendanceTypeCodeValue,
   ListAttendanceRecordsByDatePage,
   ListAttendanceRecordsByDateQuery,
+  ListOwnAttendanceRecordsByDatePage,
+  ListOwnAttendanceRecordsByDateQuery,
 } from './domain/attendance-record-model.ts'
 import type { AttendanceRecordInsertOutcome } from './domain/attendance-record-duplicate.ts'
 import { findAttendanceRecordDetail as findAttendanceRecordDetailImpl } from './impl/attendance-records.find-detail.repository.ts'
@@ -27,6 +29,7 @@ import {
   type RevokeAttendanceRecordUpdate,
 } from './impl/attendance-records.revoke.repository.ts'
 import { listAttendanceRecordsByDate as listAttendanceRecordsByDateImpl } from './impl/attendance-records.list-by-date.repository.ts'
+import { listOwnAttendanceRecordsByDate as listOwnAttendanceRecordsByDateImpl } from './impl/attendance-records.list-own-by-date.repository.ts'
 
 export type { QueryRunner }
 export type { NewAttendanceRecord, RevokeAttendanceRecordUpdate, AttendanceRecordInsertOutcome }
@@ -90,3 +93,11 @@ export const listAttendanceRecordsByDate = (
   companyId: string,
   query: ListAttendanceRecordsByDateQuery,
 ): Promise<ListAttendanceRecordsByDatePage> => listAttendanceRecordsByDateImpl(runner, companyId, query)
+
+export const listOwnAttendanceRecordsByDate = (
+  runner: QueryRunner,
+  companyId: string,
+  employeeId: string,
+  query: ListOwnAttendanceRecordsByDateQuery,
+): Promise<ListOwnAttendanceRecordsByDatePage> =>
+  listOwnAttendanceRecordsByDateImpl(runner, companyId, employeeId, query)

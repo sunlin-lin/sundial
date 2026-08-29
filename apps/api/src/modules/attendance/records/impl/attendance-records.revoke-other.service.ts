@@ -11,6 +11,11 @@
  * 選項 A：兩者共用機制，差別只在「是誰把 `revoked_by` 填成誰」與稽核）——本檔不重複那段推論，
  * 只在「與 `revoke` 不同」的地方加註解。
  *
+ * **不檢查 `attendance_settings.allow_employee_cancellation`**：這個開關字面上管的是
+ * 「員工」自行撤銷這條自助路徑（見 `attendance-records.revoke.service.ts` 檔頭「撤銷開關」
+ * 段落），不是具審核權限者的代為撤銷。公司關掉它，語意上是「這類更正一律收斂到人事審核」，
+ * `revoke-other` 正是那條收斂後仍要保留的路，因此不受這個開關約束，只靠自己的權限碼把關。
+ *
  * **必須寫 `audit_logs`**：具審核權限者對別人已生效的出勤事實做出「這筆不算數」的處置，性質與
  * 「審核結果變更」相鄰（計畫 §4.6）。欄位等級見 `modules/audit/main/domain/
  * audit-field-policy.ts` 的 `attendance_records` 節——**座標三欄是 `Presence` 級**，記進

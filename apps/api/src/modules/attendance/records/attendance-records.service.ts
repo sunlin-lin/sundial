@@ -7,8 +7,9 @@
  * 本層**不得碰 envelope、HTTP status 或 `WebFlowCode`**（§1.8.2、§3.1.1）：業務拒絕一律以
  * `ServiceResult` 的失敗結果 ＋ 具名分組表達。
  *
- * 五個動作：`create`（打卡）、`revoke`（本人撤銷）、`revokeOther`（他人撤銷）、`get`（單筆明細）、
- * `listByDate`（依日期查全公司打卡）。
+ * 六個動作：`create`（打卡）、`revoke`（本人撤銷）、`revokeOther`（他人撤銷）、`get`（單筆明細）、
+ * `listByDate`（依日期查全公司打卡）、`listOwnByDate`（依日期查本人打卡，Stage 5 補的端點，
+ * 見 `attendance-records.routes.ts` 端點說明）。
  */
 import type { ServiceResult } from '../../../shared/service-result.ts'
 import type { AttendanceRecordsContext } from './domain/attendance-record-context.ts'
@@ -18,6 +19,8 @@ import type {
   GetAttendanceRecordInput,
   ListAttendanceRecordsByDatePage,
   ListAttendanceRecordsByDateQuery,
+  ListOwnAttendanceRecordsByDatePage,
+  ListOwnAttendanceRecordsByDateQuery,
   RevokeOtherAttendanceRecordInput,
   RevokeOwnAttendanceRecordInput,
 } from './domain/attendance-record-model.ts'
@@ -29,6 +32,7 @@ import {
   type AttendanceRecordView,
 } from './impl/attendance-records.get.service.ts'
 import { listAttendanceRecordsByDate as listAttendanceRecordsByDateImpl } from './impl/attendance-records.list-by-date.service.ts'
+import { listOwnAttendanceRecordsByDate as listOwnAttendanceRecordsByDateImpl } from './impl/attendance-records.list-own-by-date.service.ts'
 
 export type { AttendanceRecordsContext }
 export type { AttendanceRecordView }
@@ -40,6 +44,9 @@ export type {
   GetAttendanceRecordInput,
   ListAttendanceRecordsByDatePage,
   ListAttendanceRecordsByDateQuery,
+  ListOwnAttendanceRecordsByDatePage,
+  ListOwnAttendanceRecordsByDateQuery,
+  OwnAttendanceRecordListItem,
   RevokeOtherAttendanceRecordInput,
   RevokeOwnAttendanceRecordInput,
 } from './domain/attendance-record-model.ts'
@@ -69,3 +76,8 @@ export const listAttendanceRecordsByDate = (
   context: AttendanceRecordsContext,
   query: ListAttendanceRecordsByDateQuery,
 ): Promise<ServiceResult<ListAttendanceRecordsByDatePage>> => listAttendanceRecordsByDateImpl(context, query)
+
+export const listOwnAttendanceRecordsByDate = (
+  context: AttendanceRecordsContext,
+  query: ListOwnAttendanceRecordsByDateQuery,
+): Promise<ServiceResult<ListOwnAttendanceRecordsByDatePage>> => listOwnAttendanceRecordsByDateImpl(context, query)

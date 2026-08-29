@@ -27,12 +27,15 @@ import type {
   AttendanceRecordDetail,
   AttendanceRecordListItem,
   ListAttendanceRecordsByDateQuery,
+  ListOwnAttendanceRecordsByDateQuery,
+  OwnAttendanceRecordListItem,
 } from './domain/attendance-record-model.ts'
 import type { AttendanceRecordView } from './impl/attendance-records.get.service.ts'
 import {
   createAttendanceRecord,
   getAttendanceRecord,
   listAttendanceRecordsByDate,
+  listOwnAttendanceRecordsByDate,
   revokeOtherAttendanceRecord,
   revokeOwnAttendanceRecord,
 } from './attendance-records.service.ts'
@@ -139,10 +142,30 @@ const toAttendanceRecordListItemData = (item: AttendanceRecordListItem) => ({
   revokeReason: item.revokeReason,
 })
 
+/**
+ * `list-own-by-date` 單筆映射。**恆不含座標**——與 `toAttendanceRecordListItemData` 同一條規則
+ * （計畫 §4.2：列表一律不回座標），差別只在少了 `employeeCode`／`employeeName`／`departmentName`
+ * 三欄（查自己不需要回聲自己的姓名工號），見 `domain/attendance-record-model.ts` 的
+ * `OwnAttendanceRecordListItem` 檔頭。
+ */
+const toOwnAttendanceRecordListItemData = (item: OwnAttendanceRecordListItem) => ({
+  id: item.id,
+  employmentId: item.employmentId,
+  workDate: item.workDate,
+  attendanceTypeCode: item.attendanceTypeCode,
+  sourceTypeCode: item.sourceTypeCode,
+  clockedAt: item.clockedAt,
+  address: item.address,
+  revokedAt: item.revokedAt,
+  revokedBy: item.revokedBy,
+  revokeReason: item.revokeReason,
+})
+
 /** 各端點 `data` 的型別。由映射函式反推，因此改了映射就會改型別，不會兩邊漂移。 */
 export type AttendanceRecordDetailData = ReturnType<typeof toAttendanceRecordDetailData>
 export type AttendanceRecordGetDetailData = ReturnType<typeof toAttendanceRecordGetDetailData>
 export type AttendanceRecordListData = ReturnType<typeof toAttendanceRecordListItemData>
+export type OwnAttendanceRecordListData = ReturnType<typeof toOwnAttendanceRecordListItemData>
 
 type CreateBody = {
   readonly attendanceTypeCode: AttendanceTypeCodeValue
@@ -159,6 +182,15 @@ type ListByDateBody = {
   readonly date: string
   readonly departmentId?: string
   readonly employeeId?: string
+  readonly perPage: number
+  readonly currentPage: number
+  readonly sort?: { readonly field: 'clockedAt'; readonly order: 'asc' | 'desc' }
+}
+
+/** `list-own-by-date` 的 body：**沒有 `employeeId`／`departmentId`**——範圍固定是呼叫者本人，
+ * 不接受呼叫端指定要查誰（§4.2 的細粒度範圍規則，比照 `RevokeBody` 不接受 `employeeId`）。 */
+type ListOwnByDateBody = {
+  readonly date: string
   readonly perPage: number
   readonly currentPage: number
   readonly sort?: { readonly field: 'clockedAt'; readonly order: 'asc' | 'desc' }
@@ -258,6 +290,38 @@ export const handleAttendanceRecordListByDate = async (
       query.sort,
       { currentPage: query.currentPage, perPage: query.perPage, totalCount: page.totalCount },
       page.items.map(toAttendanceRecordListItemData),
+    ),
+  )
+  context.set.status = outcome.status
+  return outcome.body
+}
+
+/** `list-own-by-date` 的搜尋條件回聲：只有 `date`，範圍固定是本人，沒有可篩選的欄位。 */
+const toListOwnByDateSearchEcho = (body: ListOwnByDateBody) => ({ date: body.date })
+
+export const handleAttendanceRecordListOwnByDate = async (
+  dependencies: AttendanceRecordsDependencies,
+  context: EndpointContext<ListOwnByDateBody>,
+): Promise<
+  EndpointResult<
+    ReturnType<typeof toListView<ReturnType<typeof toListOwnByDateSearchEcho>, OwnAttendanceRecordListData>>
+  >
+> => {
+  const identity = requireIdentity(context.requestContext.session)
+  const query: ListOwnAttendanceRecordsByDateQuery = {
+    workDate: context.body.date,
+    perPage: context.body.perPage,
+    currentPage: context.body.currentPage,
+    sort: context.body.sort ?? DEFAULT_LIST_BY_DATE_SORT,
+  }
+
+  const result = await listOwnAttendanceRecordsByDate(toAttendanceRecordsContext(dependencies, identity), query)
+  const outcome = resolveServiceResult(result, (page) =>
+    toListView(
+      toListOwnByDateSearchEcho(context.body),
+      query.sort,
+      { currentPage: query.currentPage, perPage: query.perPage, totalCount: page.totalCount },
+      page.items.map(toOwnAttendanceRecordListItemData),
     ),
   )
   context.set.status = outcome.status

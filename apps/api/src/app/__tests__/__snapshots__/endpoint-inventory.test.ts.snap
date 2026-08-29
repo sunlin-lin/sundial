@@ -4,6 +4,7 @@ exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | �
 "/attendance/records/create | attendance.records.create | authenticated | attendanceTypeCode,cmd,locale,rqTS
 /attendance/records/get | attendance.records.get | authenticated | cmd,locale,recordId,rqTS
 /attendance/records/list-by-date | attendance.records.list-by-date | authenticated | cmd,currentPage,date,locale,perPage,rqTS
+/attendance/records/list-own-by-date | attendance.records.list-own-by-date | authenticated | cmd,currentPage,date,locale,perPage,rqTS
 /attendance/records/revoke | attendance.records.revoke | authenticated | cmd,locale,reason,recordId,rqTS
 /attendance/records/revoke-other | attendance.records.revoke-other | authenticated | cmd,locale,reason,recordId,rqTS
 /attendance/results/recalculate-no-schedule | attendance.results.recalculate-no-schedule | authenticated | cmd,locale,rqTS
