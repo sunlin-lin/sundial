@@ -20,6 +20,8 @@ export const COMPANY_USERS = {
       'username-taken': '此登入帳號已被使用',
       /** ⚠️ 「查無此成員」與「這位成員屬於別家公司」共用的唯一出口（§3.2）。 */
       'company-user-not-found': '找不到指定的公司成員',
+      /** 啟用／停用帳號共用（`company-users-main.errors.ts` 的 `cannotChangeOwnAccountStatus`）。 */
+      'cannot-change-own-status': '不能變更自己的登入帳號狀態，請由其他管理者操作',
     },
   },
   roles: {

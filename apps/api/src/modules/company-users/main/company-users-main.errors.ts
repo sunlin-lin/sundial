@@ -24,6 +24,16 @@ export const CompanyUserErrorCode = {
    * `WHERE` 裡），想寫出不一致的回應都寫不出來。
    */
   CompanyUserNotFound: 'company-users.main.errors.company-user-not-found',
+  /**
+   * 409。操作者對自己的帳號送出啟用／停用（本輪新增，UI 定案 `docs/ui/20-employee-list.md`
+   * §3.5「管理登入帳號狀態」）。**分組是 `Conflict`，不是 `Forbidden`**——理由見
+   * `impl/company-users-main.deactivate-account.service.ts` 檔頭：`Forbidden` 在邊界層固定
+   * 映射成不帶 `errors[]` 的通用「權限不足」（`http/error-boundary.ts`），前端會拿不到可以顯示
+   * 的具體訊息；這裡要的是使用者看得懂、可以定位到 `employeeId` 欄位的拒絕，因此比照
+   * `company-users/roles` 的 `lastRoleRequired`，用 `Conflict` 表達「這個操作與系統的一項不變量
+   * 衝突」，不是「你沒有這個功能權限」。
+   */
+  CannotChangeOwnAccountStatus: 'company-users.main.errors.cannot-change-own-status',
 } as const satisfies Record<string, ErrorCode>
 
 export type CompanyUserErrorCodeValue = (typeof CompanyUserErrorCode)[keyof typeof CompanyUserErrorCode]
@@ -49,15 +59,45 @@ export const usernameTaken = (): DomainError => ({
   data: { field: 'username' },
 })
 
-/** 查無此公司成員，見上方 {@link CompanyUserErrorCode.CompanyUserNotFound} 檔頭。 */
-export const companyUserNotFound = (): DomainError => ({
+/**
+ * 查無此公司成員，見上方 {@link CompanyUserErrorCode.CompanyUserNotFound} 檔頭。
+ *
+ * @param field 請求裡指向這個目標的欄位名（§1.3 的 `data.field` 慣例）。**預設 `companyUserId`**
+ *   保留重設密碼原本的行為不變；啟用／停用端點的請求以 `employeeId` 指定目標（理由見
+ *   `impl/company-users-main.deactivate-account.service.ts` 檔頭），呼叫時要明確傳入。
+ */
+export const companyUserNotFound = (field: 'companyUserId' | 'employeeId' = 'companyUserId'): DomainError => ({
   group: ErrorGroup.Unprocessable,
   code: CompanyUserErrorCode.CompanyUserNotFound,
   msg: CompanyUserErrorCode.CompanyUserNotFound,
-  data: { field: 'companyUserId' },
+  data: { field },
+})
+
+/**
+ * 操作者對自己的帳號送出啟用／停用，見上方 {@link CompanyUserErrorCode.CannotChangeOwnAccountStatus}
+ * 檔頭。啟用／停用共用同一個碼——對使用者而言都是「不能對自己的帳號做這件事」，沒有必要為兩個
+ * 方向各造一個字面上不同、語意卻相同的碼。
+ */
+export const cannotChangeOwnAccountStatus = (): DomainError => ({
+  group: ErrorGroup.Conflict,
+  code: CompanyUserErrorCode.CannotChangeOwnAccountStatus,
+  msg: CompanyUserErrorCode.CannotChangeOwnAccountStatus,
+  data: { field: 'employeeId' },
 })
 
 /** `POST /company-users/main/reset-password` 可能吐出的業務錯誤碼（§1.8.3）。 */
 export const COMPANY_USERS_MAIN_RESET_PASSWORD_ERROR_CODES: readonly ErrorCode[] = [
   CompanyUserErrorCode.CompanyUserNotFound,
+]
+
+/** `POST /company-users/main/activate` 可能吐出的業務錯誤碼（§1.8.3）。 */
+export const COMPANY_USERS_MAIN_ACTIVATE_ERROR_CODES: readonly ErrorCode[] = [
+  CompanyUserErrorCode.CompanyUserNotFound,
+  CompanyUserErrorCode.CannotChangeOwnAccountStatus,
+]
+
+/** `POST /company-users/main/deactivate` 可能吐出的業務錯誤碼（§1.8.3）。 */
+export const COMPANY_USERS_MAIN_DEACTIVATE_ERROR_CODES: readonly ErrorCode[] = [
+  CompanyUserErrorCode.CompanyUserNotFound,
+  CompanyUserErrorCode.CannotChangeOwnAccountStatus,
 ]

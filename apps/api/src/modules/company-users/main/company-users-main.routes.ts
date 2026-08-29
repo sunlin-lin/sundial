@@ -1,19 +1,31 @@
 /**
- * `company-users/main` 的端點目錄（§0.4「routes 不拆」、§1.9）。目前只有一支：重設密碼
- * （UI 定案 `docs/ui/20-employee-list.md` §3.5「管理者直接輸入員工的新密碼」）。
+ * `company-users/main` 的端點目錄（§0.4「routes 不拆」、§1.9）。三支：重設密碼（UI 定案
+ * `docs/ui/20-employee-list.md` §3.5「管理者直接輸入員工的新密碼」）、啟用帳號、停用帳號
+ * （同一節「可以管理登入帳號狀態」）。
  *
  * **端點自己不宣告認證方式**（§1.9.1）：本 plugin 由 `app/routes.ts` 掛進「已登入群組」，
  * 認證是群組的屬性。權限碼也不在這裡寫，它由路徑機械推導（§5.2.2）。
  *
- * `companyId` 不在 body 裡（§1.1）：公司範圍一律由已驗證的 token 決定。
+ * `companyId` 不在 body 裡（§1.1）：公司範圍一律由已驗證的 token 決定。啟用／停用也不接受
+ * `status` 這種可寫欄位（§1.2）——狀態變更各自走自己的動作端點，`employeeId` 是目標識別碼，
+ * 不是狀態值本身。
  */
 import { Elysia, t } from 'elysia'
 import { requestContext, type RequestSession } from '../../../http/request-context.ts'
 import type { VerifiedIdentity } from '../../../shared/access-control.ts'
 import { envelope } from '../../../shared/envelope.ts'
 import { BaseRequest, Uuid } from '../../../shared/field-schemas.ts'
-import { COMPANY_USERS_MAIN_RESET_PASSWORD_ERROR_CODES } from './company-users-main.errors.ts'
-import { resetPasswordHandler, type CompanyUsersMainDependencies } from './company-users-main.handler.ts'
+import {
+  COMPANY_USERS_MAIN_ACTIVATE_ERROR_CODES,
+  COMPANY_USERS_MAIN_DEACTIVATE_ERROR_CODES,
+  COMPANY_USERS_MAIN_RESET_PASSWORD_ERROR_CODES,
+} from './company-users-main.errors.ts'
+import {
+  activateAccountHandler,
+  deactivateAccountHandler,
+  resetPasswordHandler,
+  type CompanyUsersMainDependencies,
+} from './company-users-main.handler.ts'
 
 /**
  * 新密碼。長度上限與下限對齊 `employees/onboarding` 的 `InitialPassword`（該檔頭：密碼複雜度
@@ -23,6 +35,15 @@ import { resetPasswordHandler, type CompanyUsersMainDependencies } from './compa
 const NewPassword = t.String({ minLength: 8, maxLength: 128 })
 
 const PasswordResetData = t.Object({ companyUserId: Uuid })
+
+/** 啟用／停用端點的請求：`employeeId` 是目標識別碼，不是狀態值本身（見檔頭）。 */
+const SetAccountStatusBody = { employeeId: Uuid }
+
+/** 啟用／停用端點共用的回應形狀，`status` 回異動後的值讓前端不必重新查詢。 */
+const AccountStatusData = t.Object({
+  companyUserId: Uuid,
+  status: t.Union([t.Literal('ACTIVE'), t.Literal('INACTIVE')]),
+})
 
 /** 業務錯誤的回應形狀。409 與 422 在 envelope 上都是 `code='300'`，差別只在錯誤分組（§1.3）。 */
 const BusinessFailureResponses = {
@@ -55,32 +76,86 @@ const describeErrorCodes = (codes: readonly string[]): string =>
   codes.length === 0 ? '本端點不會吐出任何業務錯誤碼。' : `可能的業務錯誤碼：${codes.join('、')}`
 
 export const companyUsersMainRoutes = (dependencies: CompanyUsersMainDependencies) =>
-  new Elysia({ name: 'company-users-main-routes' }).use(requestContext).post(
-    '/company-users/main/reset-password',
-    async ({ body, requestContext: context, set }) => {
-      const outcome = await resetPasswordHandler(dependencies, requireIdentity(context.session), {
-        companyUserId: body.companyUserId,
-        newPassword: body.newPassword,
-      })
-      // 只設定 status，不碰回應本體：`code`／`errors` 由邊界層的錯誤映射一起決定（§1.8.1）。
-      set.status = outcome.status
-      return outcome.body
-    },
-    {
-      body: t.Object({
-        ...BaseRequest,
-        cmd: t.Literal('company-users.main.reset-password'),
-        companyUserId: Uuid,
-        newPassword: NewPassword,
-      }),
-      response: {
-        200: envelope(PasswordResetData),
-        ...BusinessFailureResponses,
-        ...CommonFailureResponses,
+  new Elysia({ name: 'company-users-main-routes' })
+    .use(requestContext)
+    .post(
+      '/company-users/main/reset-password',
+      async ({ body, requestContext: context, set }) => {
+        const outcome = await resetPasswordHandler(dependencies, requireIdentity(context.session), {
+          companyUserId: body.companyUserId,
+          newPassword: body.newPassword,
+        })
+        // 只設定 status，不碰回應本體：`code`／`errors` 由邊界層的錯誤映射一起決定（§1.8.1）。
+        set.status = outcome.status
+        return outcome.body
       },
-      detail: {
-        summary: '管理者重設公司成員的登入密碼',
-        description: `${describeErrorCodes(COMPANY_USERS_MAIN_RESET_PASSWORD_ERROR_CODES)} 不寄送 Email、簡訊或系統通知（UI 定案 \`docs/ui/20-employee-list.md\` §3.5）；重設後 \`must_change_password\` 一律為 true；密碼與密碼雜湊不進稽核內容，只記「重設了」這件事。`,
+      {
+        body: t.Object({
+          ...BaseRequest,
+          cmd: t.Literal('company-users.main.reset-password'),
+          companyUserId: Uuid,
+          newPassword: NewPassword,
+        }),
+        response: {
+          200: envelope(PasswordResetData),
+          ...BusinessFailureResponses,
+          ...CommonFailureResponses,
+        },
+        detail: {
+          summary: '管理者重設公司成員的登入密碼',
+          description: `${describeErrorCodes(COMPANY_USERS_MAIN_RESET_PASSWORD_ERROR_CODES)} 不寄送 Email、簡訊或系統通知（UI 定案 \`docs/ui/20-employee-list.md\` §3.5）；重設後 \`must_change_password\` 一律為 true；密碼與密碼雜湊不進稽核內容，只記「重設了」這件事。`,
+        },
       },
-    },
-  )
+    )
+    .post(
+      '/company-users/main/activate',
+      async ({ body, requestContext: context, set }) => {
+        const outcome = await activateAccountHandler(dependencies, requireIdentity(context.session), {
+          employeeId: body.employeeId,
+        })
+        set.status = outcome.status
+        return outcome.body
+      },
+      {
+        body: t.Object({
+          ...BaseRequest,
+          cmd: t.Literal('company-users.main.activate'),
+          ...SetAccountStatusBody,
+        }),
+        response: {
+          200: envelope(AccountStatusData),
+          ...BusinessFailureResponses,
+          ...CommonFailureResponses,
+        },
+        detail: {
+          summary: '啟用員工的登入帳號',
+          description: `${describeErrorCodes(COMPANY_USERS_MAIN_ACTIVATE_ERROR_CODES)} 已經是啟用狀態時視為空操作，回 200 但不重複記稽核；操作者不得對自己的帳號執行本動作（UI 定案 \`docs/ui/20-employee-list.md\` §3.5「可以管理登入帳號狀態」）。`,
+        },
+      },
+    )
+    .post(
+      '/company-users/main/deactivate',
+      async ({ body, requestContext: context, set }) => {
+        const outcome = await deactivateAccountHandler(dependencies, requireIdentity(context.session), {
+          employeeId: body.employeeId,
+        })
+        set.status = outcome.status
+        return outcome.body
+      },
+      {
+        body: t.Object({
+          ...BaseRequest,
+          cmd: t.Literal('company-users.main.deactivate'),
+          ...SetAccountStatusBody,
+        }),
+        response: {
+          200: envelope(AccountStatusData),
+          ...BusinessFailureResponses,
+          ...CommonFailureResponses,
+        },
+        detail: {
+          summary: '停用員工的登入帳號',
+          description: `${describeErrorCodes(COMPANY_USERS_MAIN_DEACTIVATE_ERROR_CODES)} 已經是停用狀態時視為空操作，回 200 但不重複記稽核；操作者不得對自己的帳號執行本動作（UI 定案 \`docs/ui/20-employee-list.md\` §3.5「可以管理登入帳號狀態」）。此端點與離職流程內部的帳號停用是兩個不同動作，離職辦理仍由 \`employments/main/leave\` 處理，不受影響。`,
+        },
+      },
+    )

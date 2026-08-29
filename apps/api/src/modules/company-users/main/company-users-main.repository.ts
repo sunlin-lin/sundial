@@ -2,7 +2,9 @@
  * 公司帳號成員關係的資料存取入口（§0.4）。
  */
 import type { QueryRunner } from '../../../db/client.ts'
+import type { CompanyUserStatusValue } from '../../../db/schema/index.ts'
 import { findActiveCompanyUserByEmployee as findActiveCompanyUserByEmployeeImpl } from './impl/company-users-main.find-active-by-employee.repository.ts'
+import { findCompanyUserByEmployee as findCompanyUserByEmployeeImpl } from './impl/company-users-main.find-by-employee.repository.ts'
 import { findCompanyUserById as findCompanyUserByIdImpl } from './impl/company-users-main.find-by-id.repository.ts'
 import {
   insertCompanyUser as insertCompanyUserImpl,
@@ -13,6 +15,7 @@ import {
   type NewUser,
   type UserInsertOutcome,
 } from './impl/company-users-main.insert-user.repository.ts'
+import { markCompanyUserActivated as markCompanyUserActivatedImpl } from './impl/company-users-main.mark-activated.repository.ts'
 import { markCompanyUserDeactivated as markCompanyUserDeactivatedImpl } from './impl/company-users-main.mark-deactivated.repository.ts'
 import {
   updateUserPassword as updateUserPasswordImpl,
@@ -46,6 +49,22 @@ export const markCompanyUserDeactivated = (
   companyUserId: string,
   deactivatedAt: string,
 ): Promise<number> => markCompanyUserDeactivatedImpl(runner, companyId, companyUserId, deactivatedAt)
+
+/** 啟用一個公司帳號成員關係（與 `markCompanyUserDeactivated` 對稱）。 */
+export const markCompanyUserActivated = (
+  runner: QueryRunner,
+  companyId: string,
+  companyUserId: string,
+  activatedAt: string,
+): Promise<number> => markCompanyUserActivatedImpl(runner, companyId, companyUserId, activatedAt)
+
+/** 依員工找出他的公司帳號成員關係，不限狀態——給啟用／停用端點的自我檢查與空操作判斷用。 */
+export const findCompanyUserByEmployee = (
+  runner: QueryRunner,
+  companyId: string,
+  employeeId: string,
+): Promise<{ readonly id: string; readonly status: CompanyUserStatusValue } | null> =>
+  findCompanyUserByEmployeeImpl(runner, companyId, employeeId)
 
 /** 新增登入帳號（全域表 `users`，無公司範圍）。實作計畫 `05-employee-onboarding.md` Stage 4。 */
 export const insertUser = (runner: QueryRunner, user: NewUser): Promise<UserInsertOutcome> =>

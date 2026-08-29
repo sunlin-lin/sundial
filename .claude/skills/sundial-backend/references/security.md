@@ -196,6 +196,13 @@ export const createAccessControlPorts = (context: SessionsMainContext): AccessCo
 執行期直接拋例外，掃描階段也變紅（黑名單的失敗模式是半年後加一欄沒人記得補，自動被記進稽核，不會
 報錯）：
 
+**`check:audit-policy` 是雙向的，比對的是型別的完整屬性集合。** 它用 TypeScript 的 type checker
+取出 `source` 指到那個型別的全部屬性（`checker.getPropertiesOfType`），與政策的 `fields` 逐一對
+照——**政策多列一個型別上沒有的欄位會紅，型別多一個欄位而政策沒列也會紅**。所以改業務型別（例如給
+`EmployeeProfileInput` 加一欄）就一定要同步改政策，反之亦然；不會等到執行期才爆，`bun run ci` 當場
+就擋。這也是為什麼 `source` 要指到**寫入方向**的型別：指到輸出型別的話，屬性集合是 `xxxMasked` 那
+一套，兩邊永遠對不上。
+
 ```ts
 employees: {
   source: 'modules/employees/main/domain/employee-model.ts#EmployeeProfileInput',
