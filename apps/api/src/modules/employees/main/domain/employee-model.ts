@@ -28,9 +28,19 @@
  * 抄一份就是第二份真相，兩邊哪天不一致不會有任何地方變紅。type-only import 在編譯後完全消失，
  * 因此 domain 仍然不帶任何執行期相依（`verbatimModuleSyntax`）。
  */
-export type { GenderValue } from '../../../../db/schema/index.ts'
+export type {
+  CompanyUserStatusValue,
+  EmploymentStatusValue,
+  EmploymentTypeCodeValue,
+  GenderValue,
+} from '../../../../db/schema/index.ts'
 
-import type { GenderValue } from '../../../../db/schema/index.ts'
+import type {
+  CompanyUserStatusValue,
+  EmploymentStatusValue,
+  EmploymentTypeCodeValue,
+  GenderValue,
+} from '../../../../db/schema/index.ts'
 
 /** 列表單筆。清單只需要這幾欄，其餘個資連解密都不必做（§4.5：清單頁不撈用不到的欄位）。 */
 export type EmployeeSummary = {
@@ -60,6 +70,32 @@ export type EmployeeSummary = {
  */
 export type EmployeeListItem = EmployeeSummary & {
   readonly jobTitleName: string | null
+  /**
+   * 目前有效部門名稱（UI 定案 `docs/ui/20-employee-list.md` §1「部門」欄）。
+   *
+   * 依附於下面「目前任職」（見 `employmentStatus` 的檔頭）：查那筆任職在今天生效中的部門歷史。
+   * `null` 代表這位員工從未建立任職、或目前任職沒有生效中的部門歸屬。
+   */
+  readonly departmentName: string | null
+  /**
+   * 「目前任職」的僱用類型代碼（UI 定案 §1「僱用類型」欄）。`null` = 從未建立任職。
+   *
+   * **「目前任職」的定義是「到職日最新的一筆任職紀錄，不論在職或離職」**，不是「狀態＝ACTIVE的
+   * 那一筆」：UI 同時要求顯示離職員工的到職日與任職狀態（§1「到職日」「任職狀態」兩欄），
+   * 若只認 ACTIVE，離職員工這幾欄會全部變成 `null`，而清單明顯還是要顯示他最後一次任職的資訊。
+   * `uq_employee_employments_employee_hire_date` 保證同一員工的未刪除任職紀錄到職日不重複，
+   * 「到職日最新」因此沒有平手的疑慮（見 `impl/employees-main.list.repository.ts`）。
+   */
+  readonly employmentTypeCode: EmploymentTypeCodeValue | null
+  /** 「目前任職」的到職日期（UI 定案 §1「到職日」欄）。`null` = 從未建立任職。 */
+  readonly hireDate: string | null
+  /** 「目前任職」的狀態，在職或離職（UI 定案 §1「任職狀態」欄）。`null` = 從未建立任職。 */
+  readonly employmentStatus: EmploymentStatusValue | null
+  /**
+   * 登入帳號狀態（UI 定案 §1「帳號狀態」欄）。`null` = 這位員工沒有登入帳號
+   * ——目前只有透過 `employees/onboarding` 建立的員工才會有帳號。
+   */
+  readonly accountStatus: CompanyUserStatusValue | null
 }
 
 /** 單筆員工的完整內容。`get`／`create`／`update` 共用同一個形狀。敏感欄位一律已遮罩。 */
@@ -98,6 +134,12 @@ export type EmployeeSortOption = {
  */
 export type EmployeeListQuery = {
   readonly keyword: string | null
+  /** 部門篩選（UI 定案 §1 查詢條件「部門」）。比對的是「目前有效部門」，`null` = 不篩選。 */
+  readonly departmentId: string | null
+  /** 任職狀態篩選（UI 定案 §1 查詢條件「任職狀態」）。比對的是「目前任職」的狀態，`null` = 不篩選。 */
+  readonly employmentStatus: EmploymentStatusValue | null
+  /** 帳號狀態篩選（UI 定案 §1 查詢條件「帳號狀態」）。`null` = 不篩選。 */
+  readonly accountStatus: CompanyUserStatusValue | null
   readonly perPage: number
   readonly currentPage: number
   readonly sort: EmployeeSortOption

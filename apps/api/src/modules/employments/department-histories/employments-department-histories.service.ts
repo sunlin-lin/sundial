@@ -20,10 +20,7 @@ export type {
 } from './domain/department-history-model.ts'
 
 /**
- * **沒有對外端點**（見 `employments-department-histories.routes.ts` 沒有 `create`）；
- * 這裡仍然是入口的原因見 `impl/employments-department-histories.create.service.ts` 檔頭。
- *
- * 自己開交易，給併發測試與（將來）沒有外層交易的呼叫者用；差別見
+ * 自己開交易，給 `/employments/department-histories/create` 端點與併發測試用；差別見
  * `employees-main.service.ts` 的 `createEmployee` 說明。
  */
 export const createDepartmentHistory = (
@@ -32,7 +29,7 @@ export const createDepartmentHistory = (
 ): Promise<ServiceResult<DepartmentHistoryDetail>> =>
   context.db.transaction((tx) => createDepartmentHistoryInTransactionImpl(tx, context, input))
 
-/** 收外部交易 handle，給 Stage 4 編排點用（計畫 §4.1）。 */
+/** 收外部交易 handle，給 `employees/onboarding` 編排點用（計畫 §4.1）。 */
 export const createDepartmentHistoryInTransaction = (
   tx: TransactionRunner,
   context: DepartmentHistoriesContext,

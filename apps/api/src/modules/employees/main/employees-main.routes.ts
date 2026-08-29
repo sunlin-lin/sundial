@@ -110,8 +110,37 @@ const EmployeeKeyword = t.String({ maxLength: 128 })
 const MaskedValue = t.String()
 
 /**
- * 列表單筆。**多一欄 `jobTitleName`**（目前有效職稱，UI 定案 `docs/ui/20-employee-list.md` §1，
- * 計畫 §3.2；Stage 5 接上）：`null` 代表這位員工目前沒有設定職稱，不是查詢失敗。
+ * 僱用型態代碼，聯集字面值。值必須與 `db/schema/employee-employments.ts` 的 `EmploymentTypeCode`
+ * 相同（1 正職、2 兼職、3 約聘、4 派遣、5 工讀、6 臨時、7 顧問、8 實習）。
+ */
+const EmploymentTypeCodeSchema = t.Union([
+  t.Literal(1),
+  t.Literal(2),
+  t.Literal(3),
+  t.Literal(4),
+  t.Literal(5),
+  t.Literal(6),
+  t.Literal(7),
+  t.Literal(8),
+])
+
+/** 任職狀態代碼，值必須與 `db/schema/employee-employments.ts` 的 `EmploymentStatus` 相同。 */
+const EmploymentStatusSchema = t.Union([t.Literal('ACTIVE'), t.Literal('LEFT')])
+
+/** 帳號狀態代碼，值必須與 `db/schema/company-users.ts` 的 `CompanyUserStatus` 相同。 */
+const AccountStatusSchema = t.Union([t.Literal('ACTIVE'), t.Literal('INACTIVE')])
+
+/**
+ * 列表單筆。**多六欄**（目前有效職稱、部門、僱用類型、到職日、任職狀態、帳號狀態，UI 定案
+ * `docs/ui/20-employee-list.md` §1，計畫 §3.2；Stage 5／本輪陸續接上）：`null` 代表這位員工
+ * 目前沒有這項資料（未設定職稱／部門、從未建立任職、沒有登入帳號），不是查詢失敗。
+ *
+ * **除 `jobTitleName` 外的五欄用 `t.Optional` 包一層，本端點實際上每次都會回它們**（handler
+ * 沒有任何分支會省略）。這麼寫是相容性的刻意選擇，不是欄位真的會缺席：`apps/web` 既有的
+ * `employees-main.view.ts` 是在這五欄還不存在時寫的，它的型別（`EmployeesMainListData`）
+ * 由本檔案機械產生，若這裡直接宣告成必填，`bun run gen:api` 產生的型別就會要求那個既有頁面
+ * 的每一處測試 fixture 都補齊這五欄——那是前端 Stage 6 的工作範圍（`apps/web/**`），本輪職責
+ * 只到「後端把資料生出來、且新欄位在契約上是相容的加法」為止（§1.6：加值、不刪值）。
  */
 const EmployeeSummarySchema = t.Object({
   id: Uuid,
@@ -121,6 +150,12 @@ const EmployeeSummarySchema = t.Object({
   /** 僅末 3 碼（§5.1）。完整值不在任何端點提供。 */
   identityNumberMasked: MaskedValue,
   jobTitleName: Nullable(t.String({ maxLength: 128 })),
+  departmentName: t.Optional(Nullable(t.String({ maxLength: 128 }))),
+  employmentTypeCode: t.Optional(Nullable(EmploymentTypeCodeSchema)),
+  /** 「目前任職」的到職日，台北的日曆日，不帶時區標記（§6.1）。 */
+  hireDate: t.Optional(Nullable(IsoDate)),
+  employmentStatus: t.Optional(Nullable(EmploymentStatusSchema)),
+  accountStatus: t.Optional(Nullable(AccountStatusSchema)),
 })
 
 const EmployeeDetailSchema = t.Object({
@@ -144,6 +179,9 @@ const EmployeeDetailSchema = t.Object({
 /** 列表的搜尋條件回聲（§1.4）。使用者沒送的條件就不出現，前端才比對得出這包是不是自己要的。 */
 const EmployeeSearchSchema = t.Object({
   keyword: t.Optional(EmployeeKeyword),
+  departmentId: t.Optional(Uuid),
+  employmentStatus: t.Optional(EmploymentStatusSchema),
+  accountStatus: t.Optional(AccountStatusSchema),
 })
 
 /** 建立與修改共用的個資欄位。兩支端點收的欄位完全相同，差別只在 `update` 多一個 `id`。 */
@@ -193,6 +231,9 @@ export const employeesMainRoutes = (dependencies: EmployeesMainDependencies) =>
         ...BaseRequest,
         cmd: t.Literal('employees.main.list'),
         keyword: t.Optional(EmployeeKeyword),
+        departmentId: t.Optional(Uuid),
+        employmentStatus: t.Optional(EmploymentStatusSchema),
+        accountStatus: t.Optional(AccountStatusSchema),
         ...PageRequest,
         sort: t.Optional(sortRequest(EMPLOYEE_SORT_FIELDS)),
       }),
@@ -202,7 +243,7 @@ export const employeesMainRoutes = (dependencies: EmployeesMainDependencies) =>
       },
       detail: {
         summary: '查詢員工清單',
-        description: `${describeEmployeeErrors(EMPLOYEE_ENDPOINT_ERRORS.list)} keyword 只比對員工編號與姓名——其餘個資欄位為加密儲存，無法比對。`,
+        description: `${describeEmployeeErrors(EMPLOYEE_ENDPOINT_ERRORS.list)} keyword 只比對員工編號與姓名——其餘個資欄位為加密儲存，無法比對。departmentId／employmentStatus／accountStatus 比對的都是「目前」資料，不比對歷史。`,
       },
     })
     .post('/employees/main/get', (context) => handleEmployeeGet(dependencies, context), {

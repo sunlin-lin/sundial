@@ -6,11 +6,13 @@
  * §4.2「裸 db client 限資料存取層」那條規則會被繞過，而繞過的路徑在 import 語句上完全看不出來。
  * routes 由組裝點（`app/routes.ts`）直接掛載，不從這裡流出去。
  *
- * `main` 次目錄現在有兩支業務動作（皆無對應端點，理由見 `main/company-users-main.service.ts`
+ * `main` 次目錄有兩支**沒有對應端點**的業務動作（理由見 `main/company-users-main.service.ts`
  * 檔頭）：{@link deactivateCompanyUser}（實作計畫 `plans/05-employee-onboarding.md` §7：離職時
  * 同步停用帳號，但不刪除帳號與角色歷史），供 `employments/main` 的離職動作呼叫；
  * {@link createCompanyUserInTransaction}（同計畫 Stage 4：新增登入帳號並加入公司），供
- * `employees/onboarding` 呼叫。管理者重設密碼留到之後的階段。
+ * `employees/onboarding` 呼叫。**管理者重設密碼（`resetCompanyUserPassword`）有自己的端點**
+ * （`/company-users/main/reset-password`，UI 定案 `docs/ui/20-employee-list.md` §3.5），
+ * 因此不從這裡流出去——它與其他端點動作一樣，只透過 `routes.ts` 讓路由組裝點碰得到。
  */
 export {
   createCompanyUserInTransaction,

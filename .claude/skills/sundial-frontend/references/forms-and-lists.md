@@ -29,7 +29,31 @@
 
 理由：本系統多處畫面會出現「同一種欄位在陣列中重複出現」的結構。把 `field` 當扁平欄位名處理，`startTime` 在一張五列的表格上指不到任何一列，前端唯一能做的是退化成全域提示「時間格式錯誤」——等於這個 `field` 白給，使用者得自己逐列比對找出是哪一筆錯。
 
-「解析必須經統一函式，禁止頁面自行 `split('.')`」這條掃描測試不存在。目前**沒有現成的統一函式可抄**（`apps/web/src/pages/` 底下還沒有出現需要陣列型欄位錯誤定位的頁面）——新增這類表單時，先確認要不要順手把這支函式建起來放進 `shared/`，而不是各頁各自 `split`。
+「解析必須經統一函式，禁止頁面自行 `split('.')`」這條掃描測試不存在。**陣列型欄位（列索引）的 dot-path 解析目前仍然沒有現成的統一函式可抄**——`shifts-main.errors.view.ts` 是唯一一個處理列索引定位的頁面，新增這類表單時，先確認要不要順手把這支函式建起來放進 `shared/`，而不是各頁各自 `split`。
+
+**`ElFormItem` 的 `error` prop 不能直接綁 `string | undefined`**：`ElFormItem.error` 宣告成 `error?: string`，本專案的 `exactOptionalPropertyTypes: true` 下「可選」與「可以明確賦值 `undefined`」是兩種不同的形狀（通用規範 §2.1）——`:error="firstMessage(...)"` 在沒有錯誤時把 `undefined` 指派給這個 prop，`vue-tsc` 判定型別不符。**症狀跟其他 Element Plus 地雷一樣**：錯誤訊息指向 Element Plus 內部的型別宣告，不會提示是這個 tsconfig 選項造成的。解法是寫一支回傳「有 `error` 鍵或沒有這個鍵」的物件的函式，搭配 `v-bind` 展開而不是 `:error` 直接綁，從源頭就不會產生 `{ error: undefined }` 這個形狀。
+
+`apps/web/src/pages/employees/onboarding/employees-onboarding.errors.view.ts` 第 108～114 行的 `formItemErrorProp` 是目前唯一落地的寫法，可以照抄這個形狀：
+
+```ts
+// ✅ 沒有錯誤時整個鍵都不出現，不是 { error: undefined }
+export const formItemErrorProp = (
+  errors: OnboardingFormErrors,
+  key: OnboardingFieldKey,
+): { error: string } | object => {
+  const message = firstMessageOf(errors, key)
+  return message === undefined ? {} : { error: message }
+}
+```
+
+```vue
+<!-- ✅ -->
+<ElFormItem v-bind="formItemErrorProp(errors, 'employeeCode')" :label="...">
+<!-- ❌ exactOptionalPropertyTypes 下型別不符，vue-tsc 會擋 -->
+<ElFormItem :error="firstMessageOf(errors, 'employeeCode')" :label="...">
+```
+
+這支函式解決的是「怎麼把錯誤訊息安全綁進 `ElFormItem`」，跟上一段「陣列列索引的 dot-path 怎麼解析」是兩個不同的問題——`employees-onboarding` 的欄位全是扁平欄位（沒有陣列型可編輯列），dot-path 在那裡等於欄位名本身，比 `shifts-main` 的列索引解析單純得多。兩支函式因此還沒有合併成一支共用函式，各自留在自己的頁面目錄裡（§1.5 的「先有第二個使用者才搬進 `shared/`」判準，目前都還只有一個使用者）。
 
 ### 1.4 大型表單的拆分與草稿
 

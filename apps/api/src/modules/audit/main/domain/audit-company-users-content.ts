@@ -30,6 +30,18 @@
  */
 export type CompanyUsersAuditContent = {
   /**
+   * 管理者重設密碼是否發生（`presence` 級，永遠不記密碼或密碼 hash）。**新增於實作計畫
+   * `05-employee-onboarding.md`；UI 定案 `docs/ui/20-employee-list.md` §3.5 明文「重設行為要
+   * 留下稽核紀錄，但不得記錄密碼或密碼 Hash」**——資料字典同一句話出現在
+   * `docs/schema/01-company-access-organization.md` 與 `docs/schema/05-regulatory-system.md`。
+   * `presence` 級是唯一能同時滿足「必須稽核」與「不得記值」的表達方式（`audit-field-policy.ts`
+   * 的三級設計就是為了這種情況，理由見該檔 `AuditFieldLevel.Presence` 檔頭）。呼叫端傳
+   * `{ passwordReset: null }` → `{ passwordReset: true }`，任何非 `null` 的值都只代表「變更了」，
+   * 值本身沒有意義——`true` 只是用來讓 `buildChangeSet` 判定為「有變更」的哨兵，不是要記錄的內容。
+   */
+  readonly passwordReset: boolean | null
+
+  /**
    * 帳號在公司內的狀態（`ACTIVE`／`INACTIVE`）。**新增於實作計畫 `plans/05-employee-onboarding.md`
    * Stage 3**：離職流程（`modules/employments/main/impl/employments-main.leave.service.ts`）
    * 辦理離職時同步停用該員工的公司帳號，資料字典明列「帳號啟用、停用…要留稽核」。

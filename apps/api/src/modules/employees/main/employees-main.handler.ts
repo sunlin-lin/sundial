@@ -25,11 +25,13 @@ import { toListView } from '../../../shared/list-view.ts'
 import type { EmployeesMainContext } from './domain/employee-context.ts'
 import { resolveEmployeeSort } from './domain/employee-list-view.ts'
 import type {
+  CompanyUserStatusValue,
   EmployeeDetail,
   EmployeeListItem,
   EmployeeListPage,
   EmployeeListQuery,
   EmployeeSummary,
+  EmploymentStatusValue,
   GenderValue,
 } from './domain/employee-model.ts'
 import { deleteEmployee, getEmployee, listEmployees, updateEmployee } from './employees-main.service.ts'
@@ -103,12 +105,18 @@ const toEmployeeSummaryData = (employee: EmployeeSummary) => ({
 })
 
 /**
- * 列表單筆 → 本端點的 `data`。多一欄 `jobTitleName`（目前有效職稱，`null`＝沒有設定），
- * 理由見 `domain/employee-model.ts` 的 `EmployeeListItem` 檔頭。
+ * 列表單筆 → 本端點的 `data`。多出職稱、部門、僱用類型、到職日、任職狀態與帳號狀態六欄
+ * （UI 定案 `docs/ui/20-employee-list.md` §1），理由見 `domain/employee-model.ts` 的
+ * `EmployeeListItem` 檔頭。
  */
 const toEmployeeListItemData = (employee: EmployeeListItem) => ({
   ...toEmployeeSummaryData(employee),
   jobTitleName: employee.jobTitleName,
+  departmentName: employee.departmentName,
+  employmentTypeCode: employee.employmentTypeCode,
+  hireDate: employee.hireDate,
+  employmentStatus: employee.employmentStatus,
+  accountStatus: employee.accountStatus,
 })
 
 const toEmployeeDetailData = (employee: EmployeeDetail) => ({
@@ -127,6 +135,9 @@ const toNullableEmployeeDetailData = (employee: EmployeeDetail | null) =>
 
 type ListBody = {
   readonly keyword?: string
+  readonly departmentId?: string
+  readonly employmentStatus?: EmploymentStatusValue
+  readonly accountStatus?: CompanyUserStatusValue
   readonly perPage: number
   readonly currentPage: number
   readonly sort?: { readonly field: string; readonly order: 'asc' | 'desc' }
@@ -155,6 +166,9 @@ type UpdateBody = TargetBody & ProfileBody
  */
 const toSearchEcho = (body: ListBody) => ({
   ...(body.keyword === undefined ? {} : { keyword: body.keyword }),
+  ...(body.departmentId === undefined ? {} : { departmentId: body.departmentId }),
+  ...(body.employmentStatus === undefined ? {} : { employmentStatus: body.employmentStatus }),
+  ...(body.accountStatus === undefined ? {} : { accountStatus: body.accountStatus }),
 })
 
 /**
@@ -196,6 +210,9 @@ export const handleEmployeeList = async (
   const identity = requireIdentity(context.requestContext.session)
   const query: EmployeeListQuery = {
     keyword: context.body.keyword ?? null,
+    departmentId: context.body.departmentId ?? null,
+    employmentStatus: context.body.employmentStatus ?? null,
+    accountStatus: context.body.accountStatus ?? null,
     perPage: context.body.perPage,
     currentPage: context.body.currentPage,
     // 預設排序在這裡補上，回聲的才會是**實際生效**的排序（§1.4）。

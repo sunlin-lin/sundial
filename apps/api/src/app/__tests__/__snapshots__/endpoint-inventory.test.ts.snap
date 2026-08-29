@@ -1,7 +1,8 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | 認證群組 | request body 必填欄位\`） 1`] = `
-"/company-users/roles/create | company-users.roles.create | authenticated | cmd,companyUserId,locale,roleIds,rqTS
+"/company-users/main/reset-password | company-users.main.reset-password | authenticated | cmd,companyUserId,locale,newPassword,rqTS
+/company-users/roles/create | company-users.roles.create | authenticated | cmd,companyUserId,locale,roleIds,rqTS
 /company-users/roles/list | company-users.roles.list | authenticated | cmd,currentPage,includeRevoked,locale,perPage,rqTS
 /company-users/roles/revoke | company-users.roles.revoke | authenticated | cmd,companyUserId,locale,roleIds,rqTS
 /departments/main/create | departments.main.create | authenticated | cmd,code,locale,name,parentId,rqTS
@@ -14,6 +15,7 @@ exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | �
 /employees/main/list | employees.main.list | authenticated | cmd,currentPage,locale,perPage,rqTS
 /employees/main/update | employees.main.update | authenticated | address,birthday,cmd,employeeCode,gender,id,identityNumber,locale,name,phone,rqTS
 /employees/onboarding/create | employees.onboarding.create | authenticated | address,birthday,cmd,departmentId,employeeCode,employmentTypeCode,gender,hireDate,identityNumber,initialPassword,locale,name,phone,roleIds,rqTS,username,withholdingMethodCode
+/employments/department-histories/create | employments.department-histories.create | authenticated | cmd,departmentId,effectiveFrom,employmentId,locale,rqTS
 /employments/department-histories/list | employments.department-histories.list | authenticated | cmd,currentPage,employmentId,locale,perPage,rqTS
 /employments/job-position-histories/create | employments.job-position-histories.create | authenticated | cmd,effectiveFrom,employmentId,jobPositionIds,locale,rqTS
 /employments/job-position-histories/list | employments.job-position-histories.list | authenticated | cmd,currentPage,employmentId,locale,perPage,rqTS

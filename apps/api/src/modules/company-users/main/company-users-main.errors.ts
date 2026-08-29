@@ -1,10 +1,14 @@
 /**
  * 公司帳號成員關係的錯誤字典（§0.4「errors 不拆」）。
  *
- * **本次目錄沒有自己的端點**（見 `company-users-main.service.ts` 檔頭），因此這裡沒有
- * `ENDPOINT_ERRORS` 這種依端點分組的宣告表——`createCompanyUserInTransaction` 目前唯一的呼叫者
- * 是 `employees/onboarding`，它的錯誤碼會被那個端點的 `errors.ts` 收進自己的宣告清單。
- * 碼本身仍然依 §1.3 的規則由**本模組**的路徑推導（`company-users.main.errors.*`），不是
+ * `createCompanyUserInTransaction` 沒有自己的端點（唯一呼叫者是 `employees/onboarding`，
+ * 見 `company-users-main.service.ts` 檔頭），它的錯誤碼會被那個端點的 `errors.ts` 收進自己的
+ * 宣告清單。**`resetCompanyUserPassword` 不同：本輪起有自己的端點**
+ * （`/company-users/main/reset-password`，UI 定案 `docs/ui/20-employee-list.md` §3.5），
+ * 因此下面補了一個依端點分組的錯誤碼陣列，形狀比照 `company-users/roles` 的
+ * `COMPANY_USERS_ROLES_*_ERROR_CODES`（同一個大目錄，同一套慣例）。
+ *
+ * 碼本身依 §1.3 的規則由**本模組**的路徑推導（`company-users.main.errors.*`），不是
  * `employees.onboarding.errors.*`——這條規則產生這個業務拒絕，訊息的所有權留在這裡，
  * 呼叫者只是轉手回傳，理由與 `audit` 模組的動作碼「沒有端點也一樣有前兩段」同構。
  *
@@ -14,6 +18,12 @@ import { ErrorGroup, type DomainError, type ErrorCode } from '../../../shared/se
 
 export const CompanyUserErrorCode = {
   UsernameTaken: 'company-users.main.errors.username-taken',
+  /**
+   * 422。查無此公司成員——**包含「屬於其他公司」**（§3.2），理由與
+   * `company-users/roles` 的同名錯誤同構：兩者走的是同一行程式碼（`company_id` 寫在
+   * `WHERE` 裡），想寫出不一致的回應都寫不出來。
+   */
+  CompanyUserNotFound: 'company-users.main.errors.company-user-not-found',
 } as const satisfies Record<string, ErrorCode>
 
 export type CompanyUserErrorCodeValue = (typeof CompanyUserErrorCode)[keyof typeof CompanyUserErrorCode]
@@ -38,3 +48,16 @@ export const usernameTaken = (): DomainError => ({
   msg: CompanyUserErrorCode.UsernameTaken,
   data: { field: 'username' },
 })
+
+/** 查無此公司成員，見上方 {@link CompanyUserErrorCode.CompanyUserNotFound} 檔頭。 */
+export const companyUserNotFound = (): DomainError => ({
+  group: ErrorGroup.Unprocessable,
+  code: CompanyUserErrorCode.CompanyUserNotFound,
+  msg: CompanyUserErrorCode.CompanyUserNotFound,
+  data: { field: 'companyUserId' },
+})
+
+/** `POST /company-users/main/reset-password` 可能吐出的業務錯誤碼（§1.8.3）。 */
+export const COMPANY_USERS_MAIN_RESET_PASSWORD_ERROR_CODES: readonly ErrorCode[] = [
+  CompanyUserErrorCode.CompanyUserNotFound,
+]

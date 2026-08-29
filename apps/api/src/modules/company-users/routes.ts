@@ -10,6 +10,8 @@
  * 而且一樣從 import 語句上完全看不出來。
  *
  * 次目錄是 `roles` 而不是 `main`（§0.2）：子實體是「成員與角色的關聯」，它有自己的名字。
+ * `main` 現在也有一支端點（重設密碼），因此本檔一併 re-export 它的 routes。
  * 本檔**不建立群組、不宣告驗證方式**（§1.9）。
  */
+export * from './main/company-users-main.routes.ts'
 export * from './roles/company-users-roles.routes.ts'

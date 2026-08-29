@@ -31,9 +31,8 @@ export type DepartmentHistoryListQuery = {
 }
 
 /**
- * 新增部門歷史。**沒有對外端點**（Stage 3 只交付查詢端點，見計畫回報），但保留為業務動作
- * ——供內部測試（§7.3 併發測試）與 Stage 4 的 `employees/onboarding` 編排點未來呼叫
- * （§0.4：「沒有端點的業務動作一樣放入口檔」）。
+ * 新增部門歷史。對外端點是 `/employments/department-histories/create`（UI 定案 §3.3），
+ * 同時也是內部測試（§7.3 併發測試）與 `employees/onboarding` 編排點的呼叫入口。
  */
 export type CreateDepartmentHistoryInput = {
   readonly employmentId: string

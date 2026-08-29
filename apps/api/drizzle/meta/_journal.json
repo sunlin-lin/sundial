@@ -211,6 +211,20 @@
       "when": 1787970436092,
       "tag": "0029_seed_permission_codes_job_titles_positions",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1787982952967,
+      "tag": "0030_seed_permission_codes_employments_department_histories_create",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1787982956665,
+      "tag": "0031_seed_permission_codes_company_users_main",
+      "breakpoints": true
     }
   ]
 }

@@ -68,6 +68,39 @@ export function availableActions(
 
 去重鍵是「頁面根目錄」，不是檔案（`module-layout.md` §5）。這條與 §0.11 的分層相依一樣，**dependency-cruiser 沒有覆蓋 `apps/web`**，「共用模組至少兩個使用者」這條掃描測試不存在，靠 review。真實範例：`shared/api/list-echo.ts` 的檔頭寫明「第一個列表頁出現時只有一個使用者，留在頁面目錄裡；第二個列表頁出現時才搬過來」，可以照這個判斷時機抄。
 
+### 1.6 大量選項下拉：`ElTreeSelect` 取代 `ElSelect`＋`ElOption`
+
+`ElOption` 的 `value`／`label` 在本專案 `exactOptionalPropertyTypes: true`（通用規範 §2.1）下對 Element Plus 目前這個版本的型別宣告有已知的不相容，`vue-tsc` 會直接報型別錯誤。**症狀很容易誤判**：錯誤訊息指向 Element Plus 套件內部的型別宣告檔，不會提到 `exactOptionalPropertyTypes` 這個選項，看起來像套件版本問題，實際上是 tsconfig 設定造成的——不知道這件事的話，只能來回試錯才繞得出去。
+
+`ElRadio`（選項少）與 `ElTreeSelect`（選項多，甚至是樹狀資料）都不經過 `ElOption`，可以避開。`ElTreeSelect` 純綁 `data`／`node-key`／`props` 三個 prop 即可；職稱／職務這類沒有階層的清單，攤成沒有 `children` 的單層樹一樣能用。
+
+已查證：`apps/web/src/pages/shifts/main/components/ShiftWorkPeriodsEditor.vue` 第 14～18 行的檔頭記下了 `ElOption` 的型別不相容與改用 `ElRadio` 的理由；`apps/web/src/pages/employees/onboarding/components/EmployeeEmploymentSection.vue` 第 5～10 行的檔頭進一步記下「部門／職稱／職務一律用 `ElTreeSelect`，理由同 `ElRadioGroup` 替代方案」，並註明「已由本次開發的型別探測驗證過」。
+
+```vue
+<!-- ✅ 大量選項／樹狀資料一律 ElTreeSelect，純綁三個 prop -->
+<ElTreeSelect
+  v-model="departmentId"
+  :data="departmentTree"
+  node-key="id"
+  :props="{ label: 'name', children: 'children' }"
+/>
+<!-- ❌ ElOption 在本專案的 exactOptionalPropertyTypes 下型別不相容，vue-tsc 會擋 -->
+<ElSelect v-model="departmentId">
+  <ElOption v-for="d in departmentTree" :key="d.id" :value="d.id" :label="d.name" />
+</ElSelect>
+```
+
+### 1.7 `ElRadioGroup.modelValue` 不接受 `null`／`undefined`：必填未選要用哨兵值
+
+`ElRadioGroup` 的 `modelValue` 型別解析為 `string | number | boolean`，不含 `undefined` 也不含 `null`。欄位「必填但預設未選」時，直接綁 `T | undefined` 或 `T | null` 會被 `exactOptionalPropertyTypes` 擋下來，症狀與上一條一樣指向 Element Plus 內部。解法是在值域外挑一個字面量當「還沒選」的哨兵值——字串欄位用 `''`，數字欄位用一個確定不在值域裡的數（值域從 1 起算時用 `0`）。
+
+這個手法在本專案有兩種不同語意的用途，共用同一招：
+
+- **篩選器的「全部」語意**：`apps/web/src/pages/shifts/main/shifts-main.payload.ts` 第 28 行，`export type WorkTypeFilter = WorkTypeCode | 0`，`0` 代表「不篩選」。
+- **必填欄位「還沒選」語意**：`apps/web/src/pages/employees/onboarding/employees-onboarding.payload.ts` 第 34～35 行，`GenderFormValue = GenderValue | ''`、`EmploymentTypeFormValue = EmploymentTypeCodeValue | 0`；該檔第 30～32 行的檔頭明寫「這與 `shifts-main.payload.ts` 的 `WorkTypeFilter` 是同一個手法，差別只在語意：那裡的 `0` 是『不篩選』，這裡的哨兵是『使用者還沒選』」。
+
+兩種用途都要把哨兵值在送出前擋下來，不要讓它混進送出 payload：`employees-onboarding.payload.ts` 的 `toOnboardingCreatePayload` 對每個哨兵值都丟一個開發期錯誤（第 98～104 行），理由是「呼叫端必須先過 `canSubmitOnboardingForm` 才能送出」——哨兵值本身不是合法業務值，混進 payload 只會讓後端回一個更難懂的 `300`。
+
 ## 2. 狀態管理
 
 ### 2.1 進 Pinia 的判準

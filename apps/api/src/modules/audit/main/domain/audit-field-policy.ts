@@ -167,6 +167,12 @@ export const AUDIT_FIELD_POLICY = {
        * `domain/audit-company-users-content.ts` 的 `reusedTokenId` 檔頭。
        */
       reusedTokenId: AuditFieldLevel.Value,
+      /**
+       * 管理者重設密碼是否發生。**只有這一欄是 `presence` 級**——密碼與密碼 hash 不得寫入稽核
+       * （資料字典、UI 定案 `docs/ui/20-employee-list.md` §3.5 同時明文要求），理由見
+       * `domain/audit-company-users-content.ts` 的 `CompanyUsersAuditContent.passwordReset` 檔頭。
+       */
+      passwordReset: AuditFieldLevel.Presence,
     },
   },
   /**

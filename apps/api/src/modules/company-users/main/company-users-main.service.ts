@@ -1,13 +1,13 @@
 /**
  * 公司帳號成員關係的業務入口（§0.4）。
  *
- * 兩支都是**沒有端點的業務動作**（§0.4 明文允許）：{@link deactivateCompanyUser} 供離職流程呼叫；
- * {@link createCompanyUserInTransaction} 供 `employees/onboarding` 呼叫（實作計畫
- * `05-employee-onboarding.md` Stage 4）。本次目錄**仍然**沒有 `routes.ts`／`handler.ts`
- * ——這兩支動作都不是直接面對前端的端點，理由與 `modules/audit/main/` 相同（見該模組的
- * `audit-main.service.ts` 檔頭）。**但本次目錄現在有 `errors.ts`**：新增帳號會產生一種
- * 真正的業務拒絕（`username` 全域唯一撞鍵），不像 `deactivateCompanyUser` 那樣「找不到就是
- * 合法的空操作」，因此需要一份錯誤字典（§0.4：errors 不拆，理由見該檔）。
+ * {@link deactivateCompanyUser} 與 {@link createCompanyUserInTransaction} 是**沒有端點的業務
+ * 動作**（§0.4 明文允許）：前者供離職流程呼叫，後者供 `employees/onboarding` 呼叫（實作計畫
+ * `05-employee-onboarding.md` Stage 4）。**{@link resetCompanyUserPassword} 不同：本輪起有
+ * 自己的端點**（`/company-users/main/reset-password`，UI 定案 `docs/ui/20-employee-list.md`
+ * §3.5），因此本次目錄現在有 `routes.ts`／`handler.ts`——理由與 `company-users/roles` 的
+ * `create`／`revoke` 相同：一旦某個動作要被前端直接呼叫，它就不再只是「編排點內部呼叫的業務
+ * 動作」，需要完整的六層。
  */
 import { deactivateCompanyUser as deactivateCompanyUserImpl } from './impl/company-users-main.deactivate.service.ts'
 import type { CompanyUserDeactivation } from './impl/company-users-main.deactivate.service.ts'
@@ -16,10 +16,21 @@ import {
   type CompanyUserCreation,
   type CreateCompanyUserInput,
 } from './impl/company-users-main.create.service.ts'
-import type { TransactionRunner } from '../../../db/client.ts'
+import {
+  resetCompanyUserPasswordInTransaction as resetCompanyUserPasswordInTransactionImpl,
+  type CompanyUserPasswordReset,
+  type ResetCompanyUserPasswordInput,
+} from './impl/company-users-main.reset-password.service.ts'
+import type { Database, TransactionRunner } from '../../../db/client.ts'
 import type { ServiceResult } from '../../../shared/service-result.ts'
 
-export type { CompanyUserCreation, CompanyUserDeactivation, CreateCompanyUserInput }
+export type {
+  CompanyUserCreation,
+  CompanyUserDeactivation,
+  CompanyUserPasswordReset,
+  CreateCompanyUserInput,
+  ResetCompanyUserPasswordInput,
+}
 
 export const deactivateCompanyUser = (
   tx: TransactionRunner,
@@ -40,3 +51,26 @@ export const createCompanyUserInTransaction = (
   now: string,
 ): Promise<ServiceResult<CompanyUserCreation>> =>
   createCompanyUserInTransactionImpl(tx, companyId, operatorCompanyUserId, input, now)
+
+/**
+ * 重設公司成員的登入密碼。**自己開交易**，給 `/company-users/main/reset-password` 端點用；
+ * 差別見 `employees-main.service.ts` 的 `createEmployee` 說明。
+ */
+export const resetCompanyUserPassword = (
+  db: Database,
+  companyId: string,
+  operatorCompanyUserId: string,
+  input: ResetCompanyUserPasswordInput,
+  now: string,
+): Promise<ServiceResult<CompanyUserPasswordReset>> =>
+  db.transaction((tx) => resetCompanyUserPasswordInTransactionImpl(tx, companyId, operatorCompanyUserId, input, now))
+
+/** 重設公司成員的登入密碼。收外部交易 handle，給編排點用；差別見 {@link createCompanyUserInTransaction} 的說明。 */
+export const resetCompanyUserPasswordInTransaction = (
+  tx: TransactionRunner,
+  companyId: string,
+  operatorCompanyUserId: string,
+  input: ResetCompanyUserPasswordInput,
+  now: string,
+): Promise<ServiceResult<CompanyUserPasswordReset>> =>
+  resetCompanyUserPasswordInTransactionImpl(tx, companyId, operatorCompanyUserId, input, now)

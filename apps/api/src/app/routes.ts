@@ -26,7 +26,7 @@ import { Elysia } from 'elysia'
 import { identityGuard } from '../http/identity-guard.ts'
 import { publicGuard } from '../http/public-guard.ts'
 import { refreshGuard } from '../http/refresh-guard.ts'
-import { companyUsersRolesRoutes } from '../modules/company-users/routes.ts'
+import { companyUsersMainRoutes, companyUsersRolesRoutes } from '../modules/company-users/routes.ts'
 import { departmentsMainRoutes } from '../modules/departments/routes.ts'
 import { employeesMainRoutes, employeesOnboardingRoutes } from '../modules/employees/routes.ts'
 import {
@@ -105,6 +105,9 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
       .use(rolesMainRoutes({ db: database, clock }))
       .use(permissionsMainRoutes({ database }))
       .use(companyUsersRolesRoutes({ database, clock }))
+      // 重設密碼（UI 定案 §3.5）：與 `roles` 共用同一組相依，不需要 cipher（密碼雜湊不是
+      // `db/field-encryption.ts` 那一套欄位加密）。
+      .use(companyUsersMainRoutes({ database, clock }))
       .use(employeesMainRoutes({ db: database, cipher, clock }))
       // 到職編排（實作計畫 05-employee-onboarding.md Stage 4）：需要 cipher，理由與
       // `employeesMainRoutes` 相同——它把 `employees.main.create` 這個業務動作包在同一個交易裡。

@@ -1,5 +1,7 @@
 /**
- * 部門歷史的端點測試（§7.1）。**只測 `list`**——`create` 沒有對外端點（見 routes 檔的說明）。
+ * 部門歷史的端點測試（§7.1）。`list` 與 `create` 兩支——`create` 是本輪新補的對外端點
+ * （見 routes 檔的說明），測試形狀比照 `job-title-histories` 的同名測試檔。併發相關的重疊檢查
+ * 另有專屬的 `employments-department-histories.concurrency.test.ts`，本檔只測一般路徑與業務錯誤。
  */
 import { randomBytes } from 'node:crypto'
 import { beforeAll, describe, expect, test } from 'bun:test'
@@ -21,8 +23,7 @@ import { requestContext } from '../../../../http/request-context.ts'
 import { responseEnvelope } from '../../../../http/response-envelope.ts'
 import type { AccessControlPorts, VerifiedIdentity } from '../../../../shared/access-control.ts'
 import { fixedClock } from '../../../../shared/clock.ts'
-import { createDepartmentHistory } from '../employments-department-histories.service.ts'
-import type { DepartmentHistoriesContext } from '../domain/department-history-context.ts'
+import { DepartmentHistoryErrorCode } from '../employments-department-histories.errors.ts'
 import { employmentsDepartmentHistoriesRoutes } from '../employments-department-histories.routes.ts'
 
 const readTestDatabaseConfig = () => ({
@@ -61,7 +62,8 @@ const identityByToken = new Map<string, VerifiedIdentity>()
 const accessControl: AccessControlPorts = {
   verifyAccessToken: (token) => Promise.resolve(identityByToken.get(token) ?? null),
   renewSession: () => Promise.resolve({ expiresIn: 7200, exp: clock.transportNow() }),
-  loadPermissionCodes: () => Promise.resolve(new Set(['employments.department-histories.list'])),
+  loadPermissionCodes: () =>
+    Promise.resolve(new Set(['employments.department-histories.list', 'employments.department-histories.create'])),
 }
 
 const buildTestApp = (db: Database) =>
@@ -104,8 +106,8 @@ const call = async <TData>(path: string, token: string, body: Record<string, unk
   return { status: response.status, payload }
 }
 
-/** 建立一家公司、一位操作者、一位員工、一筆任職與一個部門，並直接寫入一筆部門歷史。 */
-const registerFixture = async (): Promise<{ token: string; employmentId: string }> => {
+/** 建立一家公司、一位操作者、一位員工、一筆任職與一個部門。 */
+const registerFixture = async (): Promise<{ token: string; employmentId: string; departmentId: string }> => {
   const companyId = crypto.randomUUID()
   const userId = crypto.randomUUID()
   const companyUserId = crypto.randomUUID()
@@ -205,22 +207,8 @@ const registerFixture = async (): Promise<{ token: string; employmentId: string 
   })
   if (!employmentResult.ok) throw new Error('測試固定資料準備失敗：建立任職沒有成功')
 
-  const historyContext: DepartmentHistoriesContext = {
-    db: database,
-    clock,
-    companyId,
-    operatorCompanyUserId: companyUserId,
-  }
-  const historyResult = await createDepartmentHistory(historyContext, {
-    employmentId: employmentResult.value.id,
-    departmentId,
-    effectiveFrom: '2024-01-01',
-    effectiveTo: null,
-  })
-  if (!historyResult.ok) throw new Error('測試固定資料準備失敗：建立部門歷史沒有成功')
-
   identityByToken.set(token, { sessionId: crypto.randomUUID(), userId, companyId, companyUserId })
-  return { token, employmentId: employmentResult.value.id }
+  return { token, employmentId: employmentResult.value.id, departmentId }
 }
 
 beforeAll(() => {
@@ -229,8 +217,18 @@ beforeAll(() => {
 })
 
 describe('employments/department-histories endpoints (integration)', () => {
-  test('查詢一筆任職的部門歷史', async () => {
-    const { token, employmentId } = await registerFixture()
+  test('新增部門歷史成功，可由 list 讀回', async () => {
+    const { token, employmentId, departmentId } = await registerFixture()
+
+    const created = await call<DepartmentHistoryShape>('/employments/department-histories/create', token, {
+      employmentId,
+      departmentId,
+      effectiveFrom: '2024-01-01',
+    })
+    expect(created.status).toBe(200)
+    expect(created.payload.data.employmentId).toBe(employmentId)
+    expect(created.payload.data.departmentId).toBe(departmentId)
+    expect(created.payload.data.effectiveTo).toBeNull()
 
     const listed = await call<{ data: DepartmentHistoryShape[] }>('/employments/department-histories/list', token, {
       employmentId,
@@ -238,7 +236,69 @@ describe('employments/department-histories endpoints (integration)', () => {
       currentPage: 1,
     })
     expect(listed.status).toBe(200)
-    expect(listed.payload.data.data.length).toBe(1)
-    expect(listed.payload.data.data[0]?.employmentId).toBe(employmentId)
+    expect(listed.payload.data.data).toHaveLength(1)
+    expect(listed.payload.data.data[0]?.id).toBe(created.payload.data.id)
+  })
+
+  test('任職不存在回 422／300 與 employment-not-found', async () => {
+    const { token, departmentId } = await registerFixture()
+
+    const result = await call('/employments/department-histories/create', token, {
+      employmentId: crypto.randomUUID(),
+      departmentId,
+      effectiveFrom: '2024-01-01',
+    })
+    expect(result.status).toBe(422)
+    expect(result.payload.errors[0]?.code).toBe(DepartmentHistoryErrorCode.EmploymentNotFound)
+  })
+
+  test('部門不存在回 422／300 與 department-not-found', async () => {
+    const { token, employmentId } = await registerFixture()
+
+    const result = await call('/employments/department-histories/create', token, {
+      employmentId,
+      departmentId: crypto.randomUUID(),
+      effectiveFrom: '2024-01-01',
+    })
+    expect(result.status).toBe(422)
+    expect(result.payload.errors[0]?.code).toBe(DepartmentHistoryErrorCode.DepartmentNotFound)
+  })
+
+  test('同一任職重疊期間回 422／300 與 period-overlap', async () => {
+    const { token, employmentId, departmentId } = await registerFixture()
+
+    await call('/employments/department-histories/create', token, {
+      employmentId,
+      departmentId,
+      effectiveFrom: '2024-01-01',
+    })
+
+    const overlapping = await call('/employments/department-histories/create', token, {
+      employmentId,
+      departmentId,
+      effectiveFrom: '2024-06-01',
+    })
+    expect(overlapping.status).toBe(422)
+    expect(overlapping.payload.errors[0]?.code).toBe(DepartmentHistoryErrorCode.PeriodOverlap)
+  })
+
+  test('未帶 token 一律回 401／900', async () => {
+    const response = await app.handle(
+      new Request('http://localhost/employments/department-histories/list', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          rqTS: clock.transportNow(),
+          cmd: 'employments.department-histories.list',
+          locale: 'zh-TW',
+          employmentId: crypto.randomUUID(),
+          perPage: 20,
+          currentPage: 1,
+        }),
+      }),
+    )
+    const payload: unknown = await response.json()
+    if (!asEnvelope(payload)) throw new Error('未登入的回應不是 envelope 形狀')
+    expect(response.status).toBe(401)
   })
 })

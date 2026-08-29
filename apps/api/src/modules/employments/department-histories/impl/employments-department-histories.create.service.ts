@@ -1,6 +1,6 @@
 /**
- * 業務動作：新增部門歷史。**沒有對外端點**（Stage 3 只交付查詢端點，回報中已說明理由），
- * 保留為業務動作供 Stage 4 編排與併發測試呼叫（§0.4：沒有端點的業務動作一樣放入口檔）。
+ * 業務動作：新增部門歷史。對外端點是 `/employments/department-histories/create`（UI 定案
+ * `docs/ui/20-employee-list.md` §3.3），同時也供 `employees/onboarding` 編排與併發測試呼叫。
  *
  * ## §4.3 期間重疊：鎖的粒度＝任職
  *
