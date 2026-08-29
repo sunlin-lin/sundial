@@ -13,15 +13,21 @@
  */
 import type {
   CompanyUsersRolesListData,
+  DependentsMainListData,
   DepartmentsMainTreeData,
   EmployeesMainGetData,
   EmploymentsMainListData,
   JobTitlesMainListData,
+  LaborPensionMainListData,
   RolesMainListData,
 } from '../../../api/generated/api-client.ts'
 import { EMPTY_DISPLAY } from '../../../shared/format/empty-display.ts'
 import type { MessageKey } from '../../../shared/i18n/messages.ts'
-import type { EmploymentTypeCodeValue, WithholdingMethodCodeValue } from './employees-detail.payload.ts'
+import type {
+  EmploymentTypeCodeValue,
+  RelationshipCodeValue,
+  WithholdingMethodCodeValue,
+} from './employees-detail.payload.ts'
 
 /** `employees.main.get` 查得到的那一筆（`null` 是「查無此人」，由呼叫端另外處理，這裡只管有值的形狀）。 */
 export type EmployeeSummary = NonNullable<EmployeesMainGetData>
@@ -113,6 +119,52 @@ export const formatOpenCode = (value: number | null): string => (value === null 
  */
 export const isCurrentlyEffective = (effectiveFrom: string, effectiveTo: string | null, today: string): boolean =>
   effectiveFrom <= today && (effectiveTo === null || today <= effectiveTo)
+
+// ============================================================================================
+// §3.4 眷屬（計畫 05 Stage 7）
+// ============================================================================================
+
+/** 眷屬清單單筆（由產生型別推導；`identityNumberMasked`／`birthdayMasked` 已經是遮罩字串，見檔頭）。 */
+export type DependentItem = DependentsMainListData['data'][number]
+
+/** 關係代碼與對應文字 key，值域對齊後端 `DependentRelationshipCode`（1–8，見 `employee-dependents.ts`）。 */
+export const DEPENDENT_RELATIONSHIP_LABEL_KEY: Record<RelationshipCodeValue, MessageKey> = {
+  1: 'employees-detail.dependent.relationship.1',
+  2: 'employees-detail.dependent.relationship.2',
+  3: 'employees-detail.dependent.relationship.3',
+  4: 'employees-detail.dependent.relationship.4',
+  5: 'employees-detail.dependent.relationship.5',
+  6: 'employees-detail.dependent.relationship.6',
+  7: 'employees-detail.dependent.relationship.7',
+  8: 'employees-detail.dependent.relationship.8',
+}
+
+export const DEPENDENT_RELATIONSHIP_CODES: readonly RelationshipCodeValue[] = [1, 2, 3, 4, 5, 6, 7, 8]
+
+export const dependentRelationshipLabel = (
+  code: RelationshipCodeValue,
+  translate: (key: MessageKey) => string,
+): string => translate(DEPENDENT_RELATIONSHIP_LABEL_KEY[code])
+
+/** 眷屬狀態的文字 key。「終止」是狀態變更（`TERMINATED`），不是刪除，見 UI 定案 §3.4。 */
+const DEPENDENT_STATUS_LABEL_KEY = {
+  ACTIVE: 'employees-detail.dependent.status.active',
+  TERMINATED: 'employees-detail.dependent.status.terminated',
+} as const satisfies Record<DependentItem['status'], MessageKey>
+
+export const dependentStatusLabel = (status: DependentItem['status'], translate: (key: MessageKey) => string): string =>
+  translate(DEPENDENT_STATUS_LABEL_KEY[status])
+
+/** `ElTag` 的 `type`：扶養中給預設（藍）、已終止給資訊（灰）——理由同 `employmentStatusTagType`。 */
+export const dependentStatusTagType = (status: DependentItem['status']): 'success' | 'info' =>
+  status === 'ACTIVE' ? 'success' : 'info'
+
+// ============================================================================================
+// §3.4 勞退自願提繳率（計畫 05 Stage 7）
+// ============================================================================================
+
+/** 勞退設定清單單筆（由產生型別推導；`voluntaryContributionRate` 是 decimal 字串，顯示走 `formatRate`）。 */
+export type LaborPensionItem = LaborPensionMainListData['data'][number]
 
 // ============================================================================================
 // §3.5 帳號與角色

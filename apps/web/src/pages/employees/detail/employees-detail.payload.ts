@@ -13,6 +13,9 @@ import type {
   CompanyUsersRolesCreateInput,
   CompanyUsersRolesListInput,
   CompanyUsersRolesRevokeInput,
+  DependentsMainCreateInput,
+  DependentsMainListInput,
+  DependentsMainTerminateInput,
   EmployeesMainGetData,
   EmployeesMainUpdateInput,
   EmploymentsDepartmentHistoriesCreateInput,
@@ -24,6 +27,8 @@ import type {
   EmploymentsMainCreateInput,
   EmploymentsMainLeaveInput,
   EmploymentsMainListInput,
+  LaborPensionMainCreateInput,
+  LaborPensionMainListInput,
   WithholdingMainCreateInput,
   WithholdingMainListInput,
 } from '../../../api/generated/api-client.ts'
@@ -297,6 +302,104 @@ export const toWithholdingCreatePayload = (
 }
 
 // ============================================================================================
+// §3.4 眷屬（計畫 05 Stage 7）
+// ============================================================================================
+
+export type RelationshipCodeValue = DependentsMainCreateInput['relationshipCode']
+/** 值域是 1–8，`0` 是值域外的哨兵值，理由同上（必填但預設未選）。 */
+export type RelationshipCodeFormValue = RelationshipCodeValue | 0
+
+export type DependentCreateFormState = {
+  name: string
+  identityNumber: string
+  birthday: string
+  relationshipCode: RelationshipCodeFormValue
+  isStudent: boolean
+  isDisabled: boolean
+  isUnableToWork: boolean
+  isCohabiting: boolean
+  effectiveDate: string
+}
+
+export const emptyDependentCreateFormState = (): DependentCreateFormState => ({
+  name: '',
+  identityNumber: '',
+  birthday: '',
+  relationshipCode: 0,
+  isStudent: false,
+  isDisabled: false,
+  isUnableToWork: false,
+  isCohabiting: false,
+  effectiveDate: '',
+})
+
+export const toDependentCreatePayload = (
+  employeeId: string,
+  form: DependentCreateFormState,
+): DependentsMainCreateInput => {
+  if (form.relationshipCode === 0)
+    throw new Error('relationshipCode 未選取，呼叫端必須先過 canSubmitDependentCreateForm 才能送出')
+
+  return {
+    employeeId,
+    name: form.name.trim(),
+    identityNumber: form.identityNumber.trim(),
+    birthday: form.birthday,
+    relationshipCode: form.relationshipCode,
+    isStudent: form.isStudent,
+    isDisabled: form.isDisabled,
+    isUnableToWork: form.isUnableToWork,
+    isCohabiting: form.isCohabiting,
+    effectiveDate: form.effectiveDate,
+  }
+}
+
+/**
+ * 「終止扶養」：畫面上只有一個 `endDate` 欄位，理由與 `EmploymentLeaveDialog.vue` 同構——
+ * 終止是動作類端點（`dependents.main.terminate`），不是把整份眷屬資料改一輪的 update。
+ */
+export type DependentTerminateFormState = { endDate: string }
+
+export const emptyDependentTerminateFormState = (): DependentTerminateFormState => ({ endDate: '' })
+
+export const toDependentTerminatePayload = (
+  id: string,
+  form: DependentTerminateFormState,
+): DependentsMainTerminateInput => ({ id, endDate: form.endDate })
+
+// ============================================================================================
+// §3.4 勞退自願提繳率（計畫 05 Stage 7）
+// ============================================================================================
+
+/**
+ * **`voluntaryContributionRate` 全程是字串，不經過 `number`**（前端規範：decimal 字串禁止
+ * `Number()`／`parseFloat` 一類轉型，`check:number-cast` 會擋）。表單欄位是純文字輸入
+ * （`ElInput`，不是 `ElInputNumber`），格式（後端 pattern `^[0-9]\.[0-9]{4}$`）交給後端的
+ * `300` 回應把關，這裡跟本頁其餘表單一樣只做「必填」（§6.1，見本檔檔頭）。
+ */
+export type LaborPensionCreateFormState = {
+  voluntaryContributionRate: string
+  effectiveFrom: string
+  effectiveTo: string
+}
+
+export const emptyLaborPensionCreateFormState = (): LaborPensionCreateFormState => ({
+  voluntaryContributionRate: '',
+  effectiveFrom: '',
+  effectiveTo: '',
+})
+
+export const toLaborPensionCreatePayload = (
+  employeeId: string,
+  form: LaborPensionCreateFormState,
+): LaborPensionMainCreateInput => ({
+  employeeId,
+  voluntaryContributionRate: form.voluntaryContributionRate.trim(),
+  effectiveFrom: form.effectiveFrom,
+  ...(form.effectiveTo === '' ? {} : { effectiveTo: form.effectiveTo }),
+})
+
+// ============================================================================================
 // 列表查詢（§7.1 統一欄位名 ＋ §7.3 回聲比對用的查詢型別，形狀比照 `employees-main.payload.ts`
 // 的 `EmployeeListQuery`）
 // ============================================================================================
@@ -366,6 +469,32 @@ export const toJobPositionHistoryListQuery = (
 export type WithholdingListQuery = WithholdingMainListInput & { readonly sort: typeof HISTORY_LIST_SORT_ECHO }
 
 export const toWithholdingListQuery = (employeeId: string, currentPage: number): WithholdingListQuery => ({
+  employeeId,
+  currentPage,
+  perPage: HISTORY_LIST_PER_PAGE,
+  sort: HISTORY_LIST_SORT_ECHO,
+})
+
+/**
+ * 眷屬清單固定依 `effectiveDate` 由舊到新排序並原樣回聲（`dependents-main.handler.ts` 的
+ * `toListData`）——欄位名是 `effectiveDate` 不是 `effectiveFrom`，與扣繳／勞退／組織異動三支
+ * 「歷史清單」端點不同構，因此另立一個常數，不能誤用 `HISTORY_LIST_SORT_ECHO`。
+ */
+export const DEPENDENT_LIST_SORT_ECHO = { field: 'effectiveDate', order: 'asc' } as const
+
+export type DependentListQuery = DependentsMainListInput & { readonly sort: typeof DEPENDENT_LIST_SORT_ECHO }
+
+export const toDependentListQuery = (employeeId: string, currentPage: number): DependentListQuery => ({
+  employeeId,
+  currentPage,
+  perPage: HISTORY_LIST_PER_PAGE,
+  sort: DEPENDENT_LIST_SORT_ECHO,
+})
+
+/** 勞退清單固定依 `effectiveFrom` 由舊到新排序（`labor-pension-main.handler.ts`），與扣繳同構。 */
+export type LaborPensionListQuery = LaborPensionMainListInput & { readonly sort: typeof HISTORY_LIST_SORT_ECHO }
+
+export const toLaborPensionListQuery = (employeeId: string, currentPage: number): LaborPensionListQuery => ({
   employeeId,
   currentPage,
   perPage: HISTORY_LIST_PER_PAGE,

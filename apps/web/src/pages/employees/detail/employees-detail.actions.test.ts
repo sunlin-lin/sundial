@@ -1,31 +1,40 @@
 import { describe, expect, test } from 'bun:test'
 import {
   canAssignRole,
+  canCreateDependent,
   canCreateDepartmentHistory,
   canCreateEmployment,
   canCreateJobPositionHistory,
   canCreateJobTitleHistory,
+  canCreateLaborPension,
   canCreateWithholding,
   canEditBasicInfo,
   canLeaveEmployment,
   canResetPassword,
   canRevokeRole,
   canSubmitBasicInfoForm,
+  canSubmitDependentCreateForm,
+  canSubmitDependentTerminateForm,
   canSubmitDepartmentHistoryForm,
   canSubmitEmploymentCreateForm,
   canSubmitEmploymentLeaveForm,
   canSubmitJobPositionHistoryForm,
   canSubmitJobTitleHistoryForm,
+  canSubmitLaborPensionCreateForm,
   canSubmitResetPasswordForm,
   canSubmitRoleAssignForm,
   canSubmitWithholdingCreateForm,
+  canTerminateDependent,
 } from './employees-detail.actions.ts'
 import {
+  emptyDependentCreateFormState,
+  emptyDependentTerminateFormState,
   emptyDepartmentHistoryFormState,
   emptyEmploymentCreateFormState,
   emptyEmploymentLeaveFormState,
   emptyJobPositionHistoryFormState,
   emptyJobTitleHistoryFormState,
+  emptyLaborPensionCreateFormState,
   emptyResetPasswordFormState,
   emptyRoleAssignFormState,
   emptyWithholdingCreateFormState,
@@ -153,6 +162,63 @@ describe('canSubmitWithholdingCreateForm', () => {
       canSubmitWithholdingCreateForm({
         isSubmitting: false,
         form: { ...empty, withholdingMethodCode: 1, effectiveFrom: '2026-01-01' },
+      }),
+    ).toBe(true)
+  })
+})
+
+describe('canCreateDependent／canSubmitDependentCreateForm', () => {
+  test('權限碼對應 dependents.main.create', () => {
+    expect(canCreateDependent(allow('dependents.main.create'))).toBe(true)
+    expect(canCreateDependent(denyAll)).toBe(false)
+  })
+
+  test('姓名、身分證字號、出生日期、關係、扶養起日五缺一即不可送出', () => {
+    const empty = emptyDependentCreateFormState()
+    expect(canSubmitDependentCreateForm({ isSubmitting: false, form: empty })).toBe(false)
+
+    const filled = {
+      ...empty,
+      name: '王小華',
+      identityNumber: 'A223456789',
+      birthday: '2015-01-01',
+      relationshipCode: 4 as const,
+      effectiveDate: '2026-01-01',
+    }
+    expect(canSubmitDependentCreateForm({ isSubmitting: false, form: filled })).toBe(true)
+    expect(canSubmitDependentCreateForm({ isSubmitting: true, form: filled })).toBe(false)
+  })
+})
+
+describe('canTerminateDependent／canSubmitDependentTerminateForm', () => {
+  test('UI 定案 §3.4：只有扶養中（ACTIVE）的眷屬能終止，已終止的不能再終止', () => {
+    const allowTerminate = allow('dependents.main.terminate')
+    expect(canTerminateDependent(allowTerminate, 'ACTIVE')).toBe(true)
+    expect(canTerminateDependent(allowTerminate, 'TERMINATED')).toBe(false)
+    expect(canTerminateDependent(denyAll, 'ACTIVE')).toBe(false)
+  })
+
+  test('扶養迄日必填，送出中不能再送出', () => {
+    const empty = emptyDependentTerminateFormState()
+    expect(canSubmitDependentTerminateForm({ isSubmitting: false, form: empty })).toBe(false)
+    expect(canSubmitDependentTerminateForm({ isSubmitting: false, form: { endDate: '2026-06-30' } })).toBe(true)
+    expect(canSubmitDependentTerminateForm({ isSubmitting: true, form: { endDate: '2026-06-30' } })).toBe(false)
+  })
+})
+
+describe('canCreateLaborPension／canSubmitLaborPensionCreateForm', () => {
+  test('權限碼對應 labor-pension.main.create', () => {
+    expect(canCreateLaborPension(allow('labor-pension.main.create'))).toBe(true)
+    expect(canCreateLaborPension(denyAll)).toBe(false)
+  })
+
+  test('提繳率與生效日齊全才能送出（格式交給後端 300，這裡只檢查必填）', () => {
+    const empty = emptyLaborPensionCreateFormState()
+    expect(canSubmitLaborPensionCreateForm({ isSubmitting: false, form: empty })).toBe(false)
+    expect(
+      canSubmitLaborPensionCreateForm({
+        isSubmitting: false,
+        form: { ...empty, voluntaryContributionRate: '0.0600', effectiveFrom: '2026-01-01' },
       }),
     ).toBe(true)
   })

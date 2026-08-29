@@ -7,11 +7,14 @@
  */
 import type {
   BasicInfoFormState,
+  DependentCreateFormState,
+  DependentTerminateFormState,
   DepartmentHistoryFormState,
   EmploymentCreateFormState,
   EmploymentLeaveFormState,
   JobPositionHistoryFormState,
   JobTitleHistoryFormState,
+  LaborPensionCreateFormState,
   ResetPasswordFormState,
   RoleAssignFormState,
   WithholdingCreateFormState,
@@ -114,6 +117,50 @@ export const canSubmitWithholdingCreateForm = (input: {
 }): boolean => {
   if (input.isSubmitting) return false
   return input.form.withholdingMethodCode !== 0 && input.form.effectiveFrom !== ''
+}
+
+// --- §3.4 眷屬（計畫 05 Stage 7）--------------------------------------------------------
+
+export const canCreateDependent = (can: Can): boolean => can('dependents.main.create')
+
+export const canSubmitDependentCreateForm = (input: {
+  readonly isSubmitting: boolean
+  readonly form: DependentCreateFormState
+}): boolean => {
+  if (input.isSubmitting) return false
+  const { form } = input
+  return (
+    form.name.trim() !== '' &&
+    form.identityNumber.trim() !== '' &&
+    form.birthday !== '' &&
+    form.relationshipCode !== 0 &&
+    form.effectiveDate !== ''
+  )
+}
+
+/** 「終止」只在這筆眷屬目前還是扶養中（`ACTIVE`）時開放，理由與 `canLeaveEmployment` 同構。 */
+export const canTerminateDependent = (can: Can, status: 'ACTIVE' | 'TERMINATED'): boolean =>
+  can('dependents.main.terminate') && status === 'ACTIVE'
+
+export const canSubmitDependentTerminateForm = (input: {
+  readonly isSubmitting: boolean
+  readonly form: DependentTerminateFormState
+}): boolean => {
+  if (input.isSubmitting) return false
+  return input.form.endDate !== ''
+}
+
+// --- §3.4 勞退自願提繳率（計畫 05 Stage 7）----------------------------------------------
+
+export const canCreateLaborPension = (can: Can): boolean => can('labor-pension.main.create')
+
+export const canSubmitLaborPensionCreateForm = (input: {
+  readonly isSubmitting: boolean
+  readonly form: LaborPensionCreateFormState
+}): boolean => {
+  if (input.isSubmitting) return false
+  const { form } = input
+  return form.voluntaryContributionRate.trim() !== '' && form.effectiveFrom !== ''
 }
 
 // --- §3.5 帳號與角色 ----------------------------------------------------------------------

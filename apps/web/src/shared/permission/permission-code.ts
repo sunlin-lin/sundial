@@ -109,6 +109,13 @@ const PERMISSION_CODES = [
   'company-users.roles.create',
   'company-users.roles.revoke',
   'company-users.main.reset-password',
+  // 眷屬與勞退自願提繳率（計畫 05 Stage 7，UI 定案 `docs/ui/20-employee-list.md` §3.4）。
+  // 三碼逐字比對過 `0033_seed_permission_codes_dependents_labor_pension.sql`。
+  // `dependents.main.list`／`labor-pension.main.list` 不在這份清單裡：與 `employments.main.list`
+  // 同一個先例，兩支端點只是清單查詢，沒有 `can(...)` 呼叫點會判斷它們。
+  'dependents.main.create',
+  'dependents.main.terminate',
+  'labor-pension.main.create',
 ] as const satisfies readonly ApiCommand[]
 
 /** 權限碼。全站判斷權限一律用這個型別，不用 `string`。 */

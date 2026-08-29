@@ -1,10 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  DEPENDENT_LIST_SORT_ECHO,
   EMPLOYMENT_LIST_SORT,
   HISTORY_LIST_SORT_ECHO,
   ROLE_ASSIGNMENT_LIST_SORT,
   toBasicInfoFormState,
   toBasicInfoUpdatePayload,
+  toDependentCreatePayload,
+  toDependentListQuery,
+  toDependentTerminatePayload,
   toDepartmentHistoryListQuery,
   toDepartmentHistoryPayload,
   toEmploymentCreatePayload,
@@ -12,17 +16,22 @@ import {
   toEmploymentListQuery,
   toJobPositionHistoryPayload,
   toJobTitleHistoryPayload,
+  toLaborPensionCreatePayload,
+  toLaborPensionListQuery,
   toResetPasswordPayload,
   toRoleAssignmentListQuery,
   toRoleAssignPayload,
   toRoleRevokePayload,
   toWithholdingCreatePayload,
   type BasicInfoFormState,
+  type DependentCreateFormState,
+  type DependentTerminateFormState,
   type DepartmentHistoryFormState,
   type EmploymentCreateFormState,
   type EmploymentLeaveFormState,
   type JobPositionHistoryFormState,
   type JobTitleHistoryFormState,
+  type LaborPensionCreateFormState,
   type ResetPasswordFormState,
   type RoleAssignFormState,
   type WithholdingCreateFormState,
@@ -201,6 +210,71 @@ describe('toWithholdingCreatePayload', () => {
   })
 })
 
+describe('toDependentCreatePayload', () => {
+  const buildForm = (overrides: Partial<DependentCreateFormState> = {}): DependentCreateFormState => ({
+    name: '王小華',
+    identityNumber: 'A223456789',
+    birthday: '2015-01-01',
+    relationshipCode: 4,
+    isStudent: true,
+    isDisabled: false,
+    isUnableToWork: false,
+    isCohabiting: true,
+    effectiveDate: '2026-01-01',
+    ...overrides,
+  })
+
+  test('relationshipCode 未選就送出時丟出錯誤', () => {
+    expect(() => toDependentCreatePayload('emp-1', buildForm({ relationshipCode: 0 }))).toThrow()
+  })
+
+  test('齊全時組出完整 payload，字串欄位裁掉前後空白', () => {
+    const payload = toDependentCreatePayload('emp-1', buildForm({ name: '  王小華  ' }))
+    expect(payload).toEqual({
+      employeeId: 'emp-1',
+      name: '王小華',
+      identityNumber: 'A223456789',
+      birthday: '2015-01-01',
+      relationshipCode: 4,
+      isStudent: true,
+      isDisabled: false,
+      isUnableToWork: false,
+      isCohabiting: true,
+      effectiveDate: '2026-01-01',
+    })
+  })
+})
+
+describe('toDependentTerminatePayload', () => {
+  test('由 id 與表單值組出 payload（沒有其餘表單狀態）', () => {
+    const form: DependentTerminateFormState = { endDate: '2026-06-30' }
+    expect(toDependentTerminatePayload('dependent-1', form)).toEqual({ id: 'dependent-1', endDate: '2026-06-30' })
+  })
+})
+
+describe('toLaborPensionCreatePayload', () => {
+  test('effectiveTo 空字串時整個鍵省略；voluntaryContributionRate 全程是字串，裁掉前後空白', () => {
+    const form: LaborPensionCreateFormState = {
+      voluntaryContributionRate: ' 0.0600 ',
+      effectiveFrom: '2026-01-01',
+      effectiveTo: '',
+    }
+    const payload = toLaborPensionCreatePayload('emp-1', form)
+    expect(payload.voluntaryContributionRate).toBe('0.0600')
+    expect(typeof payload.voluntaryContributionRate).toBe('string')
+    expect('effectiveTo' in payload).toBe(false)
+  })
+
+  test('effectiveTo 有填才帶入 payload', () => {
+    const form: LaborPensionCreateFormState = {
+      voluntaryContributionRate: '0.0600',
+      effectiveFrom: '2026-01-01',
+      effectiveTo: '2026-12-31',
+    }
+    expect(toLaborPensionCreatePayload('emp-1', form).effectiveTo).toBe('2026-12-31')
+  })
+})
+
 describe('列表查詢型別', () => {
   test('toEmploymentListQuery 帶固定排序（到職日新到舊）', () => {
     const query = toEmploymentListQuery('emp-1', 2)
@@ -211,6 +285,19 @@ describe('列表查詢型別', () => {
     const query = toDepartmentHistoryListQuery('employment-1', 1)
     expect(query.sort).toEqual(HISTORY_LIST_SORT_ECHO)
     expect(query.employmentId).toBe('employment-1')
+  })
+
+  test('toDependentListQuery 帶眷屬專用的回聲排序常數（effectiveDate，不是 effectiveFrom）', () => {
+    const query = toDependentListQuery('emp-1', 1)
+    expect(query.sort).toEqual(DEPENDENT_LIST_SORT_ECHO)
+    expect(query.sort.field).toBe('effectiveDate')
+    expect(query.employeeId).toBe('emp-1')
+  })
+
+  test('toLaborPensionListQuery 帶固定的回聲排序常數（effectiveFrom，與扣繳同構）', () => {
+    const query = toLaborPensionListQuery('emp-1', 1)
+    expect(query.sort).toEqual(HISTORY_LIST_SORT_ECHO)
+    expect(query.employeeId).toBe('emp-1')
   })
 })
 

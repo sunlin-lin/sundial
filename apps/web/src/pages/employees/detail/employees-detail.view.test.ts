@@ -3,6 +3,9 @@ import {
   activeOnly,
   assignableRoleOptions,
   companyUserIdOf,
+  dependentRelationshipLabel,
+  dependentStatusLabel,
+  dependentStatusTagType,
   employmentStatusLabel,
   employmentStatusTagType,
   employmentTypeLabel,
@@ -58,6 +61,23 @@ describe('formatOpenCode', () => {
   test('有值原樣轉字串，null 顯示空值符號', () => {
     expect(formatOpenCode(3)).toBe('3')
     expect(formatOpenCode(null)).toBe('—')
+  })
+})
+
+describe('dependentRelationshipLabel', () => {
+  test('依代碼查對應的文字 key', () => {
+    expect(dependentRelationshipLabel(1, $t)).toBe('employees-detail.dependent.relationship.1')
+    expect(dependentRelationshipLabel(4, $t)).toBe('employees-detail.dependent.relationship.4')
+    expect(dependentRelationshipLabel(8, $t)).toBe('employees-detail.dependent.relationship.8')
+  })
+})
+
+describe('dependentStatusLabel／dependentStatusTagType', () => {
+  test('扶養中與已終止各自對應不同文字與 tag 顏色（終止是狀態變更，不是刪除）', () => {
+    expect(dependentStatusLabel('ACTIVE', $t)).toBe('employees-detail.dependent.status.active')
+    expect(dependentStatusLabel('TERMINATED', $t)).toBe('employees-detail.dependent.status.terminated')
+    expect(dependentStatusTagType('ACTIVE')).toBe('success')
+    expect(dependentStatusTagType('TERMINATED')).toBe('info')
   })
 })
 
