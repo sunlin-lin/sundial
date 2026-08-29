@@ -10,14 +10,20 @@
  * 而稽核失敗**必須**讓業務一起失敗（計畫 §5），那正好是最不該被忽略的一種回傳值。
  * 因此本模組也沒有 `errors.ts`（計畫 §6）。
  *
- * ## 交易 handle 由呼叫端傳入
+ * ## 交易 handle 由呼叫端傳入，且型別上就是交易，不是隨便一個連線
  *
  * `runner` 是呼叫端**業務交易**的 handle（計畫 §5）。稽核必須與業務同生共死：
  * 業務 rollback 時稽核跟著消失，業務 commit 時稽核一定在。
  * 丟 queue 事後補也不行——漏記等於沒有稽核，而且漏記沒有症狀：沒有錯誤、沒有告警，
  * 只有事後查不到那一筆，而稽核紀錄**補不回來**（計畫 §1）。
+ *
+ * 型別是 `TransactionRunner`（`db/client.ts`），不是 `QueryRunner`：後者連線池與交易物件都滿足，
+ * `recordAudit(context.db, ...)` 與 `recordAudit(tx, ...)` 在編譯器眼裡會完全等價——這正是稽核
+ * 曾經只能靠 `check-audit-transaction.ts` 讀 AST 才擋得住的原因。換成 `TransactionRunner` 之後，
+ * 傳裸連線池是編譯錯誤，不必再靠腳本讀語法樹去發現（該腳本的職責變化見其檔頭）。
  */
-import { insertAuditLog, type AuditActor, type QueryRunner } from '../audit-main.repository.ts'
+import { insertAuditLog, type AuditActor } from '../audit-main.repository.ts'
+import type { TransactionRunner } from '../../../../db/client.ts'
 import type { AuditAction } from '../domain/audit-action.ts'
 import type { AuditChange } from '../domain/audit-change-set.ts'
 import type { AuditSubjectTable } from '../domain/audit-field-policy.ts'
@@ -60,7 +66,7 @@ export type AuditRecordInput = {
   readonly now: string
 }
 
-export const recordAudit = async (runner: QueryRunner, input: AuditRecordInput): Promise<void> => {
+export const recordAudit = async (runner: TransactionRunner, input: AuditRecordInput): Promise<void> => {
   await insertAuditLog(runner, input.companyId, {
     // 主鍵在這裡產生而不是交給資料庫：這張表的 `id` 是 uuid（不是 auto-increment），
     // 而 service 產生主鍵是本專案既有的作法（見 `employees-main.create.service.ts`）。

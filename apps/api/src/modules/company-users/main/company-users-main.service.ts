@@ -8,12 +8,12 @@
  */
 import { deactivateCompanyUser as deactivateCompanyUserImpl } from './impl/company-users-main.deactivate.service.ts'
 import type { CompanyUserDeactivation } from './impl/company-users-main.deactivate.service.ts'
-import type { QueryRunner } from '../../../db/client.ts'
+import type { TransactionRunner } from '../../../db/client.ts'
 
 export type { CompanyUserDeactivation }
 
 export const deactivateCompanyUser = (
-  tx: QueryRunner,
+  tx: TransactionRunner,
   companyId: string,
   employeeId: string,
   now: string,

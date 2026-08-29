@@ -20,7 +20,7 @@
  *   不是「兩個都必須存在」。零端點的大目錄只有 `index.ts`——生一個什麼都不 re-export 的
  *   `routes.ts` 只會多一個空殼，而路由組裝點還是得記得別去 import 它。
  */
-import type { QueryRunner } from './audit-main.repository.ts'
+import type { TransactionRunner } from '../../../db/client.ts'
 import { buildChangeSet, type AuditChange, type AuditSnapshot } from './domain/audit-change-set.ts'
 import { AUDIT_FIELD_POLICY, type AuditSubjectTable } from './domain/audit-field-policy.ts'
 import { recordAudit as recordAuditImpl, type AuditRecordInput } from './impl/audit-main.record.service.ts'
@@ -68,8 +68,12 @@ export const buildAuditChanges = (
  *   業務 rollback 時稽核不會跟著回滾，庫裡會留下「稽核說改過、資料實際沒改」的幽靈紀錄，
  *   而查稽核的人沒有辦法分辨那一筆是真的還是幽靈。
  *
+ *   型別是 `TransactionRunner`，不是 repository 常見的 `QueryRunner`——後者連線池與交易物件
+ *   都滿足，會讓「傳裸連線池」與「傳交易」在編譯器眼裡等價。`recordAudit(context.db, ...)`
+ *   因此是編譯錯誤，不必再靠 `check-audit-transaction.ts` 讀語法樹才擋得住。
+ *
  * @throws 寫入失敗時拋出，**並連帶讓外層業務交易失敗**。代價是明知的：稽核寫失敗，業務也會失敗
  *   ——「改得成但沒有紀錄」在稽核的語意下就是不該發生的事。
  */
-export const recordAudit = (runner: QueryRunner, input: AuditRecordInput): Promise<void> =>
+export const recordAudit = (runner: TransactionRunner, input: AuditRecordInput): Promise<void> =>
   recordAuditImpl(runner, input)

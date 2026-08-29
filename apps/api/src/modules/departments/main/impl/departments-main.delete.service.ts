@@ -9,14 +9,19 @@
  * 而畫面上看不出任何異狀（歷史紀錄照樣顯示得出來，只是它指向的部門「不存在」了）。
  *
  * TODO(稽核 Stage 2 定案後補；`docs/plans/02-audit-logs.md`)：理由同 `create` 切片。
+ *
+ * **本檔不開交易**：`deleteDepartmentInTransaction` 只收外部交易 handle（`TransactionRunner`，
+ * `db/client.ts`），開交易的包裝在入口檔的 `deleteDepartment`（理由同 `create` 切片）。
  */
+import type { TransactionRunner } from '../../../../db/client.ts'
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import type { DepartmentsMainContext } from '../domain/department-context.ts'
 import type { DeletedDepartment, DepartmentTargetInput } from '../domain/department-model.ts'
 import { departmentHasChildren, departmentNotFound, departmentStateChanged } from '../departments-main.errors.ts'
 import { findDepartmentDetail, hasChildDepartments, markDepartmentDeleted } from '../departments-main.repository.ts'
 
-export const deleteDepartment = async (
+export const deleteDepartmentInTransaction = async (
+  tx: TransactionRunner,
   context: DepartmentsMainContext,
   input: DepartmentTargetInput,
 ): Promise<ServiceResult<DeletedDepartment>> => {
@@ -26,19 +31,17 @@ export const deleteDepartment = async (
   // 一次，因此不可能與自己碰撞。
   const deletedSeq = context.clock.epochMs()
 
-  return context.db.transaction(async (tx): Promise<ServiceResult<DeletedDepartment>> => {
-    const current = await findDepartmentDetail(tx, context.companyId, input.id)
-    // 目標不存在與「屬於別家公司」回完全相同的一筆錯誤（§3.2、§3.1.3）。
-    if (current === null) return fail([departmentNotFound()])
+  const current = await findDepartmentDetail(tx, context.companyId, input.id)
+  // 目標不存在與「屬於別家公司」回完全相同的一筆錯誤（§3.2、§3.1.3）。
+  if (current === null) return fail([departmentNotFound()])
 
-    // 規則 3（暫時只做這一半，見檔頭）：有子部門就拒絕，逼使用者先移轉子部門的上層。
-    const hasChildren = await hasChildDepartments(tx, context.companyId, input.id)
-    if (hasChildren) return fail([departmentHasChildren()])
+  // 規則 3（暫時只做這一半，見檔頭）：有子部門就拒絕，逼使用者先移轉子部門的上層。
+  const hasChildren = await hasChildDepartments(tx, context.companyId, input.id)
+  if (hasChildren) return fail([departmentHasChildren()])
 
-    // 條件式 UPDATE ＋ 檢查影響列數（§4.4）：兩個使用者同時按刪除時，第二筆影響 0 列。
-    const affectedRows = await markDepartmentDeleted(tx, context.companyId, input.id, { now, deletedSeq })
-    if (affectedRows === 0) return fail([departmentStateChanged()])
+  // 條件式 UPDATE ＋ 檢查影響列數（§4.4）：兩個使用者同時按刪除時，第二筆影響 0 列。
+  const affectedRows = await markDepartmentDeleted(tx, context.companyId, input.id, { now, deletedSeq })
+  if (affectedRows === 0) return fail([departmentStateChanged()])
 
-    return succeed({ id: input.id })
-  })
+  return succeed({ id: input.id })
 }

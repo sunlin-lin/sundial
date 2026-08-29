@@ -1,39 +1,67 @@
 /**
- * 稽核交易掃描：每一處 `recordAudit(` 呼叫的第一個引數，必須是包住它的
- * `.transaction(async (X) => ...)` 回呼的參數名（稽核計畫的三個硬規則之一）。
+ * 稽核交易掃描：每一處 `recordAudit(` 呼叫的第一個引數，必須是**真正參與同一筆業務寫入的
+ * 那一個交易 handle**（稽核計畫的三個硬規則之一）。
  *
- * ## 為什麼型別擋不住這件事，需要一支腳本
+ * ## 職責已經轉移：這支腳本現在擋的是什麼，不再是什麼
  *
- * `db/client.ts` 的 `QueryRunner` 是 `Pick<Database, 'select' | 'selectDistinct' | 'insert' |
- * 'update' | 'delete'>`，而且**連線池與交易物件都滿足它**——這是刻意的（見該檔頭），為了讓
- * repository 在交易內外用同一套寫法。代價是 `recordAudit` 的簽章收的正是這個 `QueryRunner`，
- * 於是 `recordAudit(context.db, ...)` 與 `recordAudit(tx, ...)` 在編譯器眼裡**完全等價**——
- * 一個是裸連線池、一個是交易，型別系統分不出來。而稽核與業務寫入不在同一交易的後果，
- * `sessions-main.revoke-on-reuse.service.ts` 的檔頭已經寫死：沒有交易的兩次寫入有四種結果，
- * 最糟的是「業務寫入失敗、稽核卻成功」——庫裡會留一筆說「已經處理」的紀錄，但實際上什麼都
- * 沒發生，而查稽核的人會就此結案、不會再想到要重做一次。
+ * **這支腳本曾經是唯一的把關**：`recordAudit` 原本收 `QueryRunner`（`db/client.ts`），
+ * 而 `QueryRunner` 刻意讓連線池與交易物件滿足同一個型別（為了讓 repository 在交易內外用同一套
+ * 寫法），代價是 `recordAudit(context.db, ...)` 與 `recordAudit(tx, ...)` 在編譯器眼裡完全等價
+ * ——「有沒有交易」這件事編譯器答不出來，只能靠這支腳本讀 AST、認詞法上的巢狀
+ * `.transaction(async (X) => ...)` 來確認。
+ *
+ * **「有沒有交易」現在由型別系統回答**：`recordAudit` 的簽章已經改收 `TransactionRunner`
+ * （`db/client.ts`）——那是 `QueryRunner` 交集上只有真正交易物件才有的成員（`rollback`），
+ * 連線池塞不進去。`recordAudit(context.db, ...)` 現在是**編譯錯誤**，不必再靠這支腳本才能發現。
+ * 這也是為什麼計畫 §4.1「service 動作收交易 handle 作為第一個參數」能夠成立而不必再把
+ * `.transaction(...)` 硬寫在呼叫 `recordAudit` 的同一個檔案、同一個回呼裡——舊版規則的判準
+ * （詞法巢狀）擋不住「交易開在呼叫端、這裡只收一個外部 `tx: TransactionRunner` 參數」這種完全
+ * 合法的重構，因為那個檔案裡根本看不到 `.transaction(`。
+ *
+ * **型別系統擋不住的，換這支腳本頂上**：`recordAudit(txA, ...)` 而業務寫入用的是 `txB`
+ * ——兩個都是合法的 `TransactionRunner`，編譯器完全沒有意見（型別系統只管「這是不是一個交易」，
+ * 不管「這是不是*那一個*交易」），但那兩個寫入實際上不在同一個交易裡，稽核與業務又會走回
+ * `sessions-main.revoke-on-reuse.service.ts` 檔頭寫的那四種沒有交易的結果，最糟的是
+ * 「業務寫入失敗、稽核卻成功」。這支腳本現在只回答一個問題：**`recordAudit` 用的那個 handle，
+ * 是不是這個呼叫點唯一「看得到、可以合理相信是同一筆交易」的那一個**——不是「有沒有交易」。
  *
  * 唯一的整合測試（`sessions-main.revoke-on-reuse.test.ts` 的「★ 故意讓稽核失敗」）驗的是
  * **手工重組的複本**，不是 `revokeChainsOnReuse` 本體——那支測試的檔頭已經誠實寫明這一點：
  * 兩件事（作廢、稽核）在合法輸入下永遠同時成立或同時不成立，沒辦法只從公開介面單獨造出
  * 「作廢成功、稽核失敗」的案例，因此測試改用政策違規當觸發點，繞過了公開簽章。
- * 後果是把 `revoke-on-reuse.service.ts` 裡的 `tx` 換成 `context.db`，那支測試照樣是綠的——
- * 這支腳本補的正是這個洞：不透過執行，直接讀 AST 確認「稽核真的包在交易裡」。
+ * 後果是把 `revoke-on-reuse.service.ts` 裡的 `tx` 換成另一個變數，那支測試照樣是綠的——
+ * 這支腳本補的正是這個洞：不透過執行，直接讀 AST 確認「稽核用的就是那個可信的交易 handle」。
  *
- * ## 判準：AST，不是正則
+ * ## 判準：AST，不是正則，兩條路徑擇一通過
  *
  * 純文字掃描沒辦法回答「這個呼叫有沒有被某個 `.transaction(...)` 包住」——巢狀的深度、
  * 縮排、換行方式在每個呼叫點都不同，正則要嘛漏判要嘛誤判。因此走 TypeScript 的 AST：
  * 找到 callee 名為 `recordAudit` 的 `CallExpression`，取第一個引數（必須是識別字，
- * 不能是 `context.db` 這種屬性存取——那本身就已經是違規，不需要再往上找）；
- * 然後從這個呼叫節點沿 `parent` 鏈往上走，尋找 callee 是 `PropertyAccessExpression`
- * 且屬性名為 `transaction` 的 `CallExpression`，比對它的回呼（第一個引數，箭頭或一般函式）
- * 的第一個參數名是否等於前面取到的識別字。找到相符的就通過；走到檔案頂端都沒找到 → 違規。
+ * 不能是 `context.db` 這種屬性存取——那本身就已經是違規，不需要再往上找）。
+ * 這個識別字要通過下面兩條路徑**其中一條**才算合法：
+ *
+ * 1. **詞法巢狀**（原本唯一的路徑，交易開在同一個檔案、同一個回呼時適用）：從呼叫節點沿
+ *    `parent` 鏈往上走，尋找 callee 是 `PropertyAccessExpression` 且屬性名為 `transaction`
+ *    的 `CallExpression`，比對它的回呼（第一個引數，箭頭或一般函式）的第一個參數名是否等於
+ *    前面取到的識別字。
+ * 2. **收外部 handle**（計畫 §4.1 之後新增的路徑，交易開在呼叫端時適用）：找出「直接包住這個
+ *    呼叫」的最近一層函式（箭頭函式、一般函式或函式宣告），比對它的**第一個參數**是否
+ *    ——參數名等於前面取到的識別字，**而且**該參數的型別標註文字含有 `TransactionRunner`。
+ *    只看最近一層，不像路徑 1 會一路往上找到檔案頂端：計畫 §4.1 定案「交易 handle 一律是
+ *    第一個參數」，因此可信的 handle 只可能來自呼叫點所在函式自己的簽章，不會是外層某個
+ *    無關函式的參數。型別標註文字只用字串比對（`/\bTransactionRunner\b/`），不解析型別
+ *    ——與路徑 1 一樣刻意不建 `ts.Program`，見下段。
+ *
+ * 兩條路徑都沒找到相符的 → 違規：可能是傳了裸連線池（`QueryRunner` 但非 `TransactionRunner`
+ * 的那一種寫法現在編譯器已經擋住，這裡剩下的多半是「傳了一個型別上合法但語意上是另一個交易」
+ * 的 handle，即「兩個不同 handle」那種形狀）。
  *
  * **只走語法樹，不做型別解析**（不建 `ts.Program`）：這條規則要問的是「程式碼長什麼樣子」，
  * 不是「這個識別字的型別是什麼」，語法層級的答案就是完整答案，也讓這支腳本不必依賴
  * `tsconfig.json` 能不能成功建置——即使專案裡有別的檔案型別有誤（例如另一個模組還在開發中），
- * 這支腳本仍然讀得懂它自己在乎的那一小塊語法。
+ * 這支腳本仍然讀得懂它自己在乎的那一小塊語法。路徑 2 的型別標註比對只認文字，不是真的型別
+ * 檢查：把參數標成 `TransactionRunner` 卻塞一個裸連線池進來，那是編譯器的事（見上文），
+ * 不是這支腳本要重複把關的事。
  *
  * ## §7.2 自我檢查：命中 0 個 `recordAudit` 呼叫點必須失敗
  *
@@ -127,6 +155,45 @@ const hasEnclosingTransactionMatch = (call: ts.CallExpression, argumentName: str
   return false
 }
 
+/** 是不是函式（箭頭函式、一般函式常值、函式宣告）——`enclosingFunctionAcceptsHandle` 找的就是這三種。 */
+const isFunctionLike = (node: ts.Node): node is ts.ArrowFunction | ts.FunctionExpression | ts.FunctionDeclaration =>
+  ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node)
+
+/**
+ * 型別標註文字裡有沒有 `TransactionRunner`。只做字串比對，不解析型別——理由見檔頭
+ * 「只走語法樹，不做型別解析」那一段：這裡要問的是「這個參數看起來像不像收了交易 handle」，
+ * 不是「這個型別實際上是什麼」，後者已經是編譯器的事。用單詞邊界（`\b`）避免誤配到
+ * 例如 `MyTransactionRunnerWrapper` 這種名字包含它但語意不同的型別。
+ */
+const isTransactionRunnerAnnotation = (typeNode: ts.TypeNode | undefined): boolean =>
+  typeNode !== undefined && /\bTransactionRunner\b/.test(typeNode.getText())
+
+/**
+ * 路徑 2（計畫 §4.1 之後新增）：`recordAudit(...)` 是不是「直接包住它的那個函式」的第一個參數
+ * ——且那個參數的型別標註含有 `TransactionRunner`。
+ *
+ * **只看最近一層函式，不像 {@link hasEnclosingTransactionMatch} 會一路往上找到檔案頂端**：
+ * 計畫 §4.1 定案「交易 handle 一律是第一個參數」，可信的 handle 只可能來自呼叫點所在函式
+ * 自己的簽章。如果往上一路找的話，一個無關的外層函式剛好也有個叫同樣名字、標成
+ * `TransactionRunner` 的第一參數，會被誤判為合法——那正是「兩個不同 handle」這個規則要擋的
+ * 那種混淆的放大版。
+ *
+ * 解構參數（`({ tx }: ...) => ...`）回傳 `false`：`recordAudit` 的第一個引數本來就必須是
+ * 單一識別字，不可能等於一個解構出來的名字（與 {@link transactionCallbackParamName} 同一個理由）。
+ */
+const enclosingFunctionAcceptsHandle = (call: ts.CallExpression, argumentName: string): boolean => {
+  let current: ts.Node | undefined = call.parent
+  while (current !== undefined) {
+    if (isFunctionLike(current)) {
+      const firstParam = current.parameters[0]
+      if (firstParam === undefined || !ts.isIdentifier(firstParam.name)) return false
+      return firstParam.name.text === argumentName && isTransactionRunnerAnnotation(firstParam.type)
+    }
+    current = current.parent
+  }
+  return false
+}
+
 /** 一個檔案的掃描結果：違規清單 ＋ 命中的 `recordAudit(` 呼叫總數（自我檢查要用後者）。 */
 type FileScanResult = {
   readonly violations: readonly Violation[]
@@ -161,11 +228,15 @@ const scanSource = (code: string, file: string): FileScanResult => {
           `第一個引數必須是交易回呼的參數（一個識別字，例如 tx），實際是 ` +
             `${firstArgument === undefined ? '（缺少引數）' : firstArgument.getText(sourceFile)}`,
         )
-      } else if (!hasEnclosingTransactionMatch(node, firstArgument.text)) {
+      } else if (
+        !hasEnclosingTransactionMatch(node, firstArgument.text) &&
+        !enclosingFunctionAcceptsHandle(node, firstArgument.text)
+      ) {
         record(
           node,
-          `recordAudit(${firstArgument.text}, ...) 找不到把它包起來、且回呼參數名為 ` +
-            `${firstArgument.text} 的 .transaction(...)——稽核可能沒有跟業務寫入包在同一交易裡`,
+          `recordAudit(${firstArgument.text}, ...) 既找不到把它包起來、且回呼參數名為 ` +
+            `${firstArgument.text} 的 .transaction(...)，也不是所在函式第一個型別標註為 ` +
+            `TransactionRunner 的參數——稽核用的可能不是這次業務寫入真正在用的那個交易 handle`,
         )
       }
     }
@@ -213,19 +284,32 @@ for (const file of files) {
 // ---------------------------------------------------------------------------
 
 /**
- * 內建樣本涵蓋五種形狀：
+ * 內建樣本涵蓋七種形狀，涵蓋路徑 1（詞法巢狀）與路徑 2（收外部 handle，計畫 §4.1）：
  *
- * 1. `ok`：`recordAudit(tx, ...)` 直接包在 `context.db.transaction(async (tx) => ...)` 裡 → 合法。
+ * 1. `ok`：`recordAudit(tx, ...)` 直接包在 `context.db.transaction(async (tx) => ...)` 裡
+ *    → 合法（路徑 1）。
  * 2. `propertyAccessArg`：第一個引數是 `context.db`（屬性存取，不是識別字）→ 違規，
- *    即使外層真的有一個交易——這就是本腳本要擋的那個真實漏洞（`QueryRunner` 兩者都收）。
- * 3. `unwrapped`：第一個引數是識別字，但整個呼叫根本沒有被任何 `.transaction(...)` 包住 → 違規。
+ *    即使外層真的有一個交易——**這個形狀現在其實已經被型別系統擋住**（`recordAudit` 收
+ *    `TransactionRunner`，連線池塞不進去），這裡留著是為了證明「引數不是單一識別字」
+ *    這條判斷本身沒有壞掉，不是說這個 repo 裡真的還會出現這種寫法。
+ * 3. `unwrapped`：第一個引數是識別字，但整個呼叫既沒有被任何 `.transaction(...)` 包住，
+ *    也不是所在函式標成 `TransactionRunner` 的第一個參數 → 違規。
  * 4. `mismatchedParamName`：有外層交易，但交易回呼的參數叫 `trx`，`recordAudit` 卻傳了 `tx`
- *    （形跡可疑：多半是複製貼上時漏改）→ 違規。
+ *    （形跡可疑：多半是複製貼上時漏改）→ 違規（路徑 1 不成立，路徑 2 也不成立——`tx` 不是
+ *    這個函式自己的參數）。
  * 5. `nestedThroughNonTransactionCall`：`recordAudit(tx, ...)` 中間隔了一層不相關的呼叫
  *    （`doSomethingElse(async () => ...)`）才到得了外層的 `.transaction(async (tx) => ...)`
- *    → 合法，用來證明「往上走到檔案頂端才放棄」這件事真的有實作，不是只看最近一層。
+ *    → 合法（路徑 1），用來證明「往上走到檔案頂端才放棄」這件事真的有實作，不是只看最近一層。
+ * 6. `inTransactionHandle`：函式**不開交易**，第一個參數是 `tx: TransactionRunner`，
+ *    `recordAudit(tx, ...)` 直接用這個參數 → 合法（路徑 2）——這正是計畫 §4.1 之後、
+ *    `employees/main` 等模組的 `impl/*.service.ts` 實際採用的形狀。
+ * 7. `twoDifferentHandles`：函式收了兩個交易 handle（`tx`、`otherTx`，兩個都合法標成
+ *    `TransactionRunner`），業務寫入該用的是第一個參數 `tx`，`recordAudit` 卻手滑傳了
+ *    `otherTx` → 違規（路徑 2 要求用的必須是**第一個**參數，`otherTx` 不是）。這是型別系統
+ *    擋不住、只有這支腳本才擋得住的那種情況——兩個引數型別上都合法，但不是同一個交易，
+ *    示範見檔頭「型別系統擋不住的，換這支腳本頂上」那一段。
  *
- * 預期：5 個呼叫點，其中 3 個違規（2、3、4）。
+ * 預期：7 個呼叫點，其中 4 個違規（2、3、4、7）。
  */
 const SELF_TEST_SAMPLE = [
   'async function ok() {',
@@ -254,10 +338,16 @@ const SELF_TEST_SAMPLE = [
   '    })',
   '  })',
   '}',
+  'async function inTransactionHandle(tx: TransactionRunner, context, input) {',
+  '  await recordAudit(tx, input)',
+  '}',
+  'async function twoDifferentHandles(tx: TransactionRunner, otherTx: TransactionRunner) {',
+  '  await recordAudit(otherTx, input)',
+  '}',
 ].join('\n')
 
-const SELF_TEST_EXPECTED_CALL_COUNT = 5
-const SELF_TEST_EXPECTED_VIOLATIONS = 3
+const SELF_TEST_EXPECTED_CALL_COUNT = 7
+const SELF_TEST_EXPECTED_VIOLATIONS = 4
 
 const selfCheckFailures: string[] = []
 
@@ -302,15 +392,20 @@ if (selfCheckFailures.length > 0) {
 if (violations.length > 0) {
   process.stderr.write(
     [
-      `稽核寫入必須與業務寫入在同一交易內（${String(violations.length)} 處違規，稽核計畫的三個硬規則之一）：`,
+      `recordAudit 用的必須是這次業務寫入真正在用的那個交易 handle` +
+        `（${String(violations.length)} 處違規，稽核計畫的三個硬規則之一）：`,
       ...violations.map(({ file, line, column, source, detail }) =>
         [`  ✗ ${file}:${String(line)}:${String(column)}`, `      ${source}`, `      ${detail}`].join('\n'),
       ),
       '',
-      '修法：把 recordAudit 的第一個引數換成包住它的 .transaction(async (tx) => ...) 的那個 tx',
-      '（或呼叫端既有的交易回呼參數，名字不必是 tx，只要是同一個），不要傳 context.db／db 這種',
-      '連線池或裸 runner——QueryRunner 型別本身分不出連線池與交易物件，因此編譯器不會報錯，',
-      '這正是需要本腳本的原因，理由完整寫在 apps/api/scripts/check-audit-transaction.ts 檔頭。',
+      '修法：確認 recordAudit 的第一個引數是下面兩者之一——',
+      '  1. 包住它的 .transaction(async (tx) => ...) 的那個 tx（名字不必是 tx，只要是同一個），或',
+      '  2. 所在函式自己的第一個參數，且該參數型別標成 TransactionRunner（計畫 §4.1「收外部交易',
+      '     handle」的形狀，例如 createXxxInTransaction(tx: TransactionRunner, context, input)）。',
+      '「傳裸連線池」現在是編譯錯誤（recordAudit 收 TransactionRunner，QueryRunner 擋不住這件事，',
+      '但裸連線池不滿足 TransactionRunner），tsc 會先擋下來，不需要這支腳本。這支腳本擋的是',
+      '兩個引數型別上都合法、但不是同一個交易的情形（例如把 recordAudit 的 tx 打成另一個變數名）',
+      '——理由完整寫在 apps/api/scripts/check-audit-transaction.ts 檔頭。',
     ].join('\n') + '\n',
   )
   process.exit(1)
@@ -318,5 +413,5 @@ if (violations.length > 0) {
 
 process.stdout.write(
   `稽核交易檢查通過：${String(files.length)} 個檔案，${String(totalCallCount)} 處 ${RECORD_AUDIT_NAME}( 呼叫，` +
-    '全部包在正確的交易回呼裡。\n',
+    '全部用的是可信的交易 handle。\n',
 )

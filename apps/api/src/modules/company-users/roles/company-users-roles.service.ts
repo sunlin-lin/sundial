@@ -12,7 +12,8 @@
  * 跨層型別定義在 `domain/role-assignment-model.ts`，本檔只 re-export：定義在這裡的話，
  * `impl/` 的切片要用它就得回頭 import 入口檔，形成循環相依。
  */
-import type { ServiceResult } from '../../../shared/service-result.ts'
+import type { TransactionRunner } from '../../../db/client.ts'
+import { fail, type ServiceResult } from '../../../shared/service-result.ts'
 import type {
   RoleAssignmentContext,
   RoleAssignmentInput,
@@ -22,10 +23,14 @@ import type {
   RoleAssignmentSnapshot,
 } from './domain/role-assignment-model.ts'
 import type { QueryRunner } from './company-users-roles.repository.ts'
-import { assignRoles as assignRolesImpl } from './impl/company-users-roles.create.service.ts'
+import { assignmentStateChanged } from './company-users-roles.errors.ts'
+import { assignRolesInTransaction as assignRolesInTransactionImpl } from './impl/company-users-roles.create.service.ts'
 import { listRoleAssignments as listRoleAssignmentsImpl } from './impl/company-users-roles.list.service.ts'
 import { listPermissionCodes as listPermissionCodesImpl } from './impl/company-users-roles.list-permission-codes.service.ts'
-import { revokeRoles as revokeRolesImpl } from './impl/company-users-roles.revoke.service.ts'
+import {
+  RevocationConflict,
+  revokeRolesInTransaction as revokeRolesInTransactionImpl,
+} from './impl/company-users-roles.revoke.service.ts'
 
 export type {
   AssignedRole,
@@ -50,17 +55,56 @@ export const listRoleAssignments = (
   query: RoleAssignmentQuery,
 ): Promise<RoleAssignmentPage> => listRoleAssignmentsImpl(context, query)
 
-/** 指派一或多個角色，回傳變更後的全部有效角色。 */
+/**
+ * 指派一或多個角色，回傳變更後的全部有效角色。**自己開交易**，給單一端點用；
+ * 差別見 `employees-main.service.ts` 的 `createEmployee` 說明。
+ */
 export const assignRoles = (
   context: RoleAssignmentContext,
   input: RoleAssignmentInput,
-): Promise<ServiceResult<RoleAssignmentSnapshot>> => assignRolesImpl(context, input)
+): Promise<ServiceResult<RoleAssignmentSnapshot>> =>
+  context.database.transaction((transaction) => assignRolesInTransactionImpl(transaction, context, input))
 
-/** 撤銷一或多個角色，回傳變更後的全部有效角色。 */
-export const revokeRoles = (
+/** 指派一或多個角色。收外部交易 handle，給 Stage 4 編排點用（計畫 §4.1）。 */
+export const assignRolesInTransaction = (
+  transaction: TransactionRunner,
   context: RoleAssignmentContext,
   input: RoleAssignmentInput,
-): Promise<ServiceResult<RoleAssignmentSnapshot>> => revokeRolesImpl(context, input)
+): Promise<ServiceResult<RoleAssignmentSnapshot>> => assignRolesInTransactionImpl(transaction, context, input)
+
+/**
+ * 撤銷一或多個角色，回傳變更後的全部有效角色。**自己開交易**，給單一端點用。
+ *
+ * `RevocationConflict` 的攔截留在這一層（交易邊界所在的那一層）：`revokeRolesInTransaction`
+ * 偵測到「撤銷在交易外已被變更」時會拋出這個例外以強制 ROLLBACK（見該檔頭），
+ * 而只有自己開交易的呼叫端知道要把它轉回一句業務錯誤——編排點呼叫
+ * {@link revokeRolesInTransaction} 時，這個例外會原樣往上拋，讓編排點自己的交易一起回滾。
+ */
+export const revokeRoles = async (
+  context: RoleAssignmentContext,
+  input: RoleAssignmentInput,
+): Promise<ServiceResult<RoleAssignmentSnapshot>> => {
+  try {
+    return await context.database.transaction((transaction) =>
+      revokeRolesInTransactionImpl(transaction, context, input),
+    )
+  } catch (error) {
+    if (error instanceof RevocationConflict) {
+      // 交易已回滾，這裡把它轉回收集式的業務錯誤，讓邊界層依分組映射成 409／`300`。
+      return fail([assignmentStateChanged()])
+    }
+    // 其餘一律是真正的意外（連不上資料庫、程式錯誤），原樣往上拋給統一 error handler，
+    // 保留堆疊與告警（§3.1.2、§3.3「重拋時必須保留成因」）。
+    throw error
+  }
+}
+
+/** 撤銷一或多個角色。收外部交易 handle，給 Stage 4 編排點用；`RevocationConflict` 的處理見上方。 */
+export const revokeRolesInTransaction = (
+  transaction: TransactionRunner,
+  context: RoleAssignmentContext,
+  input: RoleAssignmentInput,
+): Promise<ServiceResult<RoleAssignmentSnapshot>> => revokeRolesInTransactionImpl(transaction, context, input)
 
 /**
  * 查出一位公司成員目前擁有的權限碼集合，供身分驗證 middleware 判斷授權。

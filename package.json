@@ -20,7 +20,7 @@
     "check:api-artifacts": "bun run apps/api/scripts/check-api-artifacts.ts",
     "check:i18n": "bun run apps/api/scripts/check-message-params.ts",
     "check:audit-policy": "bun run apps/api/scripts/check-audit-policy.ts",
-    "//check:audit-transaction": "稽核計畫的三個硬規則之一：`recordAudit` 必須與它所屬的業務寫入包在同一交易內，否則會出現「業務失敗、稽核卻成功」這種比完全沒有稽核更危險的幽靈紀錄。`QueryRunner`（`db/client.ts`）刻意讓連線池與交易物件滿足同一個型別，因此這件事編譯器擋不住，只能用腳本讀 AST 確認每一處 `recordAudit(` 的第一個引數就是包住它的 `.transaction(async (X) => ...)` 的那個 X。排在 `check:audit-policy` 之後，因為兩者都是稽核計畫的靜態掃描，放在一起讓那一段規範掃描維持連續。理由與判準完整寫在 apps/api/scripts/check-audit-transaction.ts 檔頭。",
+    "//check:audit-transaction": "稽核計畫的三個硬規則之一：`recordAudit` 必須與它所屬的業務寫入用同一個交易 handle，否則會出現「業務失敗、稽核卻成功」這種比完全沒有稽核更危險的幽靈紀錄。「有沒有交易」這件事現在由型別系統擋（`recordAudit` 收 `db/client.ts` 的 `TransactionRunner`，連線池塞不進去，傳裸連線池是編譯錯誤），這支腳本現在只剩型別擋不住的那一半：`recordAudit(txA, ...)` 而業務寫入用 `txB`——兩個都是合法的 `TransactionRunner`，編譯器沒有意見，但不是同一個交易。判準是兩條路徑（詞法巢狀的 `.transaction(...)`，或所在函式自己第一個型別標成 `TransactionRunner` 的參數）擇一通過。排在 `check:audit-policy` 之後，因為兩者都是稽核計畫的靜態掃描，放在一起讓那一段規範掃描維持連續。理由與判準完整寫在 apps/api/scripts/check-audit-transaction.ts 檔頭。",
     "check:audit-transaction": "bun run apps/api/scripts/check-audit-transaction.ts",
     "//check:migration-journal": "drizzle-kit 的 `migrate` 讀的是 `drizzle/meta/_journal.json` 的 entries，不是 `drizzle/*.sql` 的檔案清單。手寫 migration SQL 卻忘了同步補 journal（與對應的 snapshot）時，`db:migrate` 照樣印出成功，實際上零個動作、表沒有建立——而且沒有任何錯誤訊息。這支腳本做雙向比對（SQL 有 journal 沒有 → 永遠不會被執行；journal 有 SQL 沒有 → db:migrate 執行到那裡會找不到檔案，分開報，修法不同），外加 idx 是否連續不跳號、每筆 entry 是否有對應的 snapshot。排在 `check:audit-transaction` 之後，理由與它相同：都是純靜態掃描，放在一起讓「規範掃描」這一段在 ci 裡連續。理由與判準完整寫在 apps/api/scripts/check-migration-journal.ts 檔頭。",
     "check:migration-journal": "bun run apps/api/scripts/check-migration-journal.ts",

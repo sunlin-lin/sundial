@@ -23,6 +23,12 @@ export type { AuditActor, NewAuditLog }
  * **刻意不另外宣告一份更窄的 `Pick<Database, 'insert'>`**：窄化擋的是「呼叫得到某個方法」，
  * 封裝擋的是「查詢漏掉公司條件」，而窄化過的 runner 交不給 `TenantDatabase`，
  * 於是切片只能退回裸 runner 自己在 `WHERE`／`VALUES` 裡手寫 `companyId`——正是封裝要堵的破口。
+ *
+ * **本層仍然只要求 `QueryRunner`**：`insertAuditLog` 只是單純寫一列，它不在乎呼叫端傳來的是
+ * 連線池還是交易物件（那從來不是 repository 這一層該管的事）。「呼叫端傳進來的一定是交易」
+ * 這件事由更上層的 `audit-main.service.ts`／`impl/audit-main.record.service.ts` 用
+ * `TransactionRunner` 把關——`TransactionRunner` 是 `QueryRunner` 的子集合，因此那一層驗證過的
+ * 交易 handle 一樣可以直接往下傳給這裡，不需要本層也重複收窄一次。
  */
 export type { QueryRunner }
 

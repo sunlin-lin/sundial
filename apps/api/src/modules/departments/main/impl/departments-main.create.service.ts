@@ -18,7 +18,12 @@
  * 部門異動是資料字典明列必須稽核的類別（「部門、職稱及職務異動」），但稽核表尚未定案
  * （後端規範 §9 第 2 項），刻意不自建，理由與 `shifts-main.create.service.ts` 的同類標記相同
  * ——猜錯欄位的代價不是改個 schema，是一批無法重寫也無法補齊的紀錄。
+ *
+ * **本檔不開交易**：`createDepartmentInTransaction` 只收外部交易 handle（`TransactionRunner`，
+ * `db/client.ts`），開交易的包裝在入口檔的 `createDepartment`——理由與 `employees/main` 等動作
+ * 相同（計畫 §4.1：會被 Stage 4 編排的動作一律能收外部交易 handle）。
  */
+import type { TransactionRunner } from '../../../../db/client.ts'
 import { DepartmentStatus } from '../../../../db/schema/index.ts'
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import type { DepartmentsMainContext } from '../domain/department-context.ts'
@@ -26,38 +31,37 @@ import type { CreateDepartmentInput, DepartmentDetail } from '../domain/departme
 import { departmentCodeDuplicated, departmentParentNotFound } from '../departments-main.errors.ts'
 import { findDepartmentDetail, insertDepartment } from '../departments-main.repository.ts'
 
-export const createDepartment = async (
+export const createDepartmentInTransaction = async (
+  tx: TransactionRunner,
   context: DepartmentsMainContext,
   input: CreateDepartmentInput,
 ): Promise<ServiceResult<DepartmentDetail>> => {
   const now = context.clock.now()
   const departmentId = crypto.randomUUID()
 
-  return context.db.transaction(async (tx): Promise<ServiceResult<DepartmentDetail>> => {
-    if (input.parentId !== null) {
-      const parent = await findDepartmentDetail(tx, context.companyId, input.parentId)
-      if (parent === null) return fail([departmentParentNotFound()])
-    }
+  if (input.parentId !== null) {
+    const parent = await findDepartmentDetail(tx, context.companyId, input.parentId)
+    if (parent === null) return fail([departmentParentNotFound()])
+  }
 
-    // 代碼唯一性交給資料庫的唯一鍵，不做「先 SELECT 再 INSERT」（§4.3）：兩個併發請求會同時
-    // 查到「沒有」然後都寫進去，而那個 bug 只在同時送出時才出現。
-    const outcome = await insertDepartment(tx, context.companyId, {
-      id: departmentId,
-      parentId: input.parentId,
-      code: input.code,
-      name: input.name,
-      description: input.description,
-      status: DepartmentStatus.Active,
-      now,
-    })
-    if (outcome === 'duplicate-code') return fail([departmentCodeDuplicated()])
-
-    const detail = await findDepartmentDetail(tx, context.companyId, departmentId)
-    if (detail === null) {
-      // 系統錯誤（§3.1.2）：剛剛在同一個交易內寫進去的部門讀不回來，代表資料庫或本模組的
-      // 公司範圍有問題，不是使用者做錯了什麼。
-      throw new Error(`部門 ${departmentId} 建立後於同一交易內讀不回來`)
-    }
-    return succeed(detail)
+  // 代碼唯一性交給資料庫的唯一鍵，不做「先 SELECT 再 INSERT」（§4.3）：兩個併發請求會同時
+  // 查到「沒有」然後都寫進去，而那個 bug 只在同時送出時才出現。
+  const outcome = await insertDepartment(tx, context.companyId, {
+    id: departmentId,
+    parentId: input.parentId,
+    code: input.code,
+    name: input.name,
+    description: input.description,
+    status: DepartmentStatus.Active,
+    now,
   })
+  if (outcome === 'duplicate-code') return fail([departmentCodeDuplicated()])
+
+  const detail = await findDepartmentDetail(tx, context.companyId, departmentId)
+  if (detail === null) {
+    // 系統錯誤（§3.1.2）：剛剛在同一個交易內寫進去的部門讀不回來，代表資料庫或本模組的
+    // 公司範圍有問題，不是使用者做錯了什麼。
+    throw new Error(`部門 ${departmentId} 建立後於同一交易內讀不回來`)
+  }
+  return succeed(detail)
 }

@@ -20,7 +20,11 @@
  * 理由與 `impl/departments-main.create.service.ts` 的同一則標記相同。修改部門尤其值得留意——
  * 「部門異動」是資料字典明列必須稽核的類別，而搬移子樹（改 `parentId`）正是最需要留下「異動
  * 前後差異」的一種操作。
+ *
+ * **本檔不開交易**：`updateDepartmentInTransaction` 只收外部交易 handle（`TransactionRunner`，
+ * `db/client.ts`），開交易的包裝在入口檔的 `updateDepartment`（理由同 `create` 切片）。
  */
+import type { TransactionRunner } from '../../../../db/client.ts'
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import type { DepartmentsMainContext } from '../domain/department-context.ts'
 import type { DepartmentDetail, UpdateDepartmentInput } from '../domain/department-model.ts'
@@ -33,45 +37,44 @@ import {
 } from '../departments-main.errors.ts'
 import { findDepartmentDetail, listDepartmentNodes, updateDepartmentProfile } from '../departments-main.repository.ts'
 
-export const updateDepartment = async (
+export const updateDepartmentInTransaction = async (
+  tx: TransactionRunner,
   context: DepartmentsMainContext,
   input: UpdateDepartmentInput,
 ): Promise<ServiceResult<DepartmentDetail>> => {
   const now = context.clock.now()
 
-  return context.db.transaction(async (tx): Promise<ServiceResult<DepartmentDetail>> => {
-    const current = await findDepartmentDetail(tx, context.companyId, input.id)
-    // 動作類端點的「目標不存在」是業務錯誤（§3.1.3）。**別家公司的部門也走這一行**，
-    // 回一模一樣的錯誤（§3.2）。
-    if (current === null) return fail([departmentNotFound()])
+  const current = await findDepartmentDetail(tx, context.companyId, input.id)
+  // 動作類端點的「目標不存在」是業務錯誤（§3.1.3）。**別家公司的部門也走這一行**，
+  // 回一模一樣的錯誤（§3.2）。
+  if (current === null) return fail([departmentNotFound()])
 
-    // 上層改成根（null）一律安全：不會成環（根沒有上層可以形成鏈），也沒有「上層是否存在」
-    // 需要驗證。只有上層是某個既有部門時，才需要規則 1／規則 2 的兩項檢查。
-    if (input.parentId !== null) {
-      const nodes = await listDepartmentNodes(tx, context.companyId)
-      // 規則 1：不得成環（含「設成自己」的 degenerate case，見 wouldCreateCycle 檔頭）。
-      if (wouldCreateCycle(nodes, input.id, input.parentId)) return fail([departmentParentCycle()])
+  // 上層改成根（null）一律安全：不會成環（根沒有上層可以形成鏈），也沒有「上層是否存在」
+  // 需要驗證。只有上層是某個既有部門時，才需要規則 1／規則 2 的兩項檢查。
+  if (input.parentId !== null) {
+    const nodes = await listDepartmentNodes(tx, context.companyId)
+    // 規則 1：不得成環（含「設成自己」的 degenerate case，見 wouldCreateCycle 檔頭）。
+    if (wouldCreateCycle(nodes, input.id, input.parentId)) return fail([departmentParentCycle()])
 
-      // 規則 2：不得跨公司。查不到就代表上層不存在，或存在但屬於別家公司——兩者回同一則錯誤。
-      const parent = await findDepartmentDetail(tx, context.companyId, input.parentId)
-      if (parent === null) return fail([departmentParentNotFound()])
-    }
+    // 規則 2：不得跨公司。查不到就代表上層不存在，或存在但屬於別家公司——兩者回同一則錯誤。
+    const parent = await findDepartmentDetail(tx, context.companyId, input.parentId)
+    if (parent === null) return fail([departmentParentNotFound()])
+  }
 
-    const outcome = await updateDepartmentProfile(tx, context.companyId, input.id, {
-      parentId: input.parentId,
-      code: input.code,
-      name: input.name,
-      description: input.description,
-      status: input.status,
-      now,
-    })
-    if (outcome === 'duplicate-code') return fail([departmentCodeDuplicated()])
-
-    const updated = await findDepartmentDetail(tx, context.companyId, input.id)
-    if (updated === null) {
-      // 系統錯誤（§3.1.2）：同一交易內剛讀到、剛寫過的部門又讀不回來了。
-      throw new Error(`部門 ${input.id} 更新後於同一交易內讀不回來`)
-    }
-    return succeed(updated)
+  const outcome = await updateDepartmentProfile(tx, context.companyId, input.id, {
+    parentId: input.parentId,
+    code: input.code,
+    name: input.name,
+    description: input.description,
+    status: input.status,
+    now,
   })
+  if (outcome === 'duplicate-code') return fail([departmentCodeDuplicated()])
+
+  const updated = await findDepartmentDetail(tx, context.companyId, input.id)
+  if (updated === null) {
+    // 系統錯誤（§3.1.2）：同一交易內剛讀到、剛寫過的部門又讀不回來了。
+    throw new Error(`部門 ${input.id} 更新後於同一交易內讀不回來`)
+  }
+  return succeed(updated)
 }

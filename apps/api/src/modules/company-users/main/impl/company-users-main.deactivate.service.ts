@@ -1,19 +1,24 @@
 /**
  * 業務動作：停用員工的公司帳號（實作計畫 `plans/05-employee-onboarding.md` §7）。
  *
- * **本檔是 Stage 3 唯一嚴格遵守「收交易 handle 作為第一個參數、不得自己開交易」的寫入動作**
- * （§4.1 定案）：它不呼叫 `recordAudit`，因此沒有 `check:audit-transaction` 那個「`.transaction()`
- * 與 `recordAudit(` 必須同檔同回呼」的限制（見 `modules/employments/main/impl/
- * employments-main.create.service.ts` 檔頭對這個限制的完整說明）。呼叫端（離職流程）自己已經
- * 開著一個交易，把那個 `tx` 原樣傳進來即可；本動作只管停用這一件事，稽核由呼叫端負責
- * （它同時也在記任職異動的稽核，兩筆稽核與這裡的停用、任職狀態變更全部落在同一個交易裡）。
+ * **本檔是最早就遵守「收交易 handle 作為第一個參數、不得自己開交易」的寫入動作**（§4.1 定案）：
+ * 它不呼叫 `recordAudit`，稽核由呼叫端負責（它同時也在記任職異動的稽核，兩筆稽核與這裡的停用、
+ * 任職狀態變更全部落在同一個交易裡）。呼叫端（離職流程）自己已經開著一個交易，把那個 `tx`
+ * 原樣傳進來即可。
+ *
+ * 型別是 `TransactionRunner`（`db/client.ts`），不是單純的 `QueryRunner`——後者連線池與交易物件
+ * 都滿足，會讓呼叫端不小心傳一個裸連線池進來也編譯得過；`TransactionRunner` 讓那件事變成
+ * 編譯錯誤，理由與 `recordAudit` 改用同一個型別完全一樣（見 `db/client.ts` 的 `TransactionRunner`
+ * 檔頭）。**本檔沒有另外提供「自己開交易」的版本**：它從來就只被離職流程這一個已經在交易內的
+ * 呼叫端使用，沒有需要區分兩種呼叫形狀的場景（不像 `employees/main` 等動作，既有單一端點、
+ * 也會被 Stage 4 編排）。
  *
  * **只做停用，不做別的**：不驗證「這是不是本次離職動作在呼叫」、不檢查任職狀態——那些是呼叫端
  * 的責任。這支動作收到「幫某位員工停用帳號」的指令就照做，找不到有效帳號時**不是錯誤**，
  * 是合法的空操作（見 repository 的說明：Stage 3 還沒有「新增員工同時建立帳號」的編排，
  * 一位員工完全可能沒有帳號）。
  */
-import type { QueryRunner } from '../../../../db/client.ts'
+import type { TransactionRunner } from '../../../../db/client.ts'
 import { findActiveCompanyUserByEmployee, markCompanyUserDeactivated } from '../company-users-main.repository.ts'
 
 export type CompanyUserDeactivation = {
@@ -28,7 +33,7 @@ export type CompanyUserDeactivation = {
  * @returns 找不到有效帳號時回 `null`（合法的空操作，見檔頭）；停用成功回被停用的 `companyUserId`。
  */
 export const deactivateCompanyUser = async (
-  tx: QueryRunner,
+  tx: TransactionRunner,
   companyId: string,
   employeeId: string,
   now: string,

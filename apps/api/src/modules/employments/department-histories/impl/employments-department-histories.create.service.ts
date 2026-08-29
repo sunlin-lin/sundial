@@ -15,12 +15,14 @@
  *
  * 同樣不完美（處置與殘留風險見 `employments-main.create.service.ts` 檔頭，逐字適用）。
  *
- * ## 交易邊界為什麼開在這一層
+ * ## 交易 handle 由呼叫端傳入（計畫 §4.1）
  *
- * 理由與 `employments-main.create.service.ts` 檔頭「§4.1」那一段完全同構：`recordAudit`
- * 呼叫必須與包住它的 `.transaction(...)` 寫在同一個檔案、同一個回呼裡，才能通過
- * `bun run check:audit-transaction`，因此本檔不收外部 `tx`。
+ * **本檔不開交易**：`createDepartmentHistoryInTransaction` 只收外部交易 handle
+ * （`TransactionRunner`，`db/client.ts`），開交易的包裝在入口檔的 `createDepartmentHistory`。
+ * `recordAudit` 收 `TransactionRunner`，呼叫端傳裸連線池是編譯錯誤，因此不再需要
+ * `check-audit-transaction.ts` 的詞法巢狀判斷來確認「有沒有交易」（該腳本的職責變化見其檔頭）。
  */
+import type { TransactionRunner } from '../../../../db/client.ts'
 import { buildAuditChanges, recordAudit } from '../../../audit/index.ts'
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import { overlapsAnyPeriod } from '../../../../shared/effective-period.ts'
@@ -43,63 +45,62 @@ import {
   listDepartmentHistoryPeriods,
 } from '../employments-department-histories.repository.ts'
 
-export const createDepartmentHistory = async (
+export const createDepartmentHistoryInTransaction = async (
+  tx: TransactionRunner,
   context: DepartmentHistoriesContext,
   input: CreateDepartmentHistoryInput,
 ): Promise<ServiceResult<DepartmentHistoryDetail>> => {
   const now = context.clock.now()
   const historyId = crypto.randomUUID()
 
-  return context.db.transaction(async (tx): Promise<ServiceResult<DepartmentHistoryDetail>> => {
-    // 鎖的粒度＝任職（見檔頭）。
-    const employment = await findEmploymentForUpdate(tx, context.companyId, input.employmentId)
-    if (employment === null) return fail([departmentHistoryEmploymentNotFound()])
+  // 鎖的粒度＝任職（見檔頭）。
+  const employment = await findEmploymentForUpdate(tx, context.companyId, input.employmentId)
+  if (employment === null) return fail([departmentHistoryEmploymentNotFound()])
 
-    const department = await findDepartmentForReference(tx, context.companyId, input.departmentId)
-    if (department === null) return fail([departmentHistoryDepartmentNotFound()])
+  const department = await findDepartmentForReference(tx, context.companyId, input.departmentId)
+  if (department === null) return fail([departmentHistoryDepartmentNotFound()])
 
-    const existingPeriods = await listDepartmentHistoryPeriods(tx, context.companyId, input.employmentId)
-    const overlaps = overlapsAnyPeriod(existingPeriods, {
-      effectiveFrom: input.effectiveFrom,
-      effectiveTo: input.effectiveTo,
-    })
-    if (overlaps) return fail([departmentHistoryPeriodOverlap()])
+  const existingPeriods = await listDepartmentHistoryPeriods(tx, context.companyId, input.employmentId)
+  const overlaps = overlapsAnyPeriod(existingPeriods, {
+    effectiveFrom: input.effectiveFrom,
+    effectiveTo: input.effectiveTo,
+  })
+  if (overlaps) return fail([departmentHistoryPeriodOverlap()])
 
-    const outcome = await insertDepartmentHistory(tx, context.companyId, {
-      id: historyId,
-      employmentId: input.employmentId,
-      departmentId: input.departmentId,
-      effectiveFrom: input.effectiveFrom,
-      effectiveTo: input.effectiveTo,
-      now,
-    })
-    if (outcome === 'duplicate-effective-from') return fail([departmentHistoryDuplicateEffectiveFrom()])
+  const outcome = await insertDepartmentHistory(tx, context.companyId, {
+    id: historyId,
+    employmentId: input.employmentId,
+    departmentId: input.departmentId,
+    effectiveFrom: input.effectiveFrom,
+    effectiveTo: input.effectiveTo,
+    now,
+  })
+  if (outcome === 'duplicate-effective-from') return fail([departmentHistoryDuplicateEffectiveFrom()])
 
-    const after: DepartmentHistoryAuditSnapshot = {
-      departmentId: input.departmentId,
-      effectiveFrom: input.effectiveFrom,
-      effectiveTo: input.effectiveTo,
-    }
+  const after: DepartmentHistoryAuditSnapshot = {
+    departmentId: input.departmentId,
+    effectiveFrom: input.effectiveFrom,
+    effectiveTo: input.effectiveTo,
+  }
 
-    await recordAudit(tx, {
-      companyId: context.companyId,
-      actor: { type: 'company-user', companyUserId: context.operatorCompanyUserId },
-      action: 'employments.department-histories.create',
-      subjectTable: 'employee_department_histories',
-      subjectId: historyId,
-      changes: buildAuditChanges('employee_department_histories', null, after),
-      effectiveDate: input.effectiveFrom,
-      now,
-    })
+  await recordAudit(tx, {
+    companyId: context.companyId,
+    actor: { type: 'company-user', companyUserId: context.operatorCompanyUserId },
+    action: 'employments.department-histories.create',
+    subjectTable: 'employee_department_histories',
+    subjectId: historyId,
+    changes: buildAuditChanges('employee_department_histories', null, after),
+    effectiveDate: input.effectiveFrom,
+    now,
+  })
 
-    return succeed({
-      id: historyId,
-      employmentId: input.employmentId,
-      departmentId: input.departmentId,
-      effectiveFrom: input.effectiveFrom,
-      effectiveTo: input.effectiveTo,
-      createdAt: now,
-      updatedAt: now,
-    })
+  return succeed({
+    id: historyId,
+    employmentId: input.employmentId,
+    departmentId: input.departmentId,
+    effectiveFrom: input.effectiveFrom,
+    effectiveTo: input.effectiveTo,
+    createdAt: now,
+    updatedAt: now,
   })
 }

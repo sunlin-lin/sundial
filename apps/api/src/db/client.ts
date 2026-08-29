@@ -42,6 +42,50 @@ export type Database = MySql2Database
  */
 export type QueryRunner = Pick<Database, 'select' | 'selectDistinct' | 'insert' | 'update' | 'delete'>
 
+/**
+ * `Database['transaction']` 回呼收到的那個交易物件的型別。用 `Parameters` 反推而不是直接引用
+ * drizzle 內部型別名稱：drizzle 的交易型別掛著一長串泛型參數（查詢結果、prepared query HKT、
+ * schema…），版本升級時那些泛型參數的名字或數量都可能改變，反推法只依賴 `transaction` 這個
+ * 公開方法的簽章，drizzle 版本內部怎麼變都不影響這裡。
+ */
+type DbTransaction = Parameters<Parameters<Database['transaction']>[0]>[0]
+
+/**
+ * 資料存取的執行器：**跨模組編排的參與者用**——與 {@link QueryRunner} 分工不同，這裡要證明的
+ * 不是「呼叫得到某個方法」，而是「呼叫端手上這個東西真的是一個交易」。
+ *
+ * ## 為什麼需要一個比 `QueryRunner` 更窄的型別
+ *
+ * `recordAudit` 原本收 `QueryRunner`，而 `QueryRunner` 刻意讓連線池與交易物件滿足同一個型別
+ * （見上方 {@link QueryRunner} 的檔頭，那個設計對 repository 仍然成立、不受這裡影響）。代價是
+ * `recordAudit(context.db, ...)`（裸連線池，稽核與業務寫入各自另開連線）與 `recordAudit(tx, ...)`
+ * （交易內）在編譯器眼裡完全等價——「稽核必須與業務寫入同一交易」這條規則因此只能靠
+ * `apps/api/scripts/check-audit-transaction.ts` 讀 AST 的詞法巢狀去擋，而詞法巢狀擋不住
+ * 合法的重構：一旦某個 service 動作改成收外部交易 handle 作為第一個參數（`docs/plans/
+ * 05-employee-onboarding.md` §4.1），它自己的檔案裡就看不到 `.transaction(`，那支腳本會誤判
+ * 為「稽核沒有包在交易裡」而擋下一次完全正確的呼叫。
+ *
+ * `TransactionRunner` 把這件事還給編譯器：`Pick<DbTransaction, 'rollback'>` 只有交易物件才有
+ * （連線池呼叫 `rollback()` 沒有意義，drizzle 也確實沒有把它放在連線池的型別上），因此
+ * `recordAudit` 的簽章改收 `TransactionRunner` 之後，`recordAudit(context.db, ...)`
+ * 是**編譯錯誤**，不必再靠腳本讀語法樹去發現。腳本仍然留著，但職責改變了——見
+ * `check-audit-transaction.ts` 檔頭「型別接手之後，這支腳本還剩下什麼」那一段。
+ *
+ * ## 用在哪裡
+ *
+ * 任何「會被編排進同一筆業務、因此必須收外部交易 handle 作為第一個參數」的 service 動作
+ * （計畫 §4.1 定案的那一批），其收 handle 的那一支簽章都應該用 `TransactionRunner`，不是
+ * `QueryRunner`——用 `QueryRunner` 的話，呼叫端傳一個裸連線池進來一樣編譯得過，型別就白設了。
+ * `QueryRunner` 仍然是 repository 層該用的型別（交易內外同一套寫法，見上方檔頭），
+ * 兩者不是取代關係，是**分層**：repository 收 `QueryRunner`，「證明呼叫端真的開了交易」
+ * 這件事只在跨模組編排的參與者的入口簽章上才需要出現。
+ *
+ * `db/__tests__/transaction-runner.test.ts` 用 `@ts-expect-error` 證明連線池塞不進來，
+ * 且那份測試會在 `TransactionRunner` 哪天被放寬到連線池也塞得進去時，
+ * 因為「預期的錯誤沒有發生」而讓 `bun run typecheck` 變紅——比一句註解可靠。
+ */
+export type TransactionRunner = QueryRunner & Pick<DbTransaction, 'rollback'>
+
 /** 建立連線池。時區設定見 {@link assertDatabaseTimeZone}——這裡設，啟動時再驗一次。 */
 export const createDatabase = (config: DatabaseConfig): Database => {
   const pool = createPool({

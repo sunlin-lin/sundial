@@ -21,26 +21,20 @@
  * 錯誤**——是刻意的取捨，不是遺漏：逾時代表的是基礎設施層級的爭用（例如另一個交易卡住太久），
  * 不是使用者填錯了什麼，把它包裝成一句「請重試」的業務訊息並不會讓使用者多知道什麼。
  *
- * ## §4.1：交易邊界為什麼開在這一層，而不是收外部 tx
+ * ## 交易 handle 由呼叫端傳入（計畫 §4.1）
  *
- * 計畫 §4.1 定案「所有會被編排進同一筆業務的 service 動作，一律收交易 handle 作為第一個參數」，
- * 目的是讓 Stage 4 的 `employees/onboarding` 編排點能把這支動作與其他模組的寫入包進同一個交易。
- * **本檔沒有照字面做到這一點，這是刻意的偏離，必須誠實寫下來**：
+ * **本檔不開交易**：`createEmploymentInTransaction` 只收外部交易 handle
+ * （`db/client.ts` 的 `TransactionRunner`），開交易的包裝在入口檔
+ * `employments-main.service.ts` 的 `createEmployment`——那支給單一端點用，自己開交易；
+ * 這支給 Stage 4 的 `employees/onboarding` 編排點用，跟著呼叫端已經開好的交易走。
+ * `impl/` 不該知道自己是不是交易的最外層（§4.4：交易邊界屬於 service 入口這一層）。
  *
- * `bun run check:audit-transaction`（稽核計畫的三個硬規則之一）以 AST 檢查
- * `recordAudit(tx, ...)` 的呼叫節點，**必須在同一個檔案內**找到一個文字上直接包住它的
- * `.transaction(async (tx) => ...)`——它沿 AST 的 `parent` 鏈往上走，只認詞法上的巢狀，
- * 不認「呼叫了某個接收 tx 參數的函式」。這代表：只要這支動作要呼叫 `recordAudit`
- * （§6 要求任職異動必須稽核），`.transaction(...)` 就必須與 `recordAudit(...)` 寫在同一個檔案、
- * 同一個回呼裡——把交易開在呼叫端、這裡只收一個外部 `tx` 參數的寫法，會讓這裡的
- * `recordAudit(tx, ...)` 在檢查腳本眼中「找不到包住它的交易」，整條規則當場擋下 CI。
- *
- * 因此本檔維持與 `employees`／`departments`／`company-users/roles` 相同的既有慣例：
- * `context.db.transaction(async (tx) => { ...寫入... await recordAudit(tx, ...) ... })`，
- * 交易邊界開在這一層，不收外部 tx。**Stage 4 若要把這支動作編排進更大的交易，屆時必須先解決
- * 這個檢查腳本與「外部注入交易」兩者的衝突**（例如放寬檢查、或把 `recordAudit` 呼叫搬到
- * 呼叫端自己組），這不是本輪（Stage 3，明確排除交易編排）該處理的事，回報中已經提出。
+ * 這個形狀原本被 `check-audit-transaction.ts` 擋住——那支腳本曾經要求 `.transaction(...)`
+ * 與 `recordAudit(...)` 寫在同一個檔案、同一個回呼裡（詞法巢狀判斷）。現在改成靠型別：
+ * `recordAudit` 收 `TransactionRunner`，呼叫端傳裸連線池是編譯錯誤，不需要再靠詞法巢狀去確認
+ * 「有沒有交易」；那支腳本的職責也已經改變，見其檔頭。
  */
+import type { TransactionRunner } from '../../../../db/client.ts'
 import { buildAuditChanges, recordAudit } from '../../../audit/index.ts'
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import { overlapsAnyPeriod } from '../../../../shared/effective-period.ts'
@@ -59,57 +53,56 @@ import {
 } from '../employments-main.repository.ts'
 import { EmploymentStatus } from '../../../../db/schema/index.ts'
 
-export const createEmployment = async (
+export const createEmploymentInTransaction = async (
+  tx: TransactionRunner,
   context: EmploymentsMainContext,
   input: CreateEmploymentInput,
 ): Promise<ServiceResult<EmploymentDetail>> => {
   const now = context.clock.now()
   const employmentId = crypto.randomUUID()
 
-  return context.db.transaction(async (tx): Promise<ServiceResult<EmploymentDetail>> => {
-    // 鎖的粒度＝員工（見檔頭）。
-    const employee = await findEmployeeForUpdate(tx, context.companyId, input.employeeId)
-    if (employee === null) return fail([employmentEmployeeNotFound()])
+  // 鎖的粒度＝員工（見檔頭）。
+  const employee = await findEmployeeForUpdate(tx, context.companyId, input.employeeId)
+  if (employee === null) return fail([employmentEmployeeNotFound()])
 
-    const existingPeriods = await listEmployeeEmploymentPeriods(tx, context.companyId, input.employeeId)
-    const overlaps = overlapsAnyPeriod(existingPeriods, { effectiveFrom: input.hireDate, effectiveTo: null })
-    if (overlaps) return fail([employmentPeriodOverlap()])
+  const existingPeriods = await listEmployeeEmploymentPeriods(tx, context.companyId, input.employeeId)
+  const overlaps = overlapsAnyPeriod(existingPeriods, { effectiveFrom: input.hireDate, effectiveTo: null })
+  if (overlaps) return fail([employmentPeriodOverlap()])
 
-    const outcome = await insertEmployment(tx, context.companyId, {
-      id: employmentId,
-      employeeId: input.employeeId,
-      employmentTypeCode: input.employmentTypeCode,
-      employmentNatureCode: input.employmentNatureCode,
-      hireDate: input.hireDate,
-      now,
-    })
-    if (outcome === 'duplicate-hire-date') return fail([employmentDuplicateHireDate()])
-
-    const after: EmploymentAuditSnapshot = {
-      employmentTypeCode: input.employmentTypeCode,
-      employmentNatureCode: input.employmentNatureCode,
-      hireDate: input.hireDate,
-      leaveDate: null,
-      lastWorkingDate: null,
-      leaveReasonCode: null,
-      status: EmploymentStatus.Active,
-    }
-
-    await recordAudit(tx, {
-      companyId: context.companyId,
-      actor: { type: 'company-user', companyUserId: context.operatorCompanyUserId },
-      action: 'employments.main.create',
-      subjectTable: 'employee_employments',
-      subjectId: employmentId,
-      changes: buildAuditChanges('employee_employments', null, after),
-      effectiveDate: input.hireDate,
-      now,
-    })
-
-    const detail = await findEmploymentDetail(tx, context.companyId, employmentId)
-    if (detail === null) {
-      throw new Error(`任職 ${employmentId} 建立後於同一交易內讀不回來`)
-    }
-    return succeed(detail)
+  const outcome = await insertEmployment(tx, context.companyId, {
+    id: employmentId,
+    employeeId: input.employeeId,
+    employmentTypeCode: input.employmentTypeCode,
+    employmentNatureCode: input.employmentNatureCode,
+    hireDate: input.hireDate,
+    now,
   })
+  if (outcome === 'duplicate-hire-date') return fail([employmentDuplicateHireDate()])
+
+  const after: EmploymentAuditSnapshot = {
+    employmentTypeCode: input.employmentTypeCode,
+    employmentNatureCode: input.employmentNatureCode,
+    hireDate: input.hireDate,
+    leaveDate: null,
+    lastWorkingDate: null,
+    leaveReasonCode: null,
+    status: EmploymentStatus.Active,
+  }
+
+  await recordAudit(tx, {
+    companyId: context.companyId,
+    actor: { type: 'company-user', companyUserId: context.operatorCompanyUserId },
+    action: 'employments.main.create',
+    subjectTable: 'employee_employments',
+    subjectId: employmentId,
+    changes: buildAuditChanges('employee_employments', null, after),
+    effectiveDate: input.hireDate,
+    now,
+  })
+
+  const detail = await findEmploymentDetail(tx, context.companyId, employmentId)
+  if (detail === null) {
+    throw new Error(`任職 ${employmentId} 建立後於同一交易內讀不回來`)
+  }
+  return succeed(detail)
 }

@@ -8,7 +8,11 @@
  *
  * 稽核走與 `create`／`update` 相同的形狀（稽核計畫 §4.2）：刪除事件的 `after` 為 `null`，
  * `before` 是刪除前的明文快照——用的是與 `update` 同一支 `findEmployeeAuditSnapshot`。
+ *
+ * **本檔不開交易**：只收外部交易 handle，開交易的包裝在入口檔（見 `impl/
+ * employees-main.create.service.ts` 檔頭同一段說明，理由逐字適用）。
  */
+import type { TransactionRunner } from '../../../../db/client.ts'
 import { buildAuditChanges, recordAudit } from '../../../audit/index.ts'
 import { fail, succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import type { EmployeesMainContext } from '../domain/employee-context.ts'
@@ -16,7 +20,8 @@ import type { DeletedEmployee, EmployeeTargetInput } from '../domain/employee-mo
 import { employeeNotFound, employeeStateChanged } from '../employees-main.errors.ts'
 import { findEmployeeAuditSnapshot, markEmployeeDeleted } from '../employees-main.repository.ts'
 
-export const deleteEmployee = async (
+export const deleteEmployeeInTransaction = async (
+  tx: TransactionRunner,
   context: EmployeesMainContext,
   input: EmployeeTargetInput,
 ): Promise<ServiceResult<DeletedEmployee>> => {
@@ -26,28 +31,26 @@ export const deleteEmployee = async (
   // 用刪除當下的 epoch 毫秒，同一位員工只會被刪除一次，因此不可能與自己碰撞。
   const deletedSeq = context.clock.epochMs()
 
-  return context.db.transaction(async (tx): Promise<ServiceResult<DeletedEmployee>> => {
-    // 存在性檢查與稽核的 before 快照合併成同一次查詢，理由同 `update` 切片。
-    const before = await findEmployeeAuditSnapshot(tx, context.cipher, context.companyId, input.id)
-    // 目標不存在與「屬於別家公司」回完全相同的一筆錯誤（§3.2、§3.1.3）。
-    if (before === null) return fail([employeeNotFound()])
+  // 存在性檢查與稽核的 before 快照合併成同一次查詢，理由同 `update` 切片。
+  const before = await findEmployeeAuditSnapshot(tx, context.cipher, context.companyId, input.id)
+  // 目標不存在與「屬於別家公司」回完全相同的一筆錯誤（§3.2、§3.1.3）。
+  if (before === null) return fail([employeeNotFound()])
 
-    // 條件式 UPDATE ＋ 檢查影響列數（§4.4）：兩個使用者同時按刪除時，第二筆影響 0 列。
-    // 少了這道檢查，第二個人會拿到一個成功的回應，而他其實什麼也沒做。
-    const affectedRows = await markEmployeeDeleted(tx, context.companyId, input.id, { now, deletedSeq })
-    if (affectedRows === 0) return fail([employeeStateChanged()])
+  // 條件式 UPDATE ＋ 檢查影響列數（§4.4）：兩個使用者同時按刪除時，第二筆影響 0 列。
+  // 少了這道檢查，第二個人會拿到一個成功的回應，而他其實什麼也沒做。
+  const affectedRows = await markEmployeeDeleted(tx, context.companyId, input.id, { now, deletedSeq })
+  if (affectedRows === 0) return fail([employeeStateChanged()])
 
-    await recordAudit(tx, {
-      companyId: context.companyId,
-      actor: { type: 'company-user', companyUserId: context.operatorCompanyUserId },
-      action: 'employees.main.delete',
-      subjectTable: 'employees',
-      subjectId: input.id,
-      changes: buildAuditChanges('employees', before, null),
-      effectiveDate: null,
-      now,
-    })
-
-    return succeed({ id: input.id })
+  await recordAudit(tx, {
+    companyId: context.companyId,
+    actor: { type: 'company-user', companyUserId: context.operatorCompanyUserId },
+    action: 'employees.main.delete',
+    subjectTable: 'employees',
+    subjectId: input.id,
+    changes: buildAuditChanges('employees', before, null),
+    effectiveDate: null,
+    now,
   })
+
+  return succeed({ id: input.id })
 }
