@@ -11,6 +11,7 @@
 - [20 員工清單](20-employee-list.md)
 - [08 組織架構](08-ui-organization-structure.md)
 - [09 全體出勤](09-ui-all-attendance.md)
+- [23 每日全員打卡明細](23-ui-daily-attendance-records.md)
 - [21 特休／補休贈與](21-ui-company-leave-grants.md)
 - [22 班別設定](22-ui-shift-settings.md)
 

@@ -57,6 +57,7 @@
 - [20-employee-list.md](../ui/20-employee-list.md) — 人事作業／員工清單、新增、修改及離職
 - [21-ui-company-leave-grants.md](../ui/21-ui-company-leave-grants.md) — 人事作業／特休與補休贈與、發放列表及撤銷
 - [22-ui-shift-settings.md](../ui/22-ui-shift-settings.md) — 人事作業／班別設定與完整排班模式範圍
+- [23-ui-daily-attendance-records.md](../ui/23-ui-daily-attendance-records.md) — 人事作業／每日全員打卡明細，逐筆原始打卡查詢與他人撤銷
 
 ## 全域規則
 
