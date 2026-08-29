@@ -84,19 +84,25 @@ describe('明文 → 加密欄位 → 遮罩輸出', () => {
   })
 
   test('讀回來的每一個敏感欄位都已遮罩，型別上根本沒有明文欄位', () => {
-    const detail = toMaskedDetail(cipher, {
-      id: 'employee-id',
-      employeeCode: profile.employeeCode,
-      name: profile.name,
-      gender: profile.gender,
-      identityNumberEncrypted: columns.identityNumberEncrypted,
-      birthdayEncrypted: columns.birthdayEncrypted,
-      phoneEncrypted: columns.phoneEncrypted,
-      emailEncrypted: columns.emailEncrypted,
-      addressEncrypted: columns.addressEncrypted,
-      createdAt: '2026-08-27 12:00:00',
-      updatedAt: '2026-08-27 12:00:00',
-    })
+    const detail = toMaskedDetail(
+      cipher,
+      {
+        id: 'employee-id',
+        employeeCode: profile.employeeCode,
+        name: profile.name,
+        gender: profile.gender,
+        identityNumberEncrypted: columns.identityNumberEncrypted,
+        birthdayEncrypted: columns.birthdayEncrypted,
+        phoneEncrypted: columns.phoneEncrypted,
+        emailEncrypted: columns.emailEncrypted,
+        addressEncrypted: columns.addressEncrypted,
+        createdAt: '2026-08-27 12:00:00',
+        updatedAt: '2026-08-27 12:00:00',
+      },
+      // companyUserId 由呼叫端（repository）另外查好才傳入，本函式是零 IO 純函式（見檔頭）；
+      // 這裡任取一個值即可，不是本測試要驗的東西。
+      null,
+    )
 
     expect(detail.identityNumberMasked).toBe('*******789')
     expect(detail.birthdayMasked).toBe('1990-**-**')

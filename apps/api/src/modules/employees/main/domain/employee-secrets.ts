@@ -24,7 +24,13 @@ import {
   maskPhone,
 } from '../../../../db/field-masking.ts'
 import { normalizeIdentityNumber } from './employee-identity.ts'
-import type { EmployeeDetail, EmployeeProfileInput, EmployeeSummary, GenderValue } from './employee-model.ts'
+import type {
+  EmployeeDetail,
+  EmployeeProfileInput,
+  EmployeeProfileUpdateInput,
+  EmployeeSummary,
+  GenderValue,
+} from './employee-model.ts'
 
 /** 寫入 `employees` 的加密欄位組。欄位名與 `db/schema/employees.ts` 逐字對應。 */
 export type EncryptedEmployeeColumns = {
@@ -78,6 +84,40 @@ export const toEncryptedColumns = (cipher: FieldCipher, profile: EmployeeProfile
   }
 }
 
+/**
+ * 修改員工用：**只加密「有送」的加密欄位**（省略＝不變更，見 `EmployeeProfileUpdateInput` 檔頭）。
+ *
+ * 省略的欄位完全不出現在回傳物件的 key 裡（不是「key 存在、值是 undefined」）：呼叫端
+ * （`impl/employees-main.update-profile.repository.ts`）用 `...encrypted` 展開進 `UPDATE` 的
+ * `SET` 子句，沒有這個 key 就代表那一欄完全不進 `SET`，資料庫裡的原值因此不會被覆寫、也不會
+ * 產生新的隨機 IV——「加密欄位每次寫入都用新的 IV」這件事只發生在真的被 `SET` 到的欄位上。
+ *
+ * 身分證與其餘三欄各自獨立判斷是否提供：它們對應資料庫裡彼此獨立的欄位，互不影響。
+ * 身分證提供時仍然一次寫入密文與 blind index 兩欄（兩者必須同步，理由見 `toEncryptedColumns`）。
+ *
+ * `email` 不判斷是否提供——{@link EmployeeProfileUpdateInput.email} 本來就是必填的
+ * `string | null`，`null` 原樣寫成 NULL，語意與 `toEncryptedColumns` 對 email 的處理完全相同。
+ */
+export const toEncryptedColumnsForUpdate = (
+  cipher: FieldCipher,
+  profile: EmployeeProfileUpdateInput,
+): Partial<EncryptedEmployeeColumns> => {
+  const columns: { -readonly [K in keyof EncryptedEmployeeColumns]?: EncryptedEmployeeColumns[K] } = {
+    emailEncrypted: profile.email === null ? null : cipher.encrypt(profile.email),
+  }
+
+  if (profile.identityNumber !== undefined) {
+    const identityNumber = normalizeIdentityNumber(profile.identityNumber)
+    columns.identityNumberEncrypted = cipher.encrypt(identityNumber)
+    columns.identityNumberHash = cipher.blindIndex(identityNumber)
+  }
+  if (profile.birthday !== undefined) columns.birthdayEncrypted = cipher.encrypt(profile.birthday)
+  if (profile.phone !== undefined) columns.phoneEncrypted = cipher.encrypt(profile.phone)
+  if (profile.address !== undefined) columns.addressEncrypted = cipher.encrypt(profile.address)
+
+  return columns
+}
+
 /** 清單列 → 已遮罩的列表單筆。 */
 export const toMaskedSummary = (cipher: FieldCipher, row: EmployeeSummaryRow): EmployeeSummary => ({
   id: row.id,
@@ -87,8 +127,19 @@ export const toMaskedSummary = (cipher: FieldCipher, row: EmployeeSummaryRow): E
   identityNumberMasked: maskIdentityNumber(cipher.decrypt(row.identityNumberEncrypted)),
 })
 
-/** 單筆列 → 已遮罩的完整內容。 */
-export const toMaskedDetail = (cipher: FieldCipher, row: EmployeeDetailRow): EmployeeDetail => ({
+/**
+ * 單筆列 → 已遮罩的完整內容。
+ *
+ * **`companyUserId` 由呼叫端傳入，不是本函式自己查的**：本檔是零 IO 的純函式集合（見檔頭），
+ * 「這位員工目前有效的登入帳號 id」需要另一次資料庫查詢（`company_users` 一對多，見
+ * `impl/employees-main.find.repository.ts` 檔頭），查詢屬於呼叫端的責任；這裡只負責把查好的值
+ * 併進最終的 {@link EmployeeDetail} 形狀，讓「組出這個型別」這件事只有一個地方在做。
+ */
+export const toMaskedDetail = (
+  cipher: FieldCipher,
+  row: EmployeeDetailRow,
+  companyUserId: string | null,
+): EmployeeDetail => ({
   ...toMaskedSummary(cipher, row),
   birthdayMasked: maskBirthday(cipher.decrypt(row.birthdayEncrypted)),
   phoneMasked: maskPhone(cipher.decrypt(row.phoneEncrypted)),
@@ -96,6 +147,7 @@ export const toMaskedDetail = (cipher: FieldCipher, row: EmployeeDetailRow): Emp
   addressMasked: maskAddress(cipher.decrypt(row.addressEncrypted)),
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
+  companyUserId,
 })
 
 /** 稽核用明文快照實際 select 回來的欄位：只有寫進 `EmployeeProfileInput` 那八欄需要的密文。 */

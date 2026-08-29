@@ -56,7 +56,15 @@ type EnvelopeShape<TData> = {
   readonly errors: readonly ErrorItemShape[]
   readonly data: TData
 }
-type EmployeeDetailShape = { readonly id: string; readonly employeeCode: string; readonly name: string }
+type EmployeeDetailShape = {
+  readonly id: string
+  readonly employeeCode: string
+  readonly name: string
+  readonly identityNumberMasked: string
+  readonly birthdayMasked: string
+  readonly phoneMasked: string
+  readonly addressMasked: string
+}
 
 const identityByToken = new Map<string, VerifiedIdentity>()
 
@@ -209,7 +217,17 @@ const createEmployeeFixture = async (
   if (!result.ok) throw new Error(`測試 fixture 建立員工失敗：${JSON.stringify(result.errors)}`)
   return {
     status: 200,
-    payload: { data: { id: result.value.id, employeeCode: result.value.employeeCode, name: result.value.name } },
+    payload: {
+      data: {
+        id: result.value.id,
+        employeeCode: result.value.employeeCode,
+        name: result.value.name,
+        identityNumberMasked: result.value.identityNumberMasked,
+        birthdayMasked: result.value.birthdayMasked,
+        phoneMasked: result.value.phoneMasked,
+        addressMasked: result.value.addressMasked,
+      },
+    },
   }
 }
 
@@ -297,6 +315,50 @@ describe('employees/main 稽核整合（稽核計畫 §7 Stage 2）', () => {
 
     expect(changes).toEqual([{ field: 'name', before: '王小明', after: '王大明' }])
     expect(changes.map((change) => change.field)).not.toContain('identityNumber')
+  })
+
+  /**
+   * ★ gap2 定案的實際場景：請求根本**沒有送**身分證、生日、手機、地址（不是送了同樣的值），
+   * 前端不再需要把 `get` 回的遮罩值原樣讀出來、拼回一個「完整值」才能改姓名。
+   *
+   * 與上面「★ 只改姓名」的差別：那一條測的是全量提交下明文比對能不能正確判斷「沒有變更」；
+   * 這一條測的是請求本身**省略這幾個欄位時，服務層與稽核仍然得出一模一樣的結論**——
+   * 兩條合起來才涵蓋「全量提交」與「省略提交」兩種呼叫端寫法。
+   */
+  test('★ 省略身分證／生日／手機／地址：更新成功、這四欄維持原值，且 changes 不含 identityNumber', async () => {
+    const company = await registerCompany()
+    const body = profileBody()
+    const created = await createEmployeeFixture(company, body)
+
+    // body 裡刻意不帶 identityNumber／birthday／phone／address 四欄。
+    const updated = await call<EmployeeDetailShape>('/employees/main/update', company.token, {
+      id: created.payload.data.id,
+      employeeCode: body.employeeCode,
+      name: '王大明',
+      gender: body.gender,
+      email: body.email,
+    })
+    expect(updated.status).toBe(200)
+    expect(updated.payload.data.name).toBe('王大明')
+
+    // 四個遮罩欄位維持建立時的原值——省略代表不變更，不是清空或改壞。
+    expect(updated.payload.data.identityNumberMasked).toBe(created.payload.data.identityNumberMasked)
+    expect(updated.payload.data.birthdayMasked).toBe(created.payload.data.birthdayMasked)
+    expect(updated.payload.data.phoneMasked).toBe(created.payload.data.phoneMasked)
+    expect(updated.payload.data.addressMasked).toBe(created.payload.data.addressMasked)
+
+    const rows = await readAuditLogs(created.payload.data.id)
+    const updateRow = rows.find((row) => row.action === 'employees.main.update')
+    const changes = parseChanges(updateRow?.changes)
+
+    // 稽核紀錄裡只有姓名這一項變更；身分證、生日、手機、地址完全不出現在 changes 裡
+    // ——不是「記了但值是 unchanged」，是根本沒有這個 field 項目。
+    expect(changes).toEqual([{ field: 'name', before: '王小明', after: '王大明' }])
+    expect(changes.map((change) => change.field)).not.toContain('identityNumber')
+    expect(changes.map((change) => change.field)).not.toContain('birthday')
+    expect(changes.map((change) => change.field)).not.toContain('phone')
+    expect(changes.map((change) => change.field)).not.toContain('address')
+    expect(JSON.stringify(changes)).not.toContain(body.identityNumber)
   })
 
   test('刪除員工：changes 的 after 為 null，identityNumber 等仍只記 changed', async () => {

@@ -15,7 +15,14 @@
  *
  * **沒有 `handleEmployeeCreate`**：`/employees/main/create` 端點已移除（實作計畫
  * `05-employee-onboarding.md` §4.2），`ProfileBody`／`toProfileInput` 仍然保留，是因為
- * `update` 端點也用同一組個資欄位（差別只在多一個 `id`，見下方 `UpdateBody`）。
+ * `update` 端點還在用（差別只在多一個 `id`，見下方 `UpdateBody`）——現在只剩 `update` 這一個
+ * 用途，因此 `ProfileBody` 的形狀就是 `update` 端點的形狀（身分證、生日、手機、地址皆選填，
+ * 省略＝不變更，見 `domain/employee-model.ts` 的 `EmployeeProfileUpdateInput` 檔頭）。
+ *
+ * **`get`／`update` 回應共用 `EmployeeDetail`**（含 `companyUserId`，UI 定案
+ * `docs/ui/20-employee-list.md` §3.5），因此共用同一個映射函式 `toEmployeeDetailData`
+ * ——理由見 `domain/employee-model.ts` 的 `EmployeeDetail` 檔頭：`apps/web` 把兩支端點的回應
+ * 當成同一個「目前這位員工」狀態，只有其中一支帶這一欄的話，另一支覆蓋回去的那一刻它就會消失。
  */
 import { resolveServiceResult } from '../../../http/error-boundary.ts'
 import type { RequestSession } from '../../../http/request-context.ts'
@@ -127,6 +134,7 @@ const toEmployeeDetailData = (employee: EmployeeDetail) => ({
   addressMasked: employee.addressMasked,
   createdAt: employee.createdAt,
   updatedAt: employee.updatedAt,
+  companyUserId: employee.companyUserId,
 })
 
 /** 查詢類端點查無資料時 `data` 為 `null`（§1.3），不是錯誤（§3.1.3）。 */
@@ -145,15 +153,22 @@ type ListBody = {
 
 type TargetBody = { readonly id: string }
 
+/**
+ * `update` 的個資欄位。
+ *
+ * **身分證、生日、手機、地址皆為選填，省略＝不變更目前值**（定案理由見
+ * `domain/employee-model.ts` 的 `EmployeeProfileUpdateInput` 檔頭）。`email` 不在此列，
+ * 維持既有的「選填、省略＝清空」語意——它本來就有清空這個合法操作，兩者不可混為一談。
+ */
 type ProfileBody = {
   readonly employeeCode: string
   readonly name: string
   readonly gender: GenderValue
-  readonly identityNumber: string
-  readonly birthday: string
-  readonly phone: string
+  readonly identityNumber?: string
+  readonly birthday?: string
+  readonly phone?: string
   readonly email?: string
-  readonly address: string
+  readonly address?: string
 }
 
 type UpdateBody = TargetBody & ProfileBody
@@ -174,18 +189,27 @@ const toSearchEcho = (body: ListBody) => ({
 /**
  * body 的個資欄位 → service 的輸入。
  *
- * 選填欄位一律收斂成 `null`：`exactOptionalPropertyTypes` 之下，「沒有這個欄位」與
- * 「欄位是 undefined」是兩件事，而後者寫進 DB 會把既有值蓋成 NULL。
+ * **`email` 選填欄位收斂成 `null`**：`exactOptionalPropertyTypes` 之下，「沒有這個欄位」與
+ * 「欄位是 undefined」是兩件事，而後者寫進 DB 會把既有值蓋成 NULL——email 本來就有這個合法的
+ * 清空操作，收斂成 `null` 正是要的效果。
+ *
+ * **身分證、生日、手機、地址四欄則相反：維持「沒有這個 key 就是沒有」，不收斂成任何值。**
+ * 這四欄在 `EmployeeProfileUpdateInput` 上是選填的、省略＝不變更目前值（見該型別檔頭），
+ * 如果比照 email 收斂成 `null`，會把「沒填」誤譯成「使用者要清空」——而這四欄根本沒有清空這個
+ * 合法操作，接下去 repository 會拿 `null` 去加密、寫出一個不該存在的空字串密文。因此這裡用
+ * 展開＋條件式 key 的寫法，讓「沒有這個欄位」原封不動地傳到 service（`exactOptionalPropertyTypes`
+ * 之下不能直接寫 `identityNumber: body.identityNumber`，那會把型別是 `string | undefined` 的值
+ * 指派給宣告為選填、不接受顯式 `undefined` 的 key）。
  */
 const toProfileInput = (body: ProfileBody) => ({
   employeeCode: body.employeeCode,
   name: body.name,
   gender: body.gender,
-  identityNumber: body.identityNumber,
-  birthday: body.birthday,
-  phone: body.phone,
+  ...(body.identityNumber === undefined ? {} : { identityNumber: body.identityNumber }),
+  ...(body.birthday === undefined ? {} : { birthday: body.birthday }),
+  ...(body.phone === undefined ? {} : { phone: body.phone }),
   email: body.email ?? null,
-  address: body.address,
+  ...(body.address === undefined ? {} : { address: body.address }),
 })
 
 const toEmployeeListData = (query: EmployeeListQuery, body: ListBody, page: EmployeeListPage) =>

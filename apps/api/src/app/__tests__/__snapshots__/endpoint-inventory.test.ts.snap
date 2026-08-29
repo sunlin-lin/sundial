@@ -13,7 +13,7 @@ exports[`端點清單快照 已註冊的端點與快照一致（\`path | cmd | �
 /employees/main/delete | employees.main.delete | authenticated | cmd,id,locale,rqTS
 /employees/main/get | employees.main.get | authenticated | cmd,id,locale,rqTS
 /employees/main/list | employees.main.list | authenticated | cmd,currentPage,locale,perPage,rqTS
-/employees/main/update | employees.main.update | authenticated | address,birthday,cmd,employeeCode,gender,id,identityNumber,locale,name,phone,rqTS
+/employees/main/update | employees.main.update | authenticated | cmd,employeeCode,gender,id,locale,name,rqTS
 /employees/onboarding/create | employees.onboarding.create | authenticated | address,birthday,cmd,departmentId,employeeCode,employmentTypeCode,gender,hireDate,identityNumber,initialPassword,locale,name,phone,roleIds,rqTS,username,withholdingMethodCode
 /employments/department-histories/create | employments.department-histories.create | authenticated | cmd,departmentId,effectiveFrom,employmentId,locale,rqTS
 /employments/department-histories/list | employments.department-histories.list | authenticated | cmd,currentPage,employmentId,locale,perPage,rqTS

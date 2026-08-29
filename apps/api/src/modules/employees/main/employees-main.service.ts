@@ -37,6 +37,7 @@ export type {
   EmployeeListPage,
   EmployeeListQuery,
   EmployeeProfileInput,
+  EmployeeProfileUpdateInput,
   EmployeeSortOption,
   EmployeeSummary,
   EmployeeTargetInput,

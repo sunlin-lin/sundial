@@ -198,6 +198,10 @@ snapshot 做結構化比對（不是整檔案 diff——`id`／`prevId` 一定�
 
 跑 `bun run ci`：串起 lint、型別檢查、契約產生、依賴檢查、九支規範掃描與測試。個別指令與各自在擋什麼見 `references/testing-and-checks.md`。
 
+**動到任何端點的回應形狀（含只是加一個欄位）時，一定要跑 `bun run gen:api && bun run typecheck:web` 驗一次消費端，`bun run typecheck` 看不到這件事。** 後端的型別檢查只看 `apps/api`，前端是透過產生出來的契約消費它的——耦合只在產生物那一層顯形。
+
+實例：把 `companyUserId` 只加進 `employees.main.get` 的回應，`bun run typecheck` 全綠；但前端的 `employees-detail.view.ts` 寫的是 `EmployeeSummary = NonNullable<EmployeesMainGetData>`，而 `EmployeeBasicInfoTab.vue` 會把 **`update` 的回應** `Object.assign` 回同一份狀態——也就是前端把 `get` 與 `update` 當成同一個型別在用。只加在 `get` 的話，`update` 覆蓋回去的那一刻那個欄位就消失了。這個耦合**讀後端程式碼完全看不出來**，是跑 `typecheck:web` 才炸出來的。
+
 沒有自動檢查的那些（上面標 ⚠️ 的、建立順序、錯誤訊息含糊度、交易邊界、稽核完整性、測試有沒有繞過正式流程）**必須在 PR 描述逐項自述**（§8）。
 
 ## 遇到規範沒寫到的情況

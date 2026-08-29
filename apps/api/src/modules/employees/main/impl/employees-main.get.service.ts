@@ -6,7 +6,9 @@
  * 「存在但不屬於你」與「不存在」想寫出不一樣的回應都寫不出來。
  *
  * 回傳的敏感欄位**在 repository 就已經遮罩**（§5.1）：本層拿不到明文，因此
- * 「這支端點會不會漏遮罩」不是一個要在 review 時檢查的問題。
+ * 「這支端點會不會漏遮罩」不是一個要在 review 時檢查的問題。`companyUserId`（UI 定案
+ * `docs/ui/20-employee-list.md` §3.5）也已經由 `findEmployeeDetail` 一併查好、併進
+ * `EmployeeDetail`，見 `impl/employees-main.find.repository.ts` 檔頭。
  */
 import { succeed, type ServiceResult } from '../../../../shared/service-result.ts'
 import type { EmployeesMainContext } from '../domain/employee-context.ts'

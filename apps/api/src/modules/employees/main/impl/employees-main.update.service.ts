@@ -10,6 +10,14 @@
  * `findEmployeeAuditSnapshot`（明文）取代原本的 `findEmployeeDetail`（遮罩）作為存在性檢查——
  * 兩者的 `WHERE` 條件完全相同（同公司、未軟刪除），查詢語意不變，只是換一份不遮罩的映射。
  *
+ * **身分證、生日、手機、地址在請求上是選填的，省略＝不變更**（`EmployeeProfileUpdateInput` 檔頭）。
+ * 這支函式因此身兼兩件事：①把 `input`（可能省略某些欄位）原封不動交給
+ * `updateEmployeeProfile`，讓資料庫層只覆寫「有送」的欄位；②另外湊一份**補齊省略欄位**的完整
+ * `EmployeeProfileInput` 交給稽核——省略的欄位用 `before`（讀出來的明文現值）補上，於是
+ * `buildAuditChanges` 逐欄比對時，那些欄位的前後值逐字相同、自然不會產生任何 `changes` 項目
+ * （不是靠稽核政策特殊處理，是比較出來本來就沒有差異）。**兩份物件不能共用**：拿補齊後的那份
+ * 去寫資料庫的話，省略的欄位會被目前值原樣覆寫一次，白白產生一次沒有意義的新 IV。
+ *
  * **本檔不開交易**：只收外部交易 handle，開交易的包裝在入口檔（見 `impl/
  * employees-main.create.service.ts` 檔頭同一段說明，理由逐字適用）。
  */
@@ -51,25 +59,30 @@ export const updateEmployeeInTransaction = async (
   // `domain/employee-duplicate.ts`。
   if (outcome === 'duplicate-code') return fail([employeeCodeDuplicated()])
   if (outcome === 'duplicate-identity-number') return fail([employeeIdentityNumberDuplicated()])
-  // 條件式 UPDATE 影響 0 列：在上面那次讀取與這次寫入之間，別人已經把這筆刪掉了（§4.4）。
-  // 加密欄位每次都用新的隨機 IV，因此「使用者什麼都沒改」不會落到這一支
-  // （見 update-profile 切片的檔頭），0 列乾淨地只剩下併發衝突一種含義。
+  // 條件式 UPDATE 影響 0 列：絕大多數情況代表在上面那次讀取與這次寫入之間，別人已經把這筆
+  // 刪掉或改掉了（§4.4）。少數情況是一次真正「什麼都沒改」的送出——見 update-profile 切片的
+  // 檔頭，那是「省略＝不變更」帶來的一個刻意接受的窄邊界，兩者目前共用同一個錯誤碼。
   if (outcome === 'not-affected') return fail([employeeStateChanged()])
 
-  // after 快照只取 `EmployeeProfileInput` 的八個欄位（不含 `id`）——政策的內層 key 定義域就是
-  // 這個型別，混進 `id` 會被判為未分類欄位而拋例外（稽核計畫 §4.5）。身分證額外正規化一次，
-  // 理由是**實際寫進資料庫的就是正規化後的值**（`toEncryptedColumns` 對兩邊做同一件事，
-  // 見 `domain/employee-secrets.ts`）：不正規化的話，同一個身分證只是大小寫不同就會被誤判成
-  // 「變更了」，而 `identityNumber` 是 presence 級，這種誤判無法從 `changes` 裡分辨出來。
+  // after 快照補齊成 `EmployeeProfileInput` 的八個欄位（不含 `id`）——政策的內層 key 定義域就是
+  // 這個型別，混進 `id` 會被判為未分類欄位而拋例外（稽核計畫 §4.5）。
+  //
+  // 身分證、生日、手機、地址四欄：請求省略時代表「不變更」，因此用 `before`（明文現值）補齊，
+  // 讓這幾欄的前後值逐字相同，`buildAuditChanges` 自然比不出差異——這正是「省略＝不變更」
+  // 在稽核上該有的樣子：使用者根本沒有動它，稽核也就不該記一筆「變更了」。
+  // 身分證額外正規化一次，理由是**實際寫進資料庫的就是正規化後的值**（`toEncryptedColumns`／
+  // `toEncryptedColumnsForUpdate` 對兩邊做同一件事，見 `domain/employee-secrets.ts`）：
+  // 不正規化的話，同一個身分證只是大小寫不同就會被誤判成「變更了」，而 `identityNumber` 是
+  // presence 級，這種誤判無法從 `changes` 裡分辨出來。
   const after: EmployeeProfileInput = {
     employeeCode: input.employeeCode,
     name: input.name,
     gender: input.gender,
-    identityNumber: normalizeIdentityNumber(input.identityNumber),
-    birthday: input.birthday,
-    phone: input.phone,
+    identityNumber: normalizeIdentityNumber(input.identityNumber ?? before.identityNumber),
+    birthday: input.birthday ?? before.birthday,
+    phone: input.phone ?? before.phone,
     email: input.email,
-    address: input.address,
+    address: input.address ?? before.address,
   }
 
   await recordAudit(tx, {

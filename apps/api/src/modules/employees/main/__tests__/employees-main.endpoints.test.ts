@@ -70,6 +70,12 @@ type EnvelopeShape<TData> = {
   readonly expiresIn: number | null
 }
 
+/**
+ * `get`／`update` 共用的回應形狀。**含 `companyUserId`**（UI 定案
+ * `docs/ui/20-employee-list.md` §3.5）：兩支端點共用同一個型別，理由見
+ * `domain/employee-model.ts` 的 `EmployeeDetail` 檔頭——`apps/web` 把兩者的回應當成同一個
+ * 「目前這位員工」狀態，只讓其中一支帶這一欄的話，另一支覆蓋回去時它就會消失。
+ */
 type EmployeeDetailShape = {
   readonly id: string
   readonly employeeCode: string
@@ -80,6 +86,7 @@ type EmployeeDetailShape = {
   readonly phoneMasked: string
   readonly emailMasked: string | null
   readonly addressMasked: string
+  readonly companyUserId: string | null
 }
 
 type EmployeeListShape = {
@@ -332,6 +339,54 @@ describe('employees/main endpoints (integration)', () => {
     // `search` 與 `sort` 必須原樣回聲（§1.4）；沒送 sort 時回的是實際生效的預設值。
     expect(listed.payload.data.search).toEqual({ keyword: body.employeeCode })
     expect(listed.payload.data.sort).toEqual({ field: 'employeeCode', order: 'asc' })
+  })
+
+  /**
+   * UI 定案 `docs/ui/20-employee-list.md` §3.5：明細頁要管理這位員工的登入帳號與角色，
+   * 前端得先由 `get` 拿到 `companyUserId` 才問得下去。
+   *
+   * 直接 `insert` 一筆屬於這位員工的 `company_users`：與 `registerCompany` 相同的既有慣例
+   * （§7.3 的例外）——「員工既有時才補一個帳號」目前沒有正式流程，onboarding 走的是
+   * 「新增員工當下同時建帳號」那條路，不是這裡要測的東西。
+   */
+  test('get 回應含 companyUserId：查無帳號時為 null，有效帳號存在時回其 id', async () => {
+    const company = await registerCompany()
+    const created = await createEmployeeFixture(company, profileBody())
+
+    const withoutAccount = await call<EmployeeDetailShape | null>('/employees/main/get', company.token, {
+      id: created.payload.data.id,
+    })
+    expect(withoutAccount.status).toBe(200)
+    expect(withoutAccount.payload.data?.companyUserId).toBeNull()
+
+    const employeeUserId = crypto.randomUUID()
+    const employeeCompanyUserId = crypto.randomUUID()
+    const now = clock.now()
+    await database.insert(users).values({
+      id: employeeUserId,
+      username: `employee-${employeeUserId}`,
+      passwordHash: 'not-a-real-hash',
+      mustChangePassword: false,
+      passwordChangedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await database.insert(companyUsers).values({
+      id: employeeCompanyUserId,
+      companyId: company.companyId,
+      userId: employeeUserId,
+      employeeId: created.payload.data.id,
+      status: 'ACTIVE',
+      activatedAt: now,
+      deactivatedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const withAccount = await call<EmployeeDetailShape | null>('/employees/main/get', company.token, {
+      id: created.payload.data.id,
+    })
+    expect(withAccount.payload.data?.companyUserId).toBe(employeeCompanyUserId)
   })
 
   test('資料庫裡存的是密文：明文一段都找不到，且同一個明文兩次寫入的位元組不同', async () => {

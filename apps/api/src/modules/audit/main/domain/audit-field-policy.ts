@@ -127,9 +127,13 @@ export const AUDIT_FIELD_POLICY = {
        * 而它裡面根本沒有這幾個欄位。多寫進來的話，`check:audit-policy` 的第二條檢查
        * 「政策裡有型別上已經不存在的欄位 → 失敗」（計畫 §6.1）當場就會紅。
        *
-       * 配套是呼叫端的責任：`UpdateEmployeeInput` 是 `{ id } & EmployeeProfileInput`，
-       * 交給稽核的前後快照必須是**去掉 `id` 的 profile 形狀**。傳整包進來的話，
-       * `id` 會被判為未分類而拋例外——那正是要的結果，不是要繞開的障礙。
+       * 配套是呼叫端的責任：交給稽核的前後快照必須是**去掉 `id` 的 profile 形狀**，且必須是
+       * 補齊過的完整 `EmployeeProfileInput`——`update` 的請求型別 `UpdateEmployeeInput`
+       * （`{ id } & EmployeeProfileUpdateInput`）允許省略身分證、生日、手機、地址（省略＝不變更，
+       * 見 `employee-model.ts` 的 `EmployeeProfileUpdateInput` 檔頭），但那是**請求**的形狀，
+       * 不是稽核比對用的形狀：`updateEmployeeInTransaction` 會先把省略的欄位用目前值補齊，
+       * 才組出交給 `buildAuditChanges` 的 `after`。傳未補齊、或連 `id` 都還在的整包進來的話，
+       * 前者會讓稽核誤判成「變更了」，後者的 `id` 會被判為未分類而拋例外——都是要擋住的錯誤用法。
        */
     },
   },

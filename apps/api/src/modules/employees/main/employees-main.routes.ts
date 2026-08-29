@@ -158,6 +158,21 @@ const EmployeeSummarySchema = t.Object({
   accountStatus: t.Optional(Nullable(AccountStatusSchema)),
 })
 
+/**
+ * `get`／`update` 共用的回應（§1.8.0 的三種形狀之一）。
+ *
+ * **含 `companyUserId`**（UI 定案 `docs/ui/20-employee-list.md` §3.5，見
+ * `domain/employee-model.ts` 的 `EmployeeDetail` 檔頭）：`apps/web` 的員工明細頁把 `get` 與
+ * `update` 的回應當成同一個「目前這位員工」狀態，`update` 成功後會直接用它的回應覆蓋畫面上的
+ * 員工物件——只讓 `get` 帶這一欄的話，`update` 覆蓋回去的那一刻這個欄位就會消失。
+ *
+ * **`companyUserId` 用 `t.Optional` 包一層，本端點實際上每次都會回它**（handler 沒有任何分支會
+ * 省略，見 `employees-main.handler.ts` 的 `toEmployeeDetailData`）。這麼寫是相容性的刻意選擇，
+ * 不是欄位真的會缺席：與上面 `EmployeeSummarySchema` 那五欄同一個理由——`apps/web` 既有的測試
+ * 與型別是在這一欄還不存在時寫的，若直接宣告成必填，`bun run gen:api` 產生的型別就會要求那些既有
+ * fixture 都補上這一欄，而那是前端 Stage 6 的工作範圍（`apps/web/**`），本輪職責只到「後端把資料
+ * 生出來、且新欄位在契約上是相容的加法」為止（§1.6：加值、不刪值）。
+ */
 const EmployeeDetailSchema = t.Object({
   id: Uuid,
   employeeCode: EmployeeCode,
@@ -174,6 +189,8 @@ const EmployeeDetailSchema = t.Object({
   /** 業務時間，台北牆鐘、不帶時區標記（§6.1）：帶了標記前端會依瀏覽器時區再換算一次。 */
   createdAt: TaipeiDateTime,
   updatedAt: TaipeiDateTime,
+  /** `null` 代表這位員工目前沒有有效的登入帳號（尚未透過 onboarding 建立帳號，或帳號已停用）。 */
+  companyUserId: t.Optional(Nullable(Uuid)),
 })
 
 /** 列表的搜尋條件回聲（§1.4）。使用者沒送的條件就不出現，前端才比對得出這包是不是自己要的。 */
@@ -184,17 +201,27 @@ const EmployeeSearchSchema = t.Object({
   accountStatus: t.Optional(AccountStatusSchema),
 })
 
-/** 建立與修改共用的個資欄位。兩支端點收的欄位完全相同，差別只在 `update` 多一個 `id`。 */
+/**
+ * `update` 的個資欄位。
+ *
+ * **身分證、生日、手機、地址皆為選填，省略＝不變更目前值**（定案：`get` 回的這幾欄是遮罩值，
+ * 要求連同它們一起全量送出，等於逼前端把身分證明文重新顯示、重新輸入一次才能單獨改一個姓名或
+ * 電話——這不只是難用，更是安全上的退步。完整理由見 `domain/employee-model.ts` 的
+ * `EmployeeProfileUpdateInput` 檔頭。
+ *
+ * **`email` 不受影響，維持既有的「選填、省略＝清空」語意**：它本來就有清空這個合法操作，
+ * 與另外四欄「沒有清空這回事」的性質不同，因此不套用「省略＝不變更」規則。
+ */
 const EmployeeProfileFields = {
   employeeCode: EmployeeCode,
   name: EmployeeName,
   gender: GenderSchema,
-  identityNumber: IdentityNumber,
+  identityNumber: t.Optional(IdentityNumber),
   /** 出生年月日，台北的日曆日，不帶時區標記（§6.1）。 */
-  birthday: IsoDate,
-  phone: Phone,
+  birthday: t.Optional(IsoDate),
+  phone: t.Optional(Phone),
   email: t.Optional(Email),
-  address: Address,
+  address: t.Optional(Address),
 } as const
 
 /**
@@ -255,7 +282,7 @@ export const employeesMainRoutes = (dependencies: EmployeesMainDependencies) =>
       },
       detail: {
         summary: '查詢單一員工（敏感欄位一律遮罩）',
-        description: describeEmployeeErrors(EMPLOYEE_ENDPOINT_ERRORS.get),
+        description: `${describeEmployeeErrors(EMPLOYEE_ENDPOINT_ERRORS.get)} companyUserId 是這位員工目前有效的登入帳號 id，供前端接著呼叫 company-users/roles/list 查角色、或 company-users/main/reset-password 重設密碼；null 代表這位員工目前沒有有效的登入帳號。`,
       },
     })
     .post('/employees/main/update', (context) => handleEmployeeUpdate(dependencies, context), {
@@ -275,7 +302,7 @@ export const employeesMainRoutes = (dependencies: EmployeesMainDependencies) =>
       },
       detail: {
         summary: '修改員工',
-        description: describeEmployeeErrors(EMPLOYEE_ENDPOINT_ERRORS.update),
+        description: `${describeEmployeeErrors(EMPLOYEE_ENDPOINT_ERRORS.update)} identityNumber／birthday／phone／address 為選填，省略代表不變更目前值（get 回的是遮罩值，不應也不需要被要求原樣送回）；email 維持選填即清空的既有語意，與前四欄不同。`,
       },
     })
     .post('/employees/main/delete', (context) => handleEmployeeDelete(dependencies, context), {

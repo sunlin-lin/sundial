@@ -1,12 +1,43 @@
 /**
  * 資料存取：單一員工的完整內容（已遮罩）。
+ *
+ * **含目前有效的登入帳號 id**（`EmployeeDetail.companyUserId`，UI 定案
+ * `docs/ui/20-employee-list.md` §3.5）：`employees` 與 `company_users` 是一對多
+ * （同一位員工歷史上可能有多筆帳號，例如停用後又重新開通），因此**不用 JOIN**
+ * ——一對多的關聯若直接 JOIN，會讓這支「取單一員工」的查詢在帳號有多筆歷史時展開成多列，
+ * 回應形狀就得從單一物件變成陣列，而那不是這支端點要的東西（只要「目前這一個」）。
+ * 改用篩了 `status = ACTIVE` 的獨立查詢 ＋ `limit(1)`，只有查得到員工才會多送這一次查詢
+ * ——查無員工（含跨公司）時直接回 `null`，不必為了一筆注定用不到的結果多打一次資料庫。
+ * 這與 `impl/employees-main.list.repository.ts` 的 `findAccountStatusesByEmployeeIds`
+ * （同一張表的批次查法）、`company-users/main` 既有的
+ * `impl/company-users-main.find-active-by-employee.repository.ts`（同一段邏輯）同構。
+ *
+ * **直接查 `company_users` 表，不呼叫 `company-users` 模組的 service／repository**：依模組歸屬
+ * 判準（輸出型別決定掛哪個模組），這裡的輸出是「這位員工的登入帳號 id」，屬於員工明細的一部分，
+ * 留在 `employees/main` 自己的資料存取層——與 `list.repository.ts` 已經直接查
+ * `companyUsers`／`departments`／`jobTitles` 三張別的模組的表是同一種先例，不是新的例外。
  */
 import { eq, isNull } from 'drizzle-orm'
 import { TenantDatabase, type QueryRunner } from '../../../../db/client.ts'
 import type { FieldCipher } from '../../../../db/field-encryption.ts'
-import { employees } from '../../../../db/schema/index.ts'
+import { CompanyUserStatus, companyUsers, employees } from '../../../../db/schema/index.ts'
 import type { EmployeeDetail } from '../domain/employee-model.ts'
 import { toMaskedDetail } from '../domain/employee-secrets.ts'
+
+/** 這位員工目前有效（`ACTIVE`）的登入帳號 id，查無則為 `null`。見本檔檔頭。 */
+const findActiveCompanyUserId = async (tenant: TenantDatabase, employeeId: string): Promise<string | null> => {
+  const rows = await tenant
+    .select(
+      { id: companyUsers.id },
+      companyUsers,
+      eq(companyUsers.employeeId, employeeId),
+      eq(companyUsers.status, CompanyUserStatus.Active),
+    )
+    .limit(1)
+
+  const row = rows[0]
+  return row === undefined ? null : row.id
+}
 
 /**
  * 依 id 取員工。
@@ -49,6 +80,8 @@ export const findEmployeeDetail = async (
     eq(employees.deletedSeq, 0),
     isNull(employees.deletedAt),
   )
+  if (row === undefined) return null
 
-  return row === undefined ? null : toMaskedDetail(cipher, row)
+  const companyUserId = await findActiveCompanyUserId(tenant, employeeId)
+  return toMaskedDetail(cipher, row, companyUserId)
 }
