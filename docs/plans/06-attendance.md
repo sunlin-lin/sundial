@@ -4,7 +4,7 @@
 > UI 依據：[09-ui-all-attendance.md](../ui/09-ui-all-attendance.md)、[10-ui-dashboard-attendance.md](../ui/10-ui-dashboard-attendance.md)、[12-ui-my-attendance.md](../ui/12-ui-my-attendance.md)、[13-ui-attendance-correction.md](../ui/13-ui-attendance-correction.md)、[17-ui-attendance-correction-approval.md](../ui/17-ui-attendance-correction-approval.md)（皆已定案）
 > 開發規範依據：`sundial-backend`／`sundial-frontend` skill，對應 `docs/dev-standards-backend.md` §4（交易與併發）、§5（個資、權限與稽核）
 > 前置：[05-employee-onboarding.md](05-employee-onboarding.md) 交付的 `employee_employments`
-> 待補 UI 文件：§4.7「每日全員打卡明細」是使用者本輪新提出的畫面，五份既有 UI 定案都沒有涵蓋，開工前需要補一份對應的 UI 定案文件。
+> §4.7「每日全員打卡明細」的 UI 定案已補齊：[23-ui-daily-attendance-records.md](../ui/23-ui-daily-attendance-records.md)（已經使用者確認）。
 
 ## 1. 目標
 
@@ -136,7 +136,7 @@ roadmap §3 的處置是「2-D 先做沒有班表時的判定，排班上線後�
 - **選項 A：沿用 `revoke` 那組欄位，本人撤銷與他人撤銷共用同一套標記機制**，來源不必另外存欄位區分：`revoke`（本人）端點的授權範圍本來就限制「只能撤銷 `employeeId` 對應到 token 本人的紀錄」（見下段），寫入時 `revoked_by` 必然等於這筆紀錄所有人自己；`revoke-other` 則必然是別人。事後要分辨這筆是哪一種，比較 `revoked_by` 是否等於這筆紀錄 `employee_id` 目前綁定的 `company_users` 帳號即可，不需要在 `revoke_reason` 塞約定文字去標記來源（文字約定容易漂移，也容易被之後的人忘記遵守）。要不要寫 `audit_logs`，在服務層當下就已經知道——`revoke` 與 `revoke-other` 是兩支不同的 service，各自決定要不要呼叫稽核，不需要靠讀資料列反推。
 - **選項 B：另加一組 `deleted_at`／`deleted_seq`，本人撤銷改走這組，`revoked_*` 專屬他人撤銷。** 後果：「這筆是否有效」的判斷從一個條件（`revoked_at IS NULL`）變成兩個獨立條件（`revoked_at IS NULL AND deleted_at IS NULL`），而字典在「有效狀態不另設欄位」那段已經點名過這個模式的風險——多一個獨立的失效開關，就會出現「兩個開關其中一個沒清乾淨」這種**不會報錯**的壞組合。唯一鍵也要面對同一個問題：現有 `UNIQUE(employee_id, work_date, attendance_type_code, revoked_seq)` 只用一個 seq 防止同一天同一種卡出現兩筆有效紀錄；本人撤銷若改記在 `deleted_seq`，這把唯一鍵就必須同時看兩個 seq 才能正確擋下重複，等於重新設計這把鍵。
 
-**本計畫建議選項 A。** 除了上面兩點，還有一個更根本的理由：字典為 `revoked_seq` 寫的註解是「作法與 `employees.deleted_seq` 相同」——字典設計 `attendance_records` 的失效機制時，從一開始就只打算做**一種**「這筆記錄不算數了」的狀態，`revoked_*` 這組欄位本身就是這張表的軟刪除機制，只是命名沿用「撤銷」而不是「刪除」。使用者現在要分辨的是**這一種狀態底下的兩種來源**（誰讓它變成不算數的），不是需要兩種獨立的狀態機制。選項 A 不改字典、不新增欄位、不動唯一鍵，查詢時一次比較就能回答「這是本人撤銷還是他人撤銷」；選項 B 是在一張表已經有一組失效欄位的情況下再疊一組，重新製造字典已經警告過的組合爆炸。**這一項本計畫給出建議，最終選擇仍留待使用者確認**——若之後有其他理由需要獨立、不靠比較就能查詢「本人自行刪除」的筆數，選項 B 也是可行的，只是本計畫認為代價大於選項 A。
+**定案：選項 A（使用者 2026-08-29 確認）。** 除了上面兩點，還有一個更根本的理由：字典為 `revoked_seq` 寫的註解是「作法與 `employees.deleted_seq` 相同」——字典設計 `attendance_records` 的失效機制時，從一開始就只打算做**一種**「這筆記錄不算數了」的狀態，`revoked_*` 這組欄位本身就是這張表的軟刪除機制，只是命名沿用「撤銷」而不是「刪除」。使用者現在要分辨的是**這一種狀態底下的兩種來源**（誰讓它變成不算數的），不是需要兩種獨立的狀態機制。選項 A 不改字典、不新增欄位、不動唯一鍵，查詢時一次比較就能回答「這是本人撤銷還是他人撤銷」；選項 B 是在一張表已經有一組失效欄位的情況下再疊一組，重新製造字典已經警告過的組合爆炸。（若之後有其他理由需要獨立、不靠比較就能查詢「本人自行刪除」的筆數，選項 B 仍是可行的，只是代價大於選項 A。）
 
 **本人只能撤銷「自己的」打卡，這一條怎麼保證：範圍來自 token 推出的身分，不是 request body。** 比照 `sessions-main.logout-all.service.ts` 的先例——`revoke`（本人）端點的 request body 只帶 `recordId` 與 `reason`，**不接受呼叫端指定 `employeeId`**；service 撈出這筆 `attendance_records` 之後，先比對它的 `employee_id` 是否等於「目前登入身分透過 `company_users → employee_id` 推出的本人」，不相等就視同找不到這筆記錄，比對通過才進入撤銷邏輯。`revoke-other` 才收 `employeeId`／`recordId` 這種可以指到別人的欄位，而它本來就要求 `attendance.records.revoke-other` 權限碼過關——這是把 §4.3 已經定案的「兩條端點」精神，落到程式碼層面要怎麼兌現寫清楚。
 
@@ -277,7 +277,7 @@ roadmap 把 2-C（Dashboard）排在 2-D（`attendance_results`）之前，但 0
 
 - **GPS 座標明文儲存，交由資料庫端靜態加密負責，不再有應用層加密與 blind index。** 這是 `docs/dev-standards-backend.md` §5.1 全站架構變更（應用層 `*_encrypted` 欄位加密全面移除，改由資料庫端靜態加密負責）在出勤層的落地：字典的 `latitude_encrypted`／`longitude_encrypted`／`address_encrypted` 三欄本次改名為明文欄位 `latitude`／`longitude`／`address`；原本 §4.2 討論的「建不建 blind index」隨應用層加密一併消失，不再是需要選擇的問題。列表不輸出經緯度、明細輸出經緯度的輸出範圍不變；**座標的遮罩規則本輪由使用者裁示為選項 B**：明細不做精度遮罩，改為依呼叫者身分決定回不回座標（看自己的能看、看別人的需要 `attendance.records.view-all`／`revoke-other` 這一層權限碼），細節見 §4.2。
 - **打卡撤銷要檢查是否有審核權限。** 本計畫在 §4.3 定案為兩條端點：`attendance/records/revoke`（本人，權限碼配一般員工角色）與 `attendance/records/revoke-other`（他人，權限碼配人事／主管角色）；`revoke-other` 的消費端是 §4.7 新增的「每日全員打卡明細」畫面。
-- **本人撤銷是軟刪除且不寫稽核，他人撤銷標記作廢且要寫 `audit_logs`。** 本計畫在 §4.3.1 定案這條差異的資料處理細節，並建議「沿用 `revoked_*` 既有欄位、不另加 `deleted_at`／`deleted_seq`」（選項 A，理由與選項 B 的取捨見 §4.3.1），最終欄位選擇仍留待使用者確認。
+- **本人撤銷是軟刪除且不寫稽核，他人撤銷標記作廢且要寫 `audit_logs`。** 本計畫在 §4.3.1 定案這條差異的資料處理細節，並建議「沿用 `revoked_*` 既有欄位、不另加 `deleted_at`／`deleted_seq`」（選項 A，理由與選項 B 的取捨見 §4.3.1）。**使用者 2026-08-29 已確認選項 A。**
 - **已引用的打卡不構成撤銷限制，唯一限制仍是薪資結算鎖定。** 使用者本輪定案：待審核補打卡申請指向、或本身由核准補打卡建立的打卡，都可以正常走 `revoke`／`revoke-other`；字典既有的「已鎖定日期不得由員工直接撤銷」就是全部答案，不需要為引用關係另外加限制。這條鎖定檢查目前查不到真正資料（薪資結算模組尚未實作），只能先做成固定放行的樁，細節見 §4.3.1。
 
 其餘項目是本計畫新定案（§4.1、§4.4、§4.5、§4.6、§4.7）：無班表時 `attendance_results` 寫入 `NO_SCHEDULE` 狀態而非冒用「正常」；出勤紀錄同時掛 `employee_id`（查詢用）與 `employment_id`（歸屬用），字典已定案，兩者關係在此說明；打卡併發鎖粒度為任職、`FOR UPDATE` 必須是交易第一句；稽核範圍排除打卡建立與本人撤銷、涵蓋他人撤銷與補打卡審核四動作；新增「每日全員打卡明細」畫面的分工、端點形狀、權限碼與所在 Stage。
