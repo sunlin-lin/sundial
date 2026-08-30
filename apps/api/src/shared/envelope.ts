@@ -14,6 +14,7 @@
  * 會忘記在錯誤路徑上也包一層，而這三件事都不會有任何編譯錯誤——TypeScript 只知道你回了一個物件。
  */
 import { t } from 'elysia'
+import { Type } from '@sinclair/typebox'
 import type { Static, TSchema } from '@sinclair/typebox'
 import { TransportTS } from './field-schemas.ts'
 import { WebFlowCode, type WebFlowCodeValue } from './web-flow-code.ts'
@@ -87,8 +88,19 @@ export const BaseResponse = t.Object({
   rspTS: TransportTS,
   cmd: t.String(),
   locale: t.String(),
-  /** Session 剩餘秒數，**滑動視窗**；`null` = 本次請求未經 Session 授權。過期判斷的唯一依據。 */
-  expiresIn: t.Union([t.Integer(), t.Null()]),
+  /**
+   * Session 剩餘秒數，**滑動視窗**；`null` = 本次請求未經 Session 授權。過期判斷的唯一依據。
+   *
+   * 這裡是 envelope 的出口層欄位，**只由出口層寫入、只往回應方向送**（`envelope()` 只出現在
+   * `response:`，從未出現在 `body:`，見 `check-response-coercion.ts` 對本檔的追蹤），因此一律用
+   * TypeBox 原生的 `Type.Integer`，不是 Elysia 重新定義過的可強制轉型版本 `t.Integer`
+   * （`anyOf [string, integer]`，為 request 方向的字串輸入容錯設計，見
+   * `shared/field-schemas.ts` 的 `Pagination` 檔頭）。這裡曾經誤用 `t.Integer`：因為
+   * `envelope()` 是全部端點共用的殼，OpenAPI 上每一支端點的 `expiresIn` 都因此變成
+   * `string | number`——執行期一直是對的（見下方 {@link EnvelopeTail} 的 `number | null`），
+   * 說謊的只有契約本身：每一支端點的產生型別都在騙前端這裡可能是字串。
+   */
+  expiresIn: t.Union([Type.Integer(), t.Null()]),
   /** Session 絕對截止時刻。**僅供 log 與除錯**，禁止用於過期判斷、禁止顯示給使用者（§1.3）。 */
   exp: t.Union([TransportTS, t.Null()]),
 })
