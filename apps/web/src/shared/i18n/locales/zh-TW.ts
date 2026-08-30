@@ -92,6 +92,29 @@ export const ZH_TW = {
   'menu.shifts-main': '班別設定',
   'menu.employees-main': '員工清單',
   'menu.attendance-daily-records': '每日打卡明細',
+  'menu.attendance-all': '全體出勤',
+  'menu.my-data': '我的資料',
+  'menu.attendance-mine': '出勤紀錄',
+
+  /**
+   * 出勤判定結果的狀態旗標與打卡來源，`attendance/results/list`／`list-own` 兩支端點共用
+   *（`shared/attendance/result-status.ts`／`source-type.ts`）。key 前綴是 `attendance.` 而不是
+   * 某一頁的前綴，理由同上面 `regulatory.sync-status.*` 的既有先例：兩頁共用同一組呈現，掛在
+   * 其中一頁的命名空間下會讓另一頁看起來像在借用。
+   *
+   * `attendance.source.*` 與既有的 `attendance-daily-records.source.*`（Stage 6，同一份中文字）
+   * 刻意分開維護——兩者服務不同的頁面群，理由見 `shared/attendance/source-type.ts` 檔頭。
+   */
+  'attendance.result-status.no-schedule': '未排班',
+  'attendance.result-status.late': '遲到',
+  'attendance.result-status.early-leave': '早退',
+  'attendance.result-status.absent': '缺勤',
+  'attendance.result-status.on-leave': '請假',
+  'attendance.source.field': '現場打卡',
+  'attendance.source.manual-correction': '人工補登',
+  'attendance.unit.hours': '小時',
+  'attendance.unit.minutes': '分鐘',
+  'attendance.unit.days': '天',
 
   /**
    * 四種同步狀態，值取自後端的 `RegulatorySyncStatus`（1/2/3/4）。
@@ -666,6 +689,60 @@ export const ZH_TW = {
   'attendance-daily-records.revoke.confirm-ok': '確定撤銷',
   'attendance-daily-records.revoke.confirm-cancel': '取消',
   'attendance-daily-records.toast.revoked': '已撤銷這筆打卡。',
+
+  /**
+   * 全體出勤（計畫 06 §5 Stage 7，UI 定案 `docs/ui/09-ui-all-attendance.md`，已由使用者確認）。
+   */
+  'attendance-all.heading': '全體出勤',
+  'attendance-all.description': '依年月查詢全公司出勤判定結果，可依部門與人員篩選。',
+  'attendance-all.retry': '重新載入',
+  'attendance-all.empty': '目前沒有任何出勤紀錄。',
+  'attendance-all.empty-filtered': '沒有符合篩選條件的出勤紀錄，可嘗試清除部門或人員篩選。',
+
+  'attendance-all.filter.year-month': '年月',
+  'attendance-all.filter.department': '部門',
+  'attendance-all.filter.employee': '人員',
+  'attendance-all.filter.employee-keyword-placeholder': '輸入員工編號或姓名',
+
+  'attendance-all.column.employee-code': '員工編號',
+  'attendance-all.column.employee-name': '姓名',
+  'attendance-all.column.department': '部門',
+  'attendance-all.column.work-date': '日期',
+  'attendance-all.column.clock-in': '上班',
+  'attendance-all.column.clock-in-location': '上班地點',
+  'attendance-all.column.clock-out': '下班',
+  'attendance-all.column.clock-out-location': '下班地點',
+  'attendance-all.column.worked-hours': '工時',
+  'attendance-all.column.late': '遲到',
+  'attendance-all.column.early-leave': '早退',
+  'attendance-all.column.status': '狀態',
+  'attendance-all.column.source': '來源',
+
+  /**
+   * 我的出勤（計畫 06 §5 Stage 7，UI 定案 `docs/ui/12-ui-my-attendance.md`，已由使用者確認）。
+   */
+  'attendance-mine.heading': '出勤紀錄',
+  'attendance-mine.description': '查看本人當月的出勤紀錄與統計。',
+  'attendance-mine.retry': '重新載入',
+  'attendance-mine.empty': '這個月還沒有出勤紀錄。',
+  'attendance-mine.filter.year-month': '年月',
+
+  'attendance-mine.stats.attendance-days': '出勤',
+  'attendance-mine.stats.total-worked-hours': '總工時',
+  'attendance-mine.stats.late-days': '遲到',
+  'attendance-mine.stats.early-leave-days': '早退',
+  'attendance-mine.stats.absent-days': '缺勤',
+
+  'attendance-mine.column.work-date': '日期',
+  'attendance-mine.column.clock-in': '上班',
+  'attendance-mine.column.clock-in-location': '上班地點',
+  'attendance-mine.column.clock-out': '下班',
+  'attendance-mine.column.clock-out-location': '下班地點',
+  'attendance-mine.column.worked-hours': '工時',
+  'attendance-mine.column.late': '遲到',
+  'attendance-mine.column.early-leave': '早退',
+  'attendance-mine.column.status': '狀態',
+  'attendance-mine.column.source': '來源',
 
   /** 前端自己要說的話，見檔頭的「唯一的例外」。 */
   'error.system': '系統發生錯誤，請稍後再試。',

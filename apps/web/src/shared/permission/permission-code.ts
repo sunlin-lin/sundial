@@ -142,6 +142,18 @@ const PERMISSION_CODES = [
   // ——那一碼不在這份清單裡，前端本來就叫不到它。
   'attendance.records.list-by-date',
   'attendance.records.revoke-other',
+  // 全體出勤／我的出勤（計畫 06 §5 Stage 7，UI 定案 `docs/ui/09-ui-all-attendance.md`／
+  // `docs/ui/12-ui-my-attendance.md`）。兩碼逐字比對過
+  // `0043_seed_permission_codes_attendance_results_list.sql`（f32／f33）。
+  //
+  // **`list` 與 `list-own` 是兩支不同權限碼，不是一支端點內部判斷分支**（該 migration 檔頭）：
+  // `attendance.results.list` 是公司範圍（全體出勤，配人事／主管角色），`attendance.results.
+  // list-own` 是本人範圍、每一位員工都會有的權限碼（範圍固定為 token 推出的本人，不接受呼叫端
+  // 指定 employeeId）——與 `attendance.records.list-own-by-date` 是同一個判準：「本人範圍、不可能
+  // 查到別人」的端點才能配給每一位員工。兩碼都是查詢動作，符合前端規範 §4.4「選單項只能掛讀取類
+  // 動作」的判準。
+  'attendance.results.list',
+  'attendance.results.list-own',
 ] as const satisfies readonly ApiCommand[]
 
 /** 權限碼。全站判斷權限一律用這個型別，不用 `string`。 */

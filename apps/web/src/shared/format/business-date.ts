@@ -131,3 +131,23 @@ export const formatDateTime = (value: string | null | undefined): string => slic
  * ```
  */
 export const formatYearMonth = (value: string | null | undefined): string => sliceBusinessTime(value, YEAR_MONTH_LENGTH)
+
+/**
+ * 只取時刻（`HH:mm`），輸入是完整的 `datetime`（§9.2）。
+ *
+ * 借用 {@link formatDateTime} 裁到分鐘再取最後 5 碼——`dashboard-main.view.ts` 的
+ * `clockTimeDisplay` 已經用過同一招（該檔檔頭：重用已經做過的 null／時區標記防呆，不在這裡另外
+ * 重寫一次判斷）。這裡把演算法搬進 `shared/format/`：全體出勤（`attendance/all`）與我的出勤
+ * （`attendance/mine`）兩頁的「上班」「下班」欄位都只要時刻、不要日期（各自表格另有獨立的
+ * 「日期」欄），從第一天就有兩個使用者。**`dashboard-main.view.ts` 保留它自己原本的私有版本，
+ * 本輪不回頭改寫既有頁面**（不在本輪「全體出勤／我的出勤」兩頁的範圍內，見任務回報）。
+ *
+ * 與 `dashboard-main.view.ts` 的版本略有不同：這裡嚴格要求裁出來的字串長度剛好是
+ * {@link DATE_TIME_LENGTH}（代表 `formatDateTime` 真的解析出完整的日期＋時間）才取後 5 碼，
+ * 其餘情形（沒有值、只有日期沒有時間、讀不懂的字串）一律回 {@link EMPTY_DISPLAY}——
+ * 對一個不是「日期＋時間」形狀的字串硬取最後 5 碼沒有意義，寧可顯示沒有值。
+ */
+export const formatTimeOfDay = (value: string | null | undefined): string => {
+  const dateTime = formatDateTime(value)
+  return dateTime.length === DATE_TIME_LENGTH ? dateTime.slice(-5) : EMPTY_DISPLAY
+}

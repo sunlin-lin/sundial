@@ -110,6 +110,36 @@ export const MAIN_MENU: readonly MenuGroup[] = [
         routeName: 'attendance-daily-records',
         permissionCode: 'attendance.records.list-by-date',
       },
+      /**
+       * 全體出勤（計畫 06 §5 Stage 7，UI 定案 `docs/ui/09-ui-all-attendance.md` §「導覽結構」：
+       * 「人事作業 → 全體出勤」）。`permissionCode` 用 `attendance.results.list`——公司範圍的
+       * 查詢動作，與同目錄 `.route.ts` 的 `meta.permission` 同一個值。
+       */
+      {
+        labelKey: 'menu.attendance-all',
+        routeName: 'attendance-all',
+        permissionCode: 'attendance.results.list',
+      },
+    ],
+  },
+  /**
+   * 我的資料（計畫 06 §5 Stage 7，UI 定案 `docs/ui/12-ui-my-attendance.md` §「導覽結構」：
+   * 「我的資料 → 個資／出勤紀錄」）。這個分組先前不存在——**新增分組不搬動任何檔案**
+   * （§0.2 的整段理由），只在這裡多一筆。
+   *
+   * **只有「出勤紀錄」一項**：UI 12 的導覽結構同時列了「個資」，但那一頁不在本輪（計畫 06 Stage 7
+   * 的交付範圍是全體出勤／我的出勤兩頁）實作範圍內，因此這裡不虛列一個沒有對應路由的選單項——
+   * 等「個資」頁真的做出來，再補這一筆，不預先佔位（同 §1.5「先放共用區以備不時之需」的相同理由：
+   * 沒有對應路由的選單項一旦點下去無處可去，比少一個入口更糟）。
+   */
+  {
+    labelKey: 'menu.my-data',
+    items: [
+      {
+        labelKey: 'menu.attendance-mine',
+        routeName: 'attendance-mine',
+        permissionCode: 'attendance.results.list-own',
+      },
     ],
   },
 ]

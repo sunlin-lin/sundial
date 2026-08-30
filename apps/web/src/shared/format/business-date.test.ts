@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { formatDate, formatDateTime, formatYearMonth } from './business-date.ts'
+import { formatDate, formatDateTime, formatTimeOfDay, formatYearMonth } from './business-date.ts'
 import { EMPTY_DISPLAY } from './empty-display.ts'
 
 describe('日期顯示', () => {
@@ -58,6 +58,27 @@ describe('帶時區標記的字串一律不上畫面（§9.2，零例外）', ()
   test('沒有這道閘門的話，裁切會產出一個看起來完全正常的日期', () => {
     // 這一條斷言的是「為什麼要特別擋」：純裁切的結果與合法輸入無法分辨。
     expect('2026-04-14T14:30:00+08:00'.slice(0, 10)).toBe('2026-04-14')
+  })
+})
+
+describe('只取時刻（formatTimeOfDay）', () => {
+  test('完整日期＋時間取最後 5 碼', () => {
+    expect(formatTimeOfDay('2026-08-26 09:30:45')).toBe('09:30')
+    expect(formatTimeOfDay('2026-08-26 00:00:00')).toBe('00:00')
+  })
+
+  test('只有日期沒有時間：不是「日期＋時間」形狀，回 EMPTY_DISPLAY', () => {
+    expect(formatTimeOfDay('2026-08-26')).toBe(EMPTY_DISPLAY)
+  })
+
+  test('沒有值或帶時區標記：回 EMPTY_DISPLAY', () => {
+    expect(formatTimeOfDay(null)).toBe(EMPTY_DISPLAY)
+    expect(formatTimeOfDay(undefined)).toBe(EMPTY_DISPLAY)
+    expect(formatTimeOfDay('2026-04-14T14:30:00+08:00')).toBe(EMPTY_DISPLAY)
+  })
+
+  test('讀不懂的字串：formatDateTime 原樣輸出，長度不是 16 就回 EMPTY_DISPLAY', () => {
+    expect(formatTimeOfDay('yesterday')).toBe(EMPTY_DISPLAY)
   })
 })
 
