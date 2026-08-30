@@ -12,4 +12,7 @@ export type AttendanceResultsContext = {
   readonly clock: Clock
   /** 公司範圍。只能來自已驗證的 token（§4.2）。批次重算依此範圍掃描，不跨公司。 */
   readonly companyId: string
+  /** 操作者的 company_user id。`list-own`（Stage 7）用它由 `company_user → employee_id` 解出
+   * 呼叫者本人，比照 `attendance/records` 的既有先例。批次重算不需要它。 */
+  readonly operatorCompanyUserId: string
 }

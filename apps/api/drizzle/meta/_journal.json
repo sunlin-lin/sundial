@@ -302,6 +302,13 @@
       "when": 1788020759754,
       "tag": "0042_seed_permission_codes_attendance_records_list_own_by_date",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "5",
+      "when": 1788051577302,
+      "tag": "0043_seed_permission_codes_attendance_results_list",
+      "breakpoints": true
     }
   ]
 }
