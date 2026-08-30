@@ -3,7 +3,7 @@
  * 不得使用 Elysia 重新定義過的 `t.Integer`／`t.Number`／`t.Boolean`（可強制轉型版本），一律要改用
  * TypeBox 原生的 `Type.Integer`／`Type.Number`／`Type.Boolean`。
  *
- * ## 為什麼要擋：這件事已經真的發生過
+ * ## 為什麼要擋：這件事已經真的發生過，而且發生過兩次
  *
  * `shared/field-schemas.ts` 的 `Pagination` 檔頭寫得很清楚：Elysia 把 `t.Integer`／`t.Number`／
  * `t.Boolean` 重新定義成 `anyOf [string, integer]`（或對應型別），為的是讓 `?page=1` 這種字串輸入
@@ -14,6 +14,16 @@
  * 而前端規範禁止對 API 欄位用 `Number(`（`check:number-cast`）——於是畫面上長出一支專門繞過這條
  * 禁令的怪函式。**失敗模式是靜默的**：型別檢查、`bun run ci` 全綠，OpenAPI 契約看起來也「能用」，
  * 只有前端規範被迫另開一個逃生口才看得出來這裡有問題。
+ *
+ * **第二次是這支腳本自己漏掉的**：`shared/field-schemas.ts` 的 `Minutes`（`workedMinutes`／
+ * `lateMinutes`／`earlyLeaveMinutes`／`absenceMinutes`，`attendance-results.routes.ts` 的
+ * `response:` 使用）曾經同樣是 Elysia 的 `t.Integer`，卻沒有被抓到——原因是本檔原本的識別字追蹤
+ * 只認得到「本檔頂層 `const`」，`Minutes` 是 `import` 進來的識別字，在 `attendance-results.routes.ts`
+ * 裡沒有初始化運算式可以展開，因此連誤報都不會，直接被略過。這條後來已經修好（見下方「兩階段」與
+ * `collectFieldSchemasImportNames`），但值得記下：**跨檔案 import 的 schema 常數，尤其是
+ * `shared/field-schemas.ts` 這種全站共用的定義檔，一個沒改乾淨的 export 會同時污染每一個 import
+ * 它的模組，而且用「本檔常數」為範圍的追蹤天生就看不到它**——這正是這支腳本檔頭原本誠實列出的
+ * 盲區，不是憑空猜的風險。
  *
  * ## 判準：AST，不是正則，且刻意區分 `response:` 與 `body:`
  *
@@ -39,10 +49,18 @@
  *      全部 `*.routes.ts` 一致把 Elysia 的型別工具匯入為 `t`，把 TypeBox 原生工具匯入為 `Type`，
  *      見任一 `*.routes.ts` 檔頭的 import）。
  *    - 收集這段子樹裡出現的**每一個識別字**（`PropertyAccessExpression` 只收 `.expression` 那一側，
- *      不收 `.name`，避免把 `Integer`／`username` 這類屬性名誤認成變數）。對每個識別字，如果能在
- *      **同一個檔案**的頂層 `const` 宣告裡找到它，就展開它的初始化運算式，對展開後的子樹重複同樣
- *      兩件事——直到沒有新的本檔常數可以展開為止（`AttendanceRecordDetailSchema` 引用
- *      `AccuracyMeters`、`AccuracyMeters` 是 `t.Integer(...)`，就是靠這一層展開才追得到）。
+ *      不收 `.name`，避免把 `Integer`／`username` 這類屬性名誤認成變數）。對每個識別字，依序試兩個
+ *      來源展開它的初始化運算式，對展開後的子樹重複同樣兩件事——直到沒有新的常數可以展開為止：
+ *      1. **同一個檔案**的頂層 `const` 宣告（`AttendanceRecordDetailSchema` 引用
+ *         `AccuracyMeters`、`AccuracyMeters` 是 `t.Integer(...)`，就是靠這一層展開才追得到）；
+ *      2. 查不到 1 的話，看這個識別字是不是**從 `shared/field-schemas.ts` 具名匯入**的
+ *         （`collectFieldSchemasImportNames`：比對 import 宣告的 module specifier 是不是以
+ *         `/shared/field-schemas.ts` 結尾——本專案一律用相對路徑＋`.ts` 副檔名 import，沒有路徑
+ *         別名，見任一 `*.routes.ts` 的 import），是的話就到**預先讀取、解析過一次**的
+ *         `field-schemas.ts` 頂層 `const` 表裡查它匯出時的初始化運算式（`attendance-results.
+ *         routes.ts` 的 `Minutes` 就是靠這一層才追得到——這正是本檔曾經漏掉、後來補上的那個盲區，
+ *         見上方「為什麼要擋」）。這一步只認 `shared/field-schemas.ts` 這一份全站共用檔，其餘任何
+ *         跨檔案 import 仍然是下面「抓不到什麼」列的盲區。
  *
  * **request 方向不受限制**：`body:` 底下用 `t.Integer` 是對的，那正是它存在的理由（見上方
  * field-schemas.ts 的引用）。這支腳本只從 `response:` 出發做識別字追蹤，`body:` 物件字面值本身
@@ -51,11 +69,19 @@
  *
  * ## 抓不到什麼
  *
- * - **跨檔案引用的 schema**：識別字追蹤只認得到「本檔頂層 `const` 宣告」，`import` 進來的識別字
- *   （例如 `field-schemas.ts` 的 `Nullable`／`Uuid`／`Pagination`）在本檔裡沒有初始化運算式可以
- *   展開，因此不會被誤報，也追不進去看它內部乾不乾淨——`Pagination` 已經在 `field-schemas.ts`
- *   自己修好，這支腳本並不「知道」這件事，只是因為看不到它的定義，既不會抓到也不會誤判成違規。
- *   `field-schemas.ts` 本身不在 `modules/` 底下，也不會被這支腳本直接掃到。
+ * - **跨檔案引用、但不是從 `shared/field-schemas.ts` 匯入的 schema**：識別字追蹤在「本檔頂層
+ *   `const`」與「從 `shared/field-schemas.ts` 匯入」這兩個來源都查不到時就會放棄——例如
+ *   `field-schemas.ts` 自己 export 的 `Nullable`／`Uuid`（這兩個不是可強制轉型型別，查不到也不會
+ *   誤判成違規，只是這支腳本沒有實際去看它們乾不乾淨），或任何從 `shared/` 底下其他檔案、或從
+ *   別的業務模組匯入的常數，都不在追蹤範圍內。**只涵蓋 `field-schemas.ts` 是刻意縮小的範圍**，
+ *   不是完整的跨模組解析——理由見下方「把 Elysia 的 `t` 匯入成別的名字」同一種取捨：抓一個全站
+ *   共用、最容易一次污染多個模組的檔案，比起蓋一套通用的模組解析器，成本低很多，也還沒有第二個
+ *   案例證明需要更廣。
+ * - **`shared/field-schemas.ts` 的 import 寫法必須是相對路徑，且以 `/shared/field-schemas.ts`
+ *   結尾**：判準是比對 module specifier 文字的尾端，不是真的解析檔案系統路徑（與本檔其餘識別字
+ *   追蹤「讀原始碼字面」同一種立場）。改用 tsconfig 路徑別名（例如 `@shared/field-schemas`）、
+ *   或把檔案搬到別的相對深度但保留完全不同的檔名，這支腳本會認不出來，是與「把 `t` 匯入成別的
+ *   名字」相同性質的限制。
  * - **動態組出來的 schema**：用迴圈、`.map()`、或執行期組出來的欄位物件，識別字追蹤只認得到
  *   「直接寫出來的 `const` 宣告」，組合出來的中介值不在追蹤範圍內。
  * - **`.post(...)` 的路由設定不是字面值物件、而是由外部函式回傳整包設定再展開**：本專案目前每一
@@ -70,11 +96,15 @@
  *
  * 掃到 0 個 `response:` 宣告必須失敗（同 `check-attendance-recalc.ts`／`check-audit-transaction.ts`
  * 的理由：`modules/` 搬家、`*.routes.ts` 改名、`.post(` 呼叫形狀改變，都會讓這支腳本照跑、照綠、
- * 零命中，而「回應方向不得可強制轉型」這條規則就在沒有人察覺的情況下失效了）。另外用一份內建樣本
- * 驗證判斷邏輯本身，涵蓋兩種違規（`response` 直接使用 `t.Integer`；`response` 引用的本檔常數用了
- * `t.Number`）與兩種合法形狀（`response` 用 `Type.Integer`；`body` 用 `t.Integer`，且該常數從未被
- * `response` 引用）——這份樣本不依賴 repo 現況，即使有一天全專案的欄位都寫對了，這一項仍然證明得了
- * 腳本擋得住東西。
+ * 零命中，而「回應方向不得可強制轉型」這條規則就在沒有人察覺的情況下失效了）。`shared/
+ * field-schemas.ts` 找不到也必須失敗，理由相同：跨檔案追蹤那一步會安靜地退化成「查不到就跳過」，
+ * 而不會有任何錯誤提示這一半的規則已經失效。另外用一份內建樣本驗證判斷邏輯本身，涵蓋三種違規
+ * （`response` 直接使用 `t.Integer`；`response` 引用的本檔常數用了 `t.Number`；`response` 引用的
+ * 常數是從 `shared/field-schemas.ts` 具名匯入，匯出時是 `t.Integer`）與兩種合法形狀（`response`
+ * 用 `Type.Integer`；`body` 用 `t.Integer`，且該常數從未被 `response` 引用）——這份樣本不依賴
+ * repo 現況（跨檔案那一項甚至不讀真正的 `field-schemas.ts`，而是自帶一份假樣本，見
+ * `SELF_TEST_FIELD_SCHEMAS_SOURCE`），即使有一天全專案的欄位都寫對了，這一項仍然證明得了腳本擋得
+ * 住東西。
  *
  * 執行：`bun run check:response-coercion`（已串進 `bun run ci`，緊接在 `check:attendance-recalc`
  * 之後）。
@@ -89,6 +119,14 @@ const API_ROOT = resolve(fileURLToPath(import.meta.url), '../..')
 
 /** 規則的定義域：端點的 `response:` 只可能宣告在業務模組的 `*.routes.ts` 裡。 */
 const SCAN_ROOT = join(API_ROOT, 'src/modules')
+
+/** 全站唯一「跨檔案 import 也要追」的例外：這份共用 schema 檔的一個沒改乾淨的 export，
+ * 會同時污染每一個 import 它的模組（見檔頭「為什麼要擋」的 `Minutes` 那段）。 */
+const FIELD_SCHEMAS_FILE = join(API_ROOT, 'src/shared/field-schemas.ts')
+
+/** 判斷一個 import 宣告是不是在匯入 {@link FIELD_SCHEMAS_FILE}：比對 module specifier 文字的
+ * 尾端，不解析檔案系統路徑（見檔頭「抓不到什麼」對這個取捨的說明）。 */
+const FIELD_SCHEMAS_IMPORT_SUFFIX = '/shared/field-schemas.ts'
 
 /** Elysia 的型別工具在本專案一律匯入為這個名字（見任一 `*.routes.ts` 的 import）。 */
 const ELYSIA_TYPE_NAMESPACE = 't'
@@ -182,18 +220,66 @@ const collectTopLevelConstDeclarations = (sourceFile: ts.SourceFile): ReadonlyMa
   return declarations
 }
 
+/** 從一支 `*.routes.ts` 的 import 宣告裡，找出「從 {@link FIELD_SCHEMAS_FILE} 具名匯入」的
+ * 本檔識別字 → 匯出名稱（絕大多數情況兩者文字相同，只有 `import { X as Y }` 這種改名寫法才不同；
+ * 本專案目前沒有任何 `*.routes.ts` 這樣寫，這裡仍處理是為了不讓改名寫法被誤判成查不到而漏報）。
+ * 只認相對路徑＋比對尾端文字，判準與 {@link FIELD_SCHEMAS_IMPORT_SUFFIX} 一致，見檔頭。 */
+const collectFieldSchemasImportNames = (sourceFile: ts.SourceFile): ReadonlyMap<string, string> => {
+  const names = new Map<string, string>()
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement)) continue
+    if (!ts.isStringLiteral(statement.moduleSpecifier)) continue
+    if (!statement.moduleSpecifier.text.endsWith(FIELD_SCHEMAS_IMPORT_SUFFIX)) continue
+    const namedBindings = statement.importClause?.namedBindings
+    if (namedBindings === undefined || !ts.isNamedImports(namedBindings)) continue
+    for (const element of namedBindings.elements) {
+      names.set(element.name.text, (element.propertyName ?? element.name).text)
+    }
+  }
+  return names
+}
+
+/**
+ * 把「本檔頂層 `const`」與「從 `shared/field-schemas.ts` 具名匯入的常數」合成單一查詢函式，
+ * 供 {@link evaluateSchemaExpression} 統一查詢——呼叫端不需要知道一個識別字最後是在本檔展開、
+ * 還是跨到 field-schemas.ts 才展開得出來，兩者對「該不該報違規」這個問題的答案是同一套邏輯。
+ *
+ * 本檔常數優先於匯入：兩者不可能同名（同一個識別字不能既是本檔宣告又是 import 進來的，
+ * TypeScript 本身就不允許），這裡的查詢順序只是清楚表達優先順序，不影響實際結果。
+ */
+const buildConstResolver = (
+  localConsts: ReadonlyMap<string, ts.Expression>,
+  fieldSchemasImportNames: ReadonlyMap<string, string>,
+  fieldSchemaExports: ReadonlyMap<string, ts.Expression>,
+): ((name: string) => ts.Expression | undefined) => {
+  return (name) => {
+    const local = localConsts.get(name)
+    if (local !== undefined) return local
+    const exportedName = fieldSchemasImportNames.get(name)
+    return exportedName === undefined ? undefined : fieldSchemaExports.get(exportedName)
+  }
+}
+
 /**
  * 對一段「schema 運算式」做識別字追蹤（closure），把沿路發現的違規收進 `violations`。
  *
- * @param chain 走到這裡沿路展開過的本檔常數名稱（由外往內），只用來組違規訊息，不影響判斷本身。
- *   空陣列代表這段運算式就是 `response:` 底下的字面值本身，不是展開某個常數展開出來的。
+ * @param chain 走到這裡沿路展開過的常數名稱（由外往內，不分本檔或跨檔案匯入），只用來組違規訊息，
+ *   不影響判斷本身。空陣列代表這段運算式就是 `response:` 底下的字面值本身，不是展開某個常數
+ *   展開出來的。
+ * @param resolveConst 由 {@link buildConstResolver} 產生：給一個識別字文字，回傳它的初始化
+ *   運算式（查不到就是 `undefined`，代表抓不到——見檔頭「抓不到什麼」）。
  * @param visited 已經展開過的常數名稱，避免同一個常數在同一次呼叫鏈裡被重複展開（理論上 schema
  *   常數不會互相循環引用，這裡只是防禦）。
+ *
+ * 違規的位置一律取自 `call.getSourceFile()`，不是呼叫端傳進來的那份 `sourceFile`——展開到
+ * `shared/field-schemas.ts` 的常數之後，`call` 這個節點實際上屬於 field-schemas.ts 那棵語法樹，
+ * 位置理所當然要指向那裡，而不是最初發起掃描的那支 `*.routes.ts`（`ts.Node.getSourceFile()`
+ * 回傳的是節點實際所屬的語法樹根節點，不受「是哪一次呼叫觸發展開」影響，見 `recordViolation`）。
  */
 const evaluateSchemaExpression = (
   node: ts.Node,
   chain: readonly string[],
-  localConsts: ReadonlyMap<string, ts.Expression>,
+  resolveConst: (name: string) => ts.Expression | undefined,
   visited: Set<string>,
   onViolation: (call: ts.CallExpression, chain: readonly string[]) => void,
 ): void => {
@@ -201,10 +287,10 @@ const evaluateSchemaExpression = (
 
   for (const name of collectIdentifierNames(node)) {
     if (visited.has(name)) continue
-    const declaration = localConsts.get(name)
-    if (declaration === undefined) continue // 抓不到：跨檔案引用或不是 const 宣告，見檔頭。
+    const declaration = resolveConst(name)
+    if (declaration === undefined) continue // 抓不到：跨檔案引用（field-schemas.ts 除外）或不是 const 宣告，見檔頭。
     visited.add(name)
-    evaluateSchemaExpression(declaration, [...chain, name], localConsts, visited, onViolation)
+    evaluateSchemaExpression(declaration, [...chain, name], resolveConst, visited, onViolation)
   }
 }
 
@@ -253,19 +339,40 @@ type FileScanResult = {
   readonly responseDeclarationCount: number
 }
 
-/** 掃單一檔案（或內建樣本字串）。 */
-const scanSource = (code: string, file: string): FileScanResult => {
+/**
+ * 掃單一檔案（或內建樣本字串）。
+ *
+ * @param fieldSchemaExports `shared/field-schemas.ts` 頂層 `const` 表（識別字 → 初始化運算式），
+ *   由呼叫端預先讀取、解析過一次再傳進來——每支 `*.routes.ts` 各自重新解析 field-schemas.ts
+ *   一次沒有必要，這份表對整次掃描而言是常數。
+ * @param reportedPositions 違規去重集合，**呼叫端可以跨多次 `scanSource` 呼叫共用同一個
+ *   `Set`**：同一個 `shared/field-schemas.ts` 常數可能被多支 `*.routes.ts` 分別 import 引用，
+ *   共用集合能避免同一處 field-schemas.ts 的違規因為被多個模組引用而重複列出（本檔內常數重複
+ *   引用——例如 `CommonFailureResponses`——則不需要跨呼叫共用，但共用一個空集合不影響正確性）。
+ *   不傳的話每次呼叫各自建一個新的，內建樣本測試就是這樣用。
+ */
+const scanSource = (
+  code: string,
+  file: string,
+  fieldSchemaExports: ReadonlyMap<string, ts.Expression>,
+  reportedPositions: Set<string> = new Set(),
+): FileScanResult => {
   const sourceFile = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
   const localConsts = collectTopLevelConstDeclarations(sourceFile)
+  const fieldSchemasImportNames = collectFieldSchemasImportNames(sourceFile)
+  const resolveConst = buildConstResolver(localConsts, fieldSchemasImportNames, fieldSchemaExports)
   const violations: Violation[] = []
-  // 同一個常數常被多支端點的 `response:` 共同引用（例如 `CommonFailureResponses`），
-  // 展開後會落在同一個原始碼位置——用位置字串去重，避免同一處違規因為被多支端點引用而重複列出。
-  const reportedPositions = new Set<string>()
   let responseDeclarationCount = 0
 
   const recordViolation = (call: ts.CallExpression, chain: readonly string[]): void => {
-    const { line, character } = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile))
-    const position = `${String(line + 1)}:${String(character + 1)}`
+    // 用 `call` 自己的 `getSourceFile()`，不是本函式的 `sourceFile`：展開到 field-schemas.ts
+    // 常數之後，`call` 屬於 field-schemas.ts 那棵語法樹，位置與檔名都要指向那裡（見
+    // `evaluateSchemaExpression` 檔頭）。本檔內的違規則兩者是同一個物件，行為不變。
+    const callSourceFile = call.getSourceFile()
+    const { line, character } = callSourceFile.getLineAndCharacterOfPosition(call.getStart(callSourceFile))
+    // 去重鍵含檔名：`reportedPositions` 可能跨多支 `*.routes.ts` 的掃描共用（見上方參數說明），
+    // 只用行號欄號去重會讓不同檔案裡湊巧同一行同一欄的違規互相蓋掉。
+    const position = `${callSourceFile.fileName}:${String(line + 1)}:${String(character + 1)}`
     if (reportedPositions.has(position)) return
     reportedPositions.add(position)
 
@@ -274,10 +381,10 @@ const scanSource = (code: string, file: string): FileScanResult => {
     const viaText = chain.length === 0 ? 'response 直接使用' : `response 經由 ${chain.join(' → ')} 引用到的常數使用`
 
     violations.push({
-      file,
+      file: callSourceFile.fileName,
       line: line + 1,
       column: character + 1,
-      source: call.getText(sourceFile).split('\n')[0]?.trim() ?? '',
+      source: call.getText(callSourceFile).split('\n')[0]?.trim() ?? '',
       detail: `${viaText}了 Elysia 的 t.${methodName}（可強制轉型），回應方向必須改用 TypeBox 原生的 ${nativeReplacement}`,
     })
   }
@@ -289,7 +396,7 @@ const scanSource = (code: string, file: string): FileScanResult => {
       if (responseProperty !== undefined && ts.isObjectLiteralExpression(responseProperty.initializer)) {
         responseDeclarationCount += 1
         for (const expression of responseEntryExpressions(responseProperty.initializer)) {
-          evaluateSchemaExpression(expression, [], localConsts, new Set(), recordViolation)
+          evaluateSchemaExpression(expression, [], resolveConst, new Set(), recordViolation)
         }
       }
     }
@@ -323,12 +430,31 @@ const listFiles = (directory: string): string[] => {
 
 const files = listFiles(SCAN_ROOT).filter((file) => file.endsWith('.routes.ts'))
 
+/** `shared/field-schemas.ts` 只需要讀取、解析一次，供本次掃描全部 `*.routes.ts` 共用
+ * （見 `scanSource` 的 `fieldSchemaExports` 參數說明）。檔案不存在時退化成空表——不是靜靜放行，
+ * 下面的自我檢查會因此失敗（見 `selfCheckFailures` 的 `FIELD_SCHEMAS_FILE` 檢查）。 */
+const fieldSchemasExists = existsSync(FIELD_SCHEMAS_FILE)
+const fieldSchemaExports: ReadonlyMap<string, ts.Expression> = fieldSchemasExists
+  ? collectTopLevelConstDeclarations(
+      ts.createSourceFile(
+        repoPath(FIELD_SCHEMAS_FILE),
+        readFileSync(FIELD_SCHEMAS_FILE, 'utf8'),
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TS,
+      ),
+    )
+  : new Map()
+
 const violations: Violation[] = []
 let totalResponseDeclarationCount = 0
+// 跨檔案共用：同一個 field-schemas.ts 常數若被多支 *.routes.ts 引用，違規只列一次
+// （見 `scanSource` 的 `reportedPositions` 參數說明）。
+const reportedPositions = new Set<string>()
 
 for (const file of files) {
   const source = readFileSync(file, 'utf8')
-  const result = scanSource(source, repoPath(file))
+  const result = scanSource(source, repoPath(file), fieldSchemaExports, reportedPositions)
   violations.push(...result.violations)
   totalResponseDeclarationCount += result.responseDeclarationCount
 }
@@ -338,7 +464,7 @@ for (const file of files) {
 // ---------------------------------------------------------------------------
 
 /**
- * 內建樣本涵蓋四支「端點」，兩種違規、兩種合法形狀：
+ * 內建樣本涵蓋五支「端點」，三種違規、兩種合法形狀：
  *
  * 1. `valid-native`：`response` 用 `Type.Integer(...)`（TypeBox 原生）→ 合法。
  * 2. `valid-request-only`：`body` 用 `t.Integer(...)`，但這個常數從未被任何 `response` 引用
@@ -346,12 +472,18 @@ for (const file of files) {
  * 3. `invalid-direct`：`response` 直接寫 `t.Integer(...)` → 違規（不經任何常數，`chain` 為空）。
  * 4. `invalid-via-const`：`response` 引用本檔常數 `InvalidLocalConst`，該常數是 `t.Number(...)`
  *    → 違規（`chain` 長度 1，證明識別字追蹤真的有展開常數，不是只看字面值本身）。
+ * 5. `invalid-via-field-schemas-import`：`response` 引用從 `shared/field-schemas.ts` 具名匯入的
+ *    `ExternalCoercibleConst`，本檔完全查不到它的宣告（不是本檔頂層 `const`）→ 違規，且違規位置
+ *    必須落在 {@link SELF_TEST_FIELD_SCHEMAS_FILE} 而不是本樣本自己——這一項專門證明跨檔案追蹤
+ *    真的有走到 `shared/field-schemas.ts`，不是只認得到本檔常數（見檔頭「為什麼要擋」的 `Minutes`
+ *    那段：這正是這支腳本曾經漏掉的情況）。
  *
- * 預期：4 個 `response:` 宣告，2 則違規（3、4）。
+ * 預期：5 個 `response:` 宣告，3 則違規（3、4、5）。
  */
 const SELF_TEST_SAMPLE = [
   "import { Elysia, t } from 'elysia'",
   "import { Type } from '@sinclair/typebox'",
+  "import { ExternalCoercibleConst } from '../../../shared/field-schemas.ts'",
   'const ValidResponseField = Type.Integer({ minimum: 0 })',
   'const InvalidLocalConst = t.Number({ minimum: -90 })',
   '',
@@ -372,15 +504,45 @@ const SELF_TEST_SAMPLE = [
   '    body: t.Object({}),',
   '    response: { 200: envelope(t.Object({ latitude: InvalidLocalConst })) },',
   '  })',
+  "  .post('/self-test/invalid-via-field-schemas-import', handler, {",
+  '    body: t.Object({}),',
+  '    response: { 200: envelope(t.Object({ minutes: ExternalCoercibleConst })) },',
+  '  })',
 ].join('\n')
 
-const SELF_TEST_EXPECTED_RESPONSE_DECLARATIONS = 4
-const SELF_TEST_EXPECTED_VIOLATIONS = 2
+/** 自我檢查跨檔案追蹤那一步用的假 `shared/field-schemas.ts`：**不讀真正的 field-schemas.ts**，
+ * 理由是這一項要驗證的是「查不到本檔常數時，會不會去查 field-schemas.ts 的匯出」這個機制本身，
+ * 而不是「field-schemas.ts 現在的內容乾不乾淨」——後者會隨 repo 演進而變，用真檔案會讓這項自我
+ * 檢查在某一天全站欄位都寫對之後失去意義（同一份顧慮見上方 §7.2 說明）。 */
+const SELF_TEST_FIELD_SCHEMAS_FILE = '<self-test>/shared/field-schemas.ts'
+const SELF_TEST_FIELD_SCHEMAS_SOURCE = [
+  "import { t } from 'elysia'",
+  'export const ExternalCoercibleConst = t.Integer({ minimum: 0 })',
+].join('\n')
+const selfTestFieldSchemaExports = collectTopLevelConstDeclarations(
+  ts.createSourceFile(
+    SELF_TEST_FIELD_SCHEMAS_FILE,
+    SELF_TEST_FIELD_SCHEMAS_SOURCE,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  ),
+)
+
+const SELF_TEST_EXPECTED_RESPONSE_DECLARATIONS = 5
+const SELF_TEST_EXPECTED_VIOLATIONS = 3
 
 const selfCheckFailures: string[] = []
 
 if (files.length === 0) {
   selfCheckFailures.push(`掃到 0 個 *.routes.ts 檔案（${repoPath(SCAN_ROOT)}）：目錄可能搬家了，這次掃描等於沒跑`)
+}
+
+if (!fieldSchemasExists) {
+  selfCheckFailures.push(
+    `找不到 ${repoPath(FIELD_SCHEMAS_FILE)}：跨檔案追蹤的那一半（見檔頭「為什麼要擋」的 Minutes` +
+      '一段）已經退化成空表，任何從這份檔案匯入的可強制轉型常數都不會被抓到',
+  )
 }
 
 // 命中 0 個 response: 宣告必須失敗（§7.2 的核心要求，見檔頭）：modules/ 搬家、*.routes.ts 改名、
@@ -392,7 +554,7 @@ if (totalResponseDeclarationCount === 0) {
   )
 }
 
-const selfTestResult = scanSource(SELF_TEST_SAMPLE, '<self-test>')
+const selfTestResult = scanSource(SELF_TEST_SAMPLE, '<self-test>', selfTestFieldSchemaExports)
 if (selfTestResult.responseDeclarationCount !== SELF_TEST_EXPECTED_RESPONSE_DECLARATIONS) {
   selfCheckFailures.push(
     `內建樣本應找到 ${String(SELF_TEST_EXPECTED_RESPONSE_DECLARATIONS)} 個 response: 宣告，` +

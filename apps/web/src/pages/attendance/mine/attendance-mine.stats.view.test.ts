@@ -40,7 +40,7 @@ describe('summarizeAttendanceMineMonth：月度彙總逐格測試（UI 12「當�
     const items = [
       buildItem({ workedMinutes: 480 }),
       buildItem({ workedMinutes: 480 }),
-      buildItem({ workedMinutes: '480' }),
+      buildItem({ workedMinutes: 480 }),
     ]
     expect(summarizeAttendanceMineMonth(items).totalWorkedMinutes).toBe(1440)
   })
@@ -63,11 +63,6 @@ describe('summarizeAttendanceMineMonth：月度彙總逐格測試（UI 12「當�
   test('缺勤天數＝absenceMinutes > 0 的工作日數', () => {
     const items = [buildItem({ absenceMinutes: 480 }), buildItem({ absenceMinutes: 0 })]
     expect(summarizeAttendanceMineMonth(items).absentDays).toBe(1)
-  })
-
-  test('workedMinutes 等欄位是 string 時也能正確加總（後端形狀缺口，見 shared/format/duration.ts 檔頭）', () => {
-    const items = [buildItem({ lateMinutes: '15' }), buildItem({ lateMinutes: 0 })]
-    expect(summarizeAttendanceMineMonth(items).lateDays).toBe(1)
   })
 })
 

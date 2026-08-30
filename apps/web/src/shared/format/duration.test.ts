@@ -1,18 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { formatHoursFromMinutes, toSafeMinutes } from './duration.ts'
-
-describe('toSafeMinutes：string | number 安全轉整數，不用 Number()', () => {
-  test('已經是 number 時直接回傳', () => {
-    expect(toSafeMinutes(90)).toBe(90)
-    expect(toSafeMinutes(0)).toBe(0)
-  })
-
-  test('string 逐位累加成整數', () => {
-    expect(toSafeMinutes('90')).toBe(90)
-    expect(toSafeMinutes('0')).toBe(0)
-    expect(toSafeMinutes('511')).toBe(511)
-  })
-})
+import { formatHoursFromMinutes } from './duration.ts'
 
 describe('formatHoursFromMinutes：分鐘 → 「H.M」小時數字字串，不含單位', () => {
   test('整數小時', () => {

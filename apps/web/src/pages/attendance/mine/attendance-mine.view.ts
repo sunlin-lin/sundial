@@ -8,7 +8,7 @@
  */
 import { formatDate, formatTimeOfDay } from '../../../shared/format/business-date.ts'
 import { EMPTY_DISPLAY } from '../../../shared/format/empty-display.ts'
-import { formatHoursFromMinutes, toSafeMinutes } from '../../../shared/format/duration.ts'
+import { formatHoursFromMinutes } from '../../../shared/format/duration.ts'
 import {
   attendanceResultStatusPresentations,
   type AttendanceResultStatusPresentation,
@@ -66,9 +66,9 @@ export const toDisplayRows = (
     clockInLocationDisplay: EMPTY_DISPLAY,
     clockOutDisplay: formatTimeOfDay(item.clockOutAt),
     clockOutLocationDisplay: EMPTY_DISPLAY,
-    workedHoursDisplay: `${formatHoursFromMinutes(toSafeMinutes(item.workedMinutes))} ${translate('attendance.unit.hours')}`,
-    lateDisplay: minutesDisplay(toSafeMinutes(item.lateMinutes), translate),
-    earlyLeaveDisplay: minutesDisplay(toSafeMinutes(item.earlyLeaveMinutes), translate),
+    workedHoursDisplay: `${formatHoursFromMinutes(item.workedMinutes)} ${translate('attendance.unit.hours')}`,
+    lateDisplay: minutesDisplay(item.lateMinutes, translate),
+    earlyLeaveDisplay: minutesDisplay(item.earlyLeaveMinutes, translate),
     sourceLabel: sourceDisplay(item.sourceTypeCode, translate),
     statuses: toStatusBadges(item.statuses, translate),
   }))

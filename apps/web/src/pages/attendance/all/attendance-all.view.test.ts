@@ -59,13 +59,6 @@ describe('toDisplayRows：全體出勤列表呈現', () => {
     expect(nonZero?.earlyLeaveDisplay).toBe('10 attendance.unit.minutes')
   })
 
-  test('workedMinutes 等欄位是 string 時也能正確處理（後端形狀缺口，見 shared/format/duration.ts 檔頭）', () => {
-    const [row] = toDisplayRows([buildItem({ workedMinutes: '510', lateMinutes: '15', earlyLeaveMinutes: '0' })], $t)
-    expect(row?.workedHoursDisplay).toBe('8.5 attendance.unit.hours')
-    expect(row?.lateDisplay).toBe('15 attendance.unit.minutes')
-    expect(row?.earlyLeaveDisplay).toBe(EMPTY_DISPLAY)
-  })
-
   test('狀態是陣列：同一列可以同時出現多個狀態，不是單一互斥值（UI 09 明文）', () => {
     const [row] = toDisplayRows([buildItem({ statuses: ['LATE', 'EARLY_LEAVE'] })], $t)
     expect(row?.statuses).toEqual([

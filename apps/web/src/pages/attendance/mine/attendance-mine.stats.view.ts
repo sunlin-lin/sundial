@@ -11,7 +11,7 @@
  * 分開的理由是讓「彙總邏輯對不對」與「文案怎麼組」各自能被逐格測試覆蓋，且彙總邏輯不會因為
  * 語系檔的 key 改名而牽動測試。
  */
-import { formatHoursFromMinutes, toSafeMinutes } from '../../../shared/format/duration.ts'
+import { formatHoursFromMinutes } from '../../../shared/format/duration.ts'
 import type { MessageKey, TranslateMessage } from '../../../shared/i18n/messages.ts'
 import type { AttendanceMineListItem } from './attendance-mine.view.ts'
 
@@ -32,10 +32,10 @@ export type AttendanceMineMonthSummary = {
 
 export const summarizeAttendanceMineMonth = (items: readonly AttendanceMineListItem[]): AttendanceMineMonthSummary => ({
   attendanceDays: items.length,
-  totalWorkedMinutes: items.reduce((sum, item) => sum + toSafeMinutes(item.workedMinutes), 0),
-  lateDays: items.filter((item) => toSafeMinutes(item.lateMinutes) > 0).length,
-  earlyLeaveDays: items.filter((item) => toSafeMinutes(item.earlyLeaveMinutes) > 0).length,
-  absentDays: items.filter((item) => toSafeMinutes(item.absenceMinutes) > 0).length,
+  totalWorkedMinutes: items.reduce((sum, item) => sum + item.workedMinutes, 0),
+  lateDays: items.filter((item) => item.lateMinutes > 0).length,
+  earlyLeaveDays: items.filter((item) => item.earlyLeaveMinutes > 0).length,
+  absentDays: items.filter((item) => item.absenceMinutes > 0).length,
 })
 
 /** 一格統計卡片：標題＋算好的顯示字串（模板只讀這裡，§1.4）。 */

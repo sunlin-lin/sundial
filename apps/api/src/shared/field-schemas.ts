@@ -81,8 +81,21 @@ export const Money = t.String({ pattern: '^-?\\d{1,13}(?:\\.\\d{1,2})?$' })
 /**
  * 時間長度，一律以**整數分鐘**表示（§4.7）。用小數小時（8.33）做加總，
  * 月結時會累積出數十分鐘誤差。跨午夜的時刻另以「當日第幾分鐘」表示，允許超過 1440。
+ *
+ * **用 TypeBox 原生的 `Type.Integer`，不是 Elysia 的 `t.Integer`。** 全站目前唯一的引用點是
+ * `attendance-results.routes.ts` 的 `workedMinutes`／`lateMinutes`／`earlyLeaveMinutes`／
+ * `absenceMinutes`，四個都是**回應**方向（後端算出來寫回去的值，不是使用者輸入）。理由與下面
+ * {@link Pagination} 檔頭完全相同：Elysia 把 `t.Integer` 重新定義成可強制轉型的
+ * `anyOf [string, integer]`，回應方向留著它，OpenAPI 上這四欄會是 `string | integer`，
+ * 前端 `gen:api` 產生的型別跟著是 `string | number`，逼前端長出繞過 `check:number-cast` 的怪函式
+ * ——`check-response-coercion.ts` 檔頭記錄了這件事真的發生過一次（`AccuracyMeters`），這是同一個
+ * 坑的第二個受害者，差別只在於這次是跨檔案 import 才踩到，因此原本的掃描器看不到。
+ *
+ * 如果日後有端點要在 **request** 方向使用「使用者輸入的分鐘數」，不要改回這個常數——比照
+ * {@link PageRequest} 與 {@link Pagination} 分屬兩個常數的做法，另外宣告一個 `t.Integer` 版本，
+ * 不要讓同一個名字在兩個方向之間搖擺。
  */
-export const Minutes = t.Integer({ minimum: 0 })
+export const Minutes = Type.Integer({ minimum: 0 })
 
 /**
  * 語系。目前只有繁體中文；新增語系是相容變更（新增列舉值且舊值仍支援，§1.6）。
