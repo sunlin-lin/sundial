@@ -79,7 +79,13 @@ export {
   AttendanceResultStatusCode,
   type AttendanceResultStatusCodeValue,
 } from './attendance-results.ts'
+export {
+  attendanceCorrectionRequests,
+  AttendanceCorrectionRequestStatusCode,
+  type AttendanceCorrectionRequestStatusCodeValue,
+} from './attendance-correction-requests.ts'
 
+import { attendanceCorrectionRequests } from './attendance-correction-requests.ts'
 import { attendanceRecords } from './attendance-records.ts'
 import { attendanceResults } from './attendance-results.ts'
 import { attendanceSettings } from './attendance-settings.ts'
@@ -234,6 +240,15 @@ export type CompanyScopedTable =
    * 之前**清空——與 `attendanceRecords` 是同一種依賴形狀，放在它旁邊即可。
    */
   | typeof attendanceResults
+  /**
+   * `attendance_correction_requests` 有 `company_id`，因此屬於這個聯集（實作計畫
+   * `plans/06-attendance.md` §5 Stage 8）。**字典本身沒有 `company_id` 欄位**，新增理由見
+   * `db/schema/attendance-correction-requests.ts` 檔頭第 1 點。**沒有任何其他表以外鍵指向它**
+   * （`attendance_records.source_id` 字面上指向它，但這欄目前沒有 FK，見 `db/schema/
+   * attendance-records.ts` 檔頭第 2 點），它自己以複合外鍵指向 `employees`／`employee_employments`，
+   * 因此**必須排在這兩張表之前**清空——與 `attendanceRecords` 同一種依賴形狀。
+   */
+  | typeof attendanceCorrectionRequests
 
 /**
  * 對「窮舉一個聯集的所有成員」做編譯期檢查的小工具，供下方 {@link companyScopedTablesInDeleteOrder} 使用。
@@ -321,6 +336,9 @@ export const companyScopedTablesInDeleteOrder = exhaustiveCompanyScopedTables<Co
   // 出勤判定結果：複合外鍵指向 employees，必須排在它之前清空；與 attendanceRecords 同一種
   // 依賴形狀（見上方型別聯集的註解），彼此之間互不依賴。
   attendanceResults,
+  // 補打卡申請：複合外鍵指向 employees／employeeEmployments，必須排在兩者之前清空；與
+  // attendanceRecords 同一種依賴形狀（見上方型別聯集的註解），彼此之間互不依賴。
+  attendanceCorrectionRequests,
   employeeEmployments,
   employees,
   shiftDefinitions,

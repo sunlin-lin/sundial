@@ -27,6 +27,7 @@ import { identityGuard } from '../http/identity-guard.ts'
 import { publicGuard } from '../http/public-guard.ts'
 import { refreshGuard } from '../http/refresh-guard.ts'
 import {
+  attendanceCorrectionRequestsRoutes,
   attendanceRecordsRoutes,
   attendanceResultsRoutes,
   attendanceSettingsRoutes,
@@ -156,6 +157,9 @@ const authenticatedGroup = (dependencies: AppDependencies) => {
       // 出勤判定結果：不需要 cipher（沒有個資欄位）。實作計畫 06-attendance.md §4.1、§5 Stage 4——
       // 本階段只開重算全部 NO_SCHEDULE 紀錄一支端點，查詢類端點排在 Stage 7。
       .use(attendanceResultsRoutes({ db: database, clock }))
+      // 補打卡申請：不需要 cipher（沒有個資欄位）。實作計畫 06-attendance.md §5 Stage 8——
+      // 本階段只開員工端三支端點（提交、撤回、查詢自己的申請），審核排在 Stage 9。
+      .use(attendanceCorrectionRequestsRoutes({ db: database, clock }))
   )
 }
 

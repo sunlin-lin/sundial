@@ -10,8 +10,8 @@
  *
  * 本輪多了 `results` 次目錄（實作計畫 `plans/06-attendance.md` §4.1、§5 Stage 4）：
  * `recalculateAttendanceResultForWorkDay` 供 `records` 次目錄的 `revoke`／`revoke-other` 編排
- * 進同一筆交易（見兩支 service 的呼叫）。`correction-requests`／`correction-reviews` 排在後續
- * 階段，屆時在這裡各加一行。
+ * 進同一筆交易（見兩支 service 的呼叫）。本輪再加 `correction-requests`（Stage 8，員工端：提交、
+ * 查詢自己的申請、撤回）；`correction-reviews`（Stage 9，審核）排在後續階段，屆時在這裡再加一行。
  */
 export * from './settings/attendance-settings.service.ts'
 export * from './settings/attendance-settings.errors.ts'
@@ -19,3 +19,5 @@ export * from './records/attendance-records.service.ts'
 export * from './records/attendance-records.errors.ts'
 export * from './results/attendance-results.service.ts'
 export * from './results/attendance-results.errors.ts'
+export * from './correction-requests/attendance-correction-requests.service.ts'
+export * from './correction-requests/attendance-correction-requests.errors.ts'

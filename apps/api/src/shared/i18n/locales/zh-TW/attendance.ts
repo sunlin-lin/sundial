@@ -25,4 +25,17 @@ export const ATTENDANCE = {
       'cancellation-not-allowed': '公司目前不允許員工自行撤銷打卡紀錄，如需更正請改走補打卡流程或聯繫人事協助撤銷',
     },
   },
+  'correction-requests': {
+    errors: {
+      'operator-not-employee': '目前登入的帳號沒有連結有效的員工任職，無法申請補打卡',
+      'future-date-not-allowed': '不可選擇尚未發生的日期',
+      'already-punched': '這個工作日已經有一筆同類型的有效打卡紀錄，不需要申請補登',
+      'invalid-clock-order': '申請補登時間與同一工作日已有的打卡時間先後順序不符',
+      'duplicate-pending-request': '這個工作日、這個類型已經有一筆待審核的補打卡申請',
+      'period-locked': '這個工作日的薪資已結算，無法申請補打卡',
+      'correction-request-not-allowed': '公司目前不允許申請補打卡，請聯繫人事協助處理',
+      'not-found': '找不到這筆補打卡申請',
+      'not-withdrawable': '這筆補打卡申請目前不是待審核狀態，無法撤回',
+    },
+  },
 } as const

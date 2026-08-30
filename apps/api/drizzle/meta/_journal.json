@@ -309,6 +309,20 @@
       "when": 1788051577302,
       "tag": "0043_seed_permission_codes_attendance_results_list",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "5",
+      "when": 1788056686223,
+      "tag": "0044_daily_ronan",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "5",
+      "when": 1788056847464,
+      "tag": "0045_seed_permission_codes_attendance_correction_requests",
+      "breakpoints": true
     }
   ]
 }
